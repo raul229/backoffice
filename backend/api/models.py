@@ -3,7 +3,7 @@ from django.db import models
 
 class TipoCliente(models.TextChoices):
     PERSONA = "PERSONA", "Persona Natural"
-    EMPRESA = "EMPRESA", "Persona Jurudica"
+    EMPRESA = "EMPRESA", "Persona Juridica"
 
 class Cliente(models.Model):
     tipo = models.CharField(max_length=20, choices=TipoCliente.choices)
@@ -45,34 +45,88 @@ class Direccion(models.Model):
     direccion = models.CharField(max_length=200)
     numero = models.CharField(max_length=10)
     distrito = models.CharField(max_length=100)
-    urbanizacion = models.CharField(max_length=100, blank=True, null=True)
-    manzana = models.CharField(max_length=10, blank=True, null=True)
-    lote = models.CharField(max_length=10, blank=True, null=True)
-    referencia = models.CharField(max_length=200, blank=True, null=True)
+    urbanizacion = models.CharField(max_length=100, blank=True)
+    manzana = models.CharField(max_length=10, blank=True)
+    lote = models.CharField(max_length=10, blank=True)
+    referencia = models.CharField(max_length=200, blank=True)
     
 class Promocion(models.Model):
     nombre = models.CharField(max_length=100)
-    descuento = models.DecimalField(max_digits=5, decimal_places=2, default=0.30)
+    #descuento = models.DecimalField(max_digits=5, decimal_places=2, default=0.30)
     descripcion = models.TextField()
+    #bono = models.PositiveIntegerField(default=0)
     
 class Producto(models.Model):
     nombre = models.CharField(max_length=100)
-    velocidad = models.IntegerField()
+    velocidad = models.PositiveBigIntegerField()
     precio = models.DecimalField(max_digits=10, decimal_places=2)
-    promocion = models.ForeignKey(Promocion, on_delete=models.SET_NULL, null=True, blank=True)
     
+class EstadoPaso(models.TextChoices):
+    PENDIENTE = "PENDIENTE", "Pendiente"
+    EN_PROCESO = "EN_PROCESO", "En proceso"
+    OBSERVADO = "OBSERVADO", "Observado"
+    SUBSANANDO = "SUBSANANDO", "Subsanando"
+    APROBADO = "APROBADO", "Aprobado"
+    RECHAZADO = "RECHAZADO", "Rechazado"
+
 class Paso(models.Model):
     nombre = models.CharField(max_length=100)
     descripcion = models.TextField()
-    orden = models.IntegerField()
 
 class Flujo(models.Model):
     nombre = models.CharField(max_length=100)
-    pasos = models.ManyToManyField(Paso, through='FlujoPaso')
+    pasos = models.ManyToManyField(Paso, through="FlujoPaso")
     
+class FlujoPaso(models.Model):
+    flujo = models.ForeignKey(Flujo, on_delete=models.PROTECT)
+    paso = models.ForeignKey(Paso, on_delete=models.PROTECT)
+    orden = models.PositiveIntegerField()
+    
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['flujo', 'paso'],
+                name='unique_flujo_paso'
+                
+                
+            ),
+            models.UniqueConstraint(
+                fields=['flujo', 'orden'],
+                name='unique_flujo_orden'
+            )
+        ] 
+    
+    
+class PromocionVenta(models.Model):
+    promocion = models.ForeignKey(Promocion, on_delete=models.CASCADE)
+    venta = models.ForeignKey('Venta', on_delete=models.CASCADE)
+    
+    class Meta:
+        constraints = [
+        models.UniqueConstraint(
+            fields=["venta", "promocion"],
+            name="unique_venta_promocion"
+        )
+        ]
+    
+
+class EstadoVenta(models.TextChoices):
+    EN_PROCESO = "EN_PROCESO", "En proceso"
+    INSTALADO = "INSTALADO", "Instalado"
+    ANULADO = "ANULADO", "Anulado"
+
+
 class Venta(models.Model):
-    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
+    cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT)
     fecha = models.DateTimeField(auto_now_add=True)
     producto = models.ForeignKey(Producto, on_delete=models.PROTECT)
+    flujo=models.ForeignKey(Flujo, on_delete=models.PROTECT)
+    promociones = models.ManyToManyField(Promocion, through=PromocionVenta)
+    estado = models.CharField(max_length=20, choices=EstadoVenta.choices, default=EstadoVenta.EN_PROCESO)
+    
+class VentaPaso(models.Model):
+    venta=models.ForeignKey(Venta, on_delete=models.CASCADE)
+    flujo_paso=models.ForeignKey(FlujoPaso, on_delete=models.PROTECT)
+    estado=models.CharField(max_length=20, choices=EstadoPaso.choices, default=EstadoPaso.PENDIENTE)
     
 
