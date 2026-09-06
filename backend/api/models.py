@@ -8,6 +8,19 @@ class TipoCliente(models.TextChoices):
 class Cliente(models.Model):
     tipo = models.CharField(max_length=20, choices=TipoCliente.choices)
     
+    @property
+    def nombre(self):
+        if self.tipo == TipoCliente.PERSONA:
+            return f"{self.persona.nombres} {self.persona.apellidos}"
+
+        if self.tipo == TipoCliente.EMPRESA:
+            return self.empresa.razon_social
+
+        return self.tipo + " - " + str(self.id)
+    
+    def __str__(self):
+        return self.nombre
+    
     
 class TipoDocumento(models.TextChoices):
     DNI = "DNI", "DNI"
@@ -24,6 +37,9 @@ class Persona(models.Model):
     padre = models.CharField(max_length=100)
     madre = models.CharField(max_length=100)
     celular = models.CharField(max_length=9)
+    
+    def __str__(self):
+        return f"{self.nombres} {self.apellidos}"
     
     
 class Empresa(models.Model):
@@ -56,10 +72,16 @@ class Promocion(models.Model):
     descripcion = models.TextField()
     #bono = models.PositiveIntegerField(default=0)
     
+    def __str__(self):
+        return self.nombre
+    
 class Producto(models.Model):
     nombre = models.CharField(max_length=100)
     velocidad = models.PositiveBigIntegerField()
     precio = models.DecimalField(max_digits=10, decimal_places=2)
+    
+    def __str__(self):
+        return self.nombre + " - " + str(self.velocidad) + " Mbps - S/." + str(self.precio)
     
 class EstadoPaso(models.TextChoices):
     PENDIENTE = "PENDIENTE", "Pendiente"
@@ -72,10 +94,16 @@ class EstadoPaso(models.TextChoices):
 class Paso(models.Model):
     nombre = models.CharField(max_length=100)
     descripcion = models.TextField()
+    
+    def __str__(self):
+        return self.nombre
 
 class Flujo(models.Model):
     nombre = models.CharField(max_length=100)
     pasos = models.ManyToManyField(Paso, through="FlujoPaso")
+    
+    def __str__(self):
+        return self.nombre
     
 class FlujoPaso(models.Model):
     flujo = models.ForeignKey(Flujo, on_delete=models.PROTECT)
