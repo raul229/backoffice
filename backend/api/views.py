@@ -35,7 +35,9 @@ from .serializers import (
 
 
 class ClienteViewSet(ModelViewSet):
-    queryset = Cliente.objects.prefetch_related("direccion_set").all()
+    queryset = Cliente.objects.select_related("persona", "empresa").prefetch_related(
+        "direccion_set"
+    )
     serializer_class = ClienteSerializer
 
 
@@ -85,7 +87,13 @@ class FlujoPasoViewSet(ModelViewSet):
 
 class VentaViewSet(ModelViewSet):
     queryset = (
-        Venta.objects.select_related("cliente", "producto", "flujo")
+        Venta.objects.select_related(
+            "cliente",
+            "cliente__persona",
+            "cliente__empresa",
+            "producto",
+            "flujo",
+        )
         .prefetch_related("promociones", "ventapaso_set__flujo_paso__paso")
         .all()
     )

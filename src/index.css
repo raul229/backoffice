@@ -1,17 +1,35 @@
 @import "tailwindcss";
-@plugin "daisyui";
-
-
-/* DaisyUI themes are configured in tailwind.config.js */
-
-
-
-body {
-  margin: 0;
-  min-width: 320px;
-  background: #f4f7fb;
+@plugin "daisyui" {
+  themes: light --default;
 }
 
+html,
+body,
 #root {
-  min-height: 100svh;
+  min-height: 100%;
+}
+
+body {
+  background: #e8eef8;
+  color: #1e293b;
+}
+
+.bo-sidebar {
+  background: linear-gradient(180deg, #12233f 0%, #0d1a33 100%);
+}
+
+.bo-card {
+  background: #fff;
+  border-radius: 1.1rem;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 0.06);
+}
+
+.bo-kpi-icon {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  color: #fff;
+  flex-shrink: 0;
 }
