@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import StatusBadge from '../components/StatusBadge.jsx'
-import { getVenta, updateVentaPaso } from '../service/api.js'
+import { getFlujos, getVenta, updateVenta, updateVentaPaso } from '../service/api.js'
 import {
+  celularCliente,
   documentoCliente,
+  flujosPorTipo,
   formatFecha,
   nombreCliente,
   numeroVenta,
@@ -10,6 +12,7 @@ import {
 } from '../lib/venta.js'
 
 const PASO_ESTADOS = ['PENDIENTE', 'EN_PROCESO', 'OBSERVADO', 'SUBSANANDO', 'APROBADO', 'RECHAZADO']
+const VENTA_ESTADOS = ['EN_PROCESO', 'INSTALADO', 'ANULADO']
 
 function pasoColor(estado) {
   if (estado === 'APROBADO') return 'bg-emerald-500'
@@ -25,13 +28,21 @@ export default function VentaDetailPage({ ventaId, onBack }) {
     queryKey: ['venta', ventaId],
     queryFn: () => getVenta(ventaId),
   })
+  const flujosQuery = useQuery({ queryKey: ['flujos'], queryFn: getFlujos })
 
-  const mutation = useMutation({
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['venta', ventaId] })
+    queryClient.invalidateQueries({ queryKey: ['tabla-ventas'] })
+  }
+
+  const pasoMutation = useMutation({
     mutationFn: ({ id, estado }) => updateVentaPaso(id, { estado }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['venta', ventaId] })
-      queryClient.invalidateQueries({ queryKey: ['tabla-ventas'] })
-    },
+    onSuccess: invalidate,
+  })
+
+  const ventaMutation = useMutation({
+    mutationFn: (payload) => updateVenta(ventaId, payload),
+    onSuccess: invalidate,
   })
 
   if (isPending) {
@@ -48,9 +59,12 @@ export default function VentaDetailPage({ ventaId, onBack }) {
 
   const cliente = venta.cliente_detalle
   const direccion = cliente?.direcciones?.[0]
+  const representante = cliente?.empresa?.representante_legal_detalle
   const pasos = [...(venta.pasos ?? [])].sort(
     (a, b) => (a.flujo_paso_detalle?.orden ?? 0) - (b.flujo_paso_detalle?.orden ?? 0),
   )
+  const flujos = flujosPorTipo(flujosQuery.data, cliente?.tipo)
+  const saving = pasoMutation.isPending || ventaMutation.isPending
 
   return (
     <div className="space-y-4">
@@ -59,13 +73,34 @@ export default function VentaDetailPage({ ventaId, onBack }) {
           <button type="button" className="text-sm text-blue-600" onClick={onBack}>
             ← Volver
           </button>
-          <div className="mt-2 flex items-center gap-3">
+          <div className="mt-2 flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold">{numeroVenta(venta)}</h1>
             <StatusBadge venta={venta} />
           </div>
           <p className="text-sm text-slate-500">Registrada {formatFecha(venta.fecha)}</p>
         </div>
+        <label className="text-sm">
+          <span className="mb-1 block text-slate-500">Estado de la venta</span>
+          <select
+            className="select select-bordered"
+            disabled={saving}
+            onChange={(event) => ventaMutation.mutate({ estado: event.target.value })}
+            value={venta.estado}
+          >
+            {VENTA_ESTADOS.map((estado) => (
+              <option key={estado} value={estado}>
+                {estado}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
+
+      {ventaMutation.isError ? (
+        <div className="alert alert-error">
+          <span>{ventaMutation.error.message}</span>
+        </div>
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="bo-card p-5">
@@ -85,8 +120,17 @@ export default function VentaDetailPage({ ventaId, onBack }) {
             </div>
             <div>
               <dt className="text-slate-400">Celular</dt>
-              <dd>{cliente?.persona?.celular || '—'}</dd>
+              <dd>{celularCliente(cliente) || '—'}</dd>
             </div>
+            {representante ? (
+              <div className="col-span-2">
+                <dt className="text-slate-400">Representante legal</dt>
+                <dd>
+                  {representante.nombres} {representante.apellidos} · {representante.tipo_documento}{' '}
+                  {representante.numero_documento}
+                </dd>
+              </div>
+            ) : null}
             <div className="col-span-2">
               <dt className="text-slate-400">Dirección</dt>
               <dd>
@@ -113,9 +157,32 @@ export default function VentaDetailPage({ ventaId, onBack }) {
               <dt className="text-slate-400">Precio</dt>
               <dd>{venta.producto_detalle?.precio ? `S/ ${venta.producto_detalle.precio}` : '—'}</dd>
             </div>
-            <div>
-              <dt className="text-slate-400">Flujo</dt>
-              <dd>{venta.flujo_detalle?.nombre ?? '—'}</dd>
+            <div className="col-span-2">
+              <dt className="mb-1 text-slate-400">Flujo</dt>
+              <dd>
+                <select
+                  className="select select-bordered w-full"
+                  disabled={saving}
+                  onChange={(event) => {
+                    const next = Number(event.target.value)
+                    if (next === venta.flujo) return
+                    if (
+                      window.confirm(
+                        'Cambiar el flujo recrea los pasos de esta venta. ¿Continuar?',
+                      )
+                    ) {
+                      ventaMutation.mutate({ flujo: next })
+                    }
+                  }}
+                  value={venta.flujo}
+                >
+                  {flujos.map((flujo) => (
+                    <option key={flujo.id} value={flujo.id}>
+                      {flujo.nombre}
+                    </option>
+                  ))}
+                </select>
+              </dd>
             </div>
             <div className="col-span-2">
               <dt className="text-slate-400">Promociones</dt>
@@ -145,8 +212,8 @@ export default function VentaDetailPage({ ventaId, onBack }) {
                   </div>
                   <select
                     className="select select-bordered select-sm w-44"
-                    disabled={mutation.isPending}
-                    onChange={(event) => mutation.mutate({ id: paso.id, estado: event.target.value })}
+                    disabled={saving}
+                    onChange={(event) => pasoMutation.mutate({ id: paso.id, estado: event.target.value })}
                     value={paso.estado}
                   >
                     {PASO_ESTADOS.map((estado) => (

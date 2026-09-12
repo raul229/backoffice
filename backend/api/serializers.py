@@ -147,7 +147,8 @@ class FlujoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Flujo
-        fields = ["id", "nombre", "pasos_detalle"]
+        fields = ["id", "nombre", "tipo_cliente", "pasos_detalle"]
+        read_only_fields = ["pasos_detalle"]
 
     def get_pasos_detalle(self, obj):
         flujo_pasos = obj.flujopaso_set.select_related("paso").order_by("orden")
@@ -200,6 +201,25 @@ class VentaSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["fecha"]
 
+    def validate(self, attrs):
+        cliente = attrs.get("cliente") or getattr(self.instance, "cliente", None)
+        flujo = attrs.get("flujo") or getattr(self.instance, "flujo", None)
+        if cliente and flujo and flujo.tipo_cliente != cliente.tipo:
+            raise serializers.ValidationError(
+                {
+                    "flujo": "El flujo no corresponde al tipo de cliente. "
+                    "Usa un flujo de persona natural (RUC 10) o de empresa (RUC 20)."
+                }
+            )
+        return attrs
+
+    def _sync_pasos(self, venta):
+        venta.ventapaso_set.all().delete()
+        flujo_pasos = FlujoPaso.objects.filter(flujo=venta.flujo).order_by("orden")
+        VentaPaso.objects.bulk_create(
+            [VentaPaso(venta=venta, flujo_paso=flujo_paso) for flujo_paso in flujo_pasos]
+        )
+
     def get_pasos(self, obj):
         venta_pasos = obj.ventapaso_set.select_related("flujo_paso__paso").order_by(
             "flujo_paso__orden"
@@ -211,19 +231,19 @@ class VentaSerializer(serializers.ModelSerializer):
         promociones = validated_data.pop("promociones", [])
         venta = Venta.objects.create(**validated_data)
         venta.promociones.set(promociones)
-
-        flujo_pasos = FlujoPaso.objects.filter(flujo=venta.flujo).order_by("orden")
-        VentaPaso.objects.bulk_create(
-            [VentaPaso(venta=venta, flujo_paso=flujo_paso) for flujo_paso in flujo_pasos]
-        )
+        self._sync_pasos(venta)
         return venta
 
     @transaction.atomic
     def update(self, instance, validated_data):
         promociones = validated_data.pop("promociones", None)
+        flujo_nuevo = validated_data.get("flujo")
+        flujo_cambio = flujo_nuevo is not None and flujo_nuevo != instance.flujo
         venta = super().update(instance, validated_data)
         if promociones is not None:
             venta.promociones.set(promociones)
+        if flujo_cambio:
+            self._sync_pasos(venta)
         return venta
 
 

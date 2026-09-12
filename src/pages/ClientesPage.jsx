@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { getClientes } from '../service/api.js'
-import { documentoCliente, nombreCliente, tipoClienteLabel } from '../lib/venta.js'
+import { celularCliente, documentoCliente, nombreCliente, tipoClienteLabel } from '../lib/venta.js'
 
 export default function ClientesPage({ search }) {
   const { isPending, isError, error, data: clientes } = useQuery({
@@ -53,7 +53,7 @@ export default function ClientesPage({ search }) {
                     <td className="font-medium">{nombreCliente(cliente)}</td>
                     <td>{tipoClienteLabel(cliente.tipo)}</td>
                     <td>{documentoCliente(cliente) || '—'}</td>
-                    <td>{cliente.persona?.celular || '—'}</td>
+                    <td>{celularCliente(cliente) || '—'}</td>
                   </tr>
                 ))
               )}

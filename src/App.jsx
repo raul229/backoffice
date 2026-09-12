@@ -6,6 +6,7 @@ import VentasPage from './pages/VentasPage.jsx'
 import ClientesPage from './pages/ClientesPage.jsx'
 import VentaDetailPage from './pages/VentaDetailPage.jsx'
 import NuevaVentaPage from './pages/NuevaVentaPage.jsx'
+import ConfiguracionPage from './pages/ConfiguracionPage.jsx'
 import PlaceholderPage from './pages/PlaceholderPage.jsx'
 import { getVentas } from './service/api.js'
 import { filterVentas } from './lib/venta.js'
@@ -71,12 +72,7 @@ function App() {
       )
     }
     if (route.page === 'configuracion') {
-      return (
-        <PlaceholderPage
-          detail="Aquí irá la configuración de productos, flujos y catálogos."
-          title="Configuración"
-        />
-      )
+      return <ConfiguracionPage />
     }
     return (
       <DashboardPage

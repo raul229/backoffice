@@ -51,6 +51,37 @@ export function getFlujos() {
   return request("/flujos/");
 }
 
+export function getPasos() {
+  return request("/pasos/");
+}
+
+export function createPaso(payload) {
+  return request("/pasos/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createFlujo(payload) {
+  return request("/flujos/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createFlujoPaso(payload) {
+  return request("/flujo-pasos/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteFlujoPaso(id) {
+  return request(`/flujo-pasos/${id}/`, {
+    method: "DELETE",
+  });
+}
+
 export function getVentas() {
   return request("/ventas/");
 }
@@ -87,6 +118,13 @@ export function createDireccion(payload) {
 export function createVenta(payload) {
   return request("/ventas/", {
     method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateVenta(id, payload) {
+  return request(`/ventas/${id}/`, {
+    method: "PATCH",
     body: JSON.stringify(payload),
   });
 }

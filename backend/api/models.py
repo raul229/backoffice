@@ -100,6 +100,7 @@ class Paso(models.Model):
 
 class Flujo(models.Model):
     nombre = models.CharField(max_length=100)
+    tipo_cliente = models.CharField(max_length=20, choices=TipoCliente.choices)
     pasos = models.ManyToManyField(Paso, through="FlujoPaso")
     
     def __str__(self):

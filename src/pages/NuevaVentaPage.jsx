@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import CatalogEmpty from '../components/CatalogEmpty.jsx'
 import {
   createDireccion,
+  createEmpresa,
   createPersona,
   createVenta,
   getChoices,
@@ -10,8 +11,10 @@ import {
   getProductos,
   getPromociones,
 } from '../service/api.js'
+import { flujosPorTipo } from '../lib/venta.js'
 
 const emptyForm = {
+  tipo_cliente: 'PERSONA',
   tipo_documento: 'DNI',
   numero_documento: '',
   nombres: '',
@@ -20,6 +23,8 @@ const emptyForm = {
   distrito_nacimiento: '',
   padre: '',
   madre: '',
+  ruc: '',
+  razon_social: '',
   tipo_direccion: 'CALLE',
   direccion: '',
   numero: '',
@@ -27,6 +32,29 @@ const emptyForm = {
   producto: '',
   flujo: '',
   promociones: [],
+}
+
+function personaPayload(form) {
+  return {
+    tipo_documento: form.tipo_documento,
+    numero_documento: form.numero_documento,
+    nombres: form.nombres,
+    apellidos: form.apellidos,
+    distrito_nacimiento: form.distrito_nacimiento,
+    padre: form.padre,
+    madre: form.madre,
+    celular: form.celular,
+  }
+}
+
+function direccionPayload(form, clienteId) {
+  return {
+    cliente: clienteId,
+    tipo: form.tipo_direccion,
+    direccion: form.direccion,
+    numero: form.numero,
+    distrito: form.distrito,
+  }
 }
 
 export default function NuevaVentaPage({ onCancel, onCreated }) {
@@ -42,25 +70,22 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const persona = await createPersona({
-        tipo_documento: form.tipo_documento,
-        numero_documento: form.numero_documento,
-        nombres: form.nombres,
-        apellidos: form.apellidos,
-        distrito_nacimiento: form.distrito_nacimiento,
-        padre: form.padre,
-        madre: form.madre,
-        celular: form.celular,
-      })
-      await createDireccion({
-        cliente: persona.cliente,
-        tipo: form.tipo_direccion,
-        direccion: form.direccion,
-        numero: form.numero,
-        distrito: form.distrito,
-      })
+      let clienteId
+      if (form.tipo_cliente === 'EMPRESA') {
+        const representante = await createPersona(personaPayload(form))
+        const empresa = await createEmpresa({
+          ruc: form.ruc,
+          razon_social: form.razon_social,
+          representante_legal: representante.id,
+        })
+        clienteId = empresa.cliente
+      } else {
+        const persona = await createPersona(personaPayload(form))
+        clienteId = persona.cliente
+      }
+      await createDireccion(direccionPayload(form, clienteId))
       return createVenta({
-        cliente: persona.cliente,
+        cliente: clienteId,
         producto: Number(form.producto),
         flujo: Number(form.flujo),
         promociones: form.promociones.map(Number),
@@ -76,43 +101,57 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
 
   const setField = (name, value) => setForm((current) => ({ ...current, [name]: value }))
   const productos = productosQuery.data ?? []
-  const flujos = flujosQuery.data ?? []
+  const flujos = flujosPorTipo(flujosQuery.data, form.tipo_cliente)
+  const flujoSeleccionado = flujos.find((flujo) => String(flujo.id) === String(form.flujo))
   const promociones = promocionesQuery.data ?? []
   const tiposDocumento = choicesQuery.data?.tipos_documento ?? []
   const tiposDireccion = choicesQuery.data?.tipos_direccion ?? []
 
-  const canNext =
+  const personaCompleta =
     form.numero_documento &&
     form.nombres &&
     form.apellidos &&
     form.celular &&
     form.distrito_nacimiento &&
     form.padre &&
-    form.madre &&
-    form.direccion &&
-    form.numero &&
-    form.distrito
-
+    form.madre
+  const direccionCompleta = form.direccion && form.numero && form.distrito
+  const empresaCompleta = form.ruc.length === 11 && form.razon_social
+  const canNext =
+    personaCompleta &&
+    direccionCompleta &&
+    (form.tipo_cliente === 'PERSONA' || empresaCompleta)
   const canSubmit = form.producto && form.flujo
+
+  const elegirTipo = (tipo) => {
+    setForm((current) => ({ ...current, tipo_cliente: tipo, flujo: '' }))
+  }
+
+  const pasosFlujo = useMemo(
+    () => [...(flujoSeleccionado?.pasos_detalle ?? [])].sort((a, b) => a.orden - b.orden),
+    [flujoSeleccionado],
+  )
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Nueva venta</h1>
-          <p className="text-sm text-slate-500">Completa los datos del cliente y el plan para registrarla.</p>
+          <p className="text-sm text-slate-500">
+            El flujo de pasos cambia según si el cliente es persona natural (RUC 10) o empresa (RUC 20).
+          </p>
         </div>
         <button type="button" className="btn btn-ghost rounded-full" onClick={onCancel}>
           Cancelar
         </button>
       </div>
 
-      <CatalogEmpty flujos={flujos} productos={productos} />
+      <CatalogEmpty flujos={flujosQuery.data ?? []} productos={productos} />
 
       <section className="bo-card p-6">
         <ul className="steps mb-6 w-full">
           <li className={`step ${step >= 0 ? 'step-primary' : ''}`}>Cliente</li>
-          <li className={`step ${step >= 1 ? 'step-primary' : ''}`}>Producto</li>
+          <li className={`step ${step >= 1 ? 'step-primary' : ''}`}>Producto y flujo</li>
         </ul>
 
         {formError ? (
@@ -123,6 +162,46 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
 
         {step === 0 ? (
           <div className="grid gap-4 md:grid-cols-2">
+            <div className="md:col-span-2 flex rounded-full bg-slate-100 p-1">
+              <button
+                type="button"
+                className={`flex-1 rounded-full py-2 text-sm ${form.tipo_cliente === 'PERSONA' ? 'bg-white font-medium shadow' : 'text-slate-500'}`}
+                onClick={() => elegirTipo('PERSONA')}
+              >
+                Persona Natural
+              </button>
+              <button
+                type="button"
+                className={`flex-1 rounded-full py-2 text-sm ${form.tipo_cliente === 'EMPRESA' ? 'bg-white font-medium shadow' : 'text-slate-500'}`}
+                onClick={() => elegirTipo('EMPRESA')}
+              >
+                Persona Jurídica
+              </button>
+            </div>
+
+            {form.tipo_cliente === 'EMPRESA' ? (
+              <>
+                <label className="text-sm">
+                  <span className="mb-1 block text-slate-500">RUC</span>
+                  <input
+                    className="input input-bordered w-full"
+                    maxLength={11}
+                    onChange={(event) => setField('ruc', event.target.value)}
+                    value={form.ruc}
+                  />
+                </label>
+                <label className="text-sm">
+                  <span className="mb-1 block text-slate-500">Razón social</span>
+                  <input
+                    className="input input-bordered w-full"
+                    onChange={(event) => setField('razon_social', event.target.value)}
+                    value={form.razon_social}
+                  />
+                </label>
+                <p className="md:col-span-2 text-sm font-medium text-slate-600">Representante legal</p>
+              </>
+            ) : null}
+
             <label className="text-sm">
               <span className="mb-1 block text-slate-500">Tipo de documento</span>
               <select
@@ -252,7 +331,9 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
               </select>
             </label>
             <label className="text-sm md:col-span-2">
-              <span className="mb-1 block text-slate-500">Flujo</span>
+              <span className="mb-1 block text-slate-500">
+                Flujo {form.tipo_cliente === 'EMPRESA' ? '(RUC 20 / empresa)' : '(RUC 10 / persona natural)'}
+              </span>
               <select
                 className="select select-bordered w-full"
                 onChange={(event) => setField('flujo', event.target.value)}
@@ -265,7 +346,21 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                   </option>
                 ))}
               </select>
+              {flujos.length === 0 ? (
+                <span className="mt-1 block text-xs text-orange-600">
+                  No hay un flujo configurado para este tipo de cliente.
+                </span>
+              ) : null}
             </label>
+            {pasosFlujo.length ? (
+              <ol className="md:col-span-2 rounded-xl bg-slate-50 p-4 text-sm">
+                {pasosFlujo.map((paso) => (
+                  <li key={paso.id} className="mb-1">
+                    {paso.orden}. {paso.paso_detalle?.nombre}
+                  </li>
+                ))}
+              </ol>
+            ) : null}
             <label className="text-sm md:col-span-2">
               <span className="mb-1 block text-slate-500">Promociones</span>
               <select
@@ -300,7 +395,13 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
               type="button"
               className="btn rounded-full border-none bg-blue-600 text-white hover:bg-blue-700"
               disabled={!canNext}
-              onClick={() => setStep(1)}
+              onClick={() => {
+                setForm((current) => ({
+                  ...current,
+                  flujo: current.flujo || (flujos.length === 1 ? String(flujos[0].id) : ''),
+                }))
+                setStep(1)
+              }}
             >
               Siguiente
             </button>
