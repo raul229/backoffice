@@ -182,6 +182,7 @@ class VentaSerializer(serializers.ModelSerializer):
         source="promociones", many=True, read_only=True
     )
     pasos = serializers.SerializerMethodField()
+    creado_por = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = Venta
@@ -198,8 +199,9 @@ class VentaSerializer(serializers.ModelSerializer):
             "promociones_detalle",
             "estado",
             "pasos",
+            "creado_por",
         ]
-        read_only_fields = ["fecha"]
+        read_only_fields = ["fecha", "creado_por"]
 
     def validate(self, attrs):
         cliente = attrs.get("cliente") or getattr(self.instance, "cliente", None)

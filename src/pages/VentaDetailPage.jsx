@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '../context/AuthContext.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
-import { getFlujos, getVenta, updateVenta, updateVentaPaso } from '../service/api.js'
+import { getVenta, getFlujos, updateVenta, updateVentaPaso, deleteVenta } from '../service/api.js'
 import {
   celularCliente,
   documentoCliente,
@@ -22,7 +23,8 @@ function pasoColor(estado) {
   return 'bg-slate-300'
 }
 
-export default function VentaDetailPage({ ventaId, onBack }) {
+export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
+  const { can } = useAuth()
   const queryClient = useQueryClient()
   const { isPending, isError, error, data: venta } = useQuery({
     queryKey: ['venta', ventaId],
@@ -45,6 +47,14 @@ export default function VentaDetailPage({ ventaId, onBack }) {
     onSuccess: invalidate,
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteVenta(ventaId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tabla-ventas'] })
+      onDeleted?.()
+    },
+  })
+
   if (isPending) {
     return <p className="p-6">Cargando venta...</p>
   }
@@ -64,7 +74,10 @@ export default function VentaDetailPage({ ventaId, onBack }) {
     (a, b) => (a.flujo_paso_detalle?.orden ?? 0) - (b.flujo_paso_detalle?.orden ?? 0),
   )
   const flujos = flujosPorTipo(flujosQuery.data, cliente?.tipo)
-  const saving = pasoMutation.isPending || ventaMutation.isPending
+  const canChangeVenta = can('api.change_venta')
+  const canChangePaso = can('api.change_ventapaso')
+  const canDeleteVenta = can('api.delete_venta')
+  const saving = pasoMutation.isPending || ventaMutation.isPending || deleteMutation.isPending
 
   return (
     <div className="space-y-4">
@@ -79,6 +92,8 @@ export default function VentaDetailPage({ ventaId, onBack }) {
           </div>
           <p className="text-sm text-slate-500">Registrada {formatFecha(venta.fecha)}</p>
         </div>
+        {canChangeVenta ? (
+        <div className="flex flex-wrap items-end gap-2">
         <label className="text-sm">
           <span className="mb-1 block text-slate-500">Estado de la venta</span>
           <select
@@ -94,11 +109,45 @@ export default function VentaDetailPage({ ventaId, onBack }) {
             ))}
           </select>
         </label>
+        {canDeleteVenta ? (
+          <button
+            type="button"
+            className="btn btn-ghost text-rose-600"
+            disabled={saving}
+            onClick={() => {
+              if (window.confirm(`¿Eliminar ${numeroVenta(venta)}?`)) {
+                deleteMutation.mutate()
+              }
+            }}
+          >
+            Eliminar venta
+          </button>
+        ) : null}
+        </div>
+        ) : canDeleteVenta ? (
+          <button
+            type="button"
+            className="btn btn-ghost text-rose-600"
+            disabled={saving}
+            onClick={() => {
+              if (window.confirm(`¿Eliminar ${numeroVenta(venta)}?`)) {
+                deleteMutation.mutate()
+              }
+            }}
+          >
+            Eliminar venta
+          </button>
+        ) : null}
       </div>
 
       {ventaMutation.isError ? (
         <div className="alert alert-error">
           <span>{ventaMutation.error.message}</span>
+        </div>
+      ) : null}
+      {deleteMutation.isError ? (
+        <div className="alert alert-error">
+          <span>{deleteMutation.error.message}</span>
         </div>
       ) : null}
 
@@ -160,6 +209,7 @@ export default function VentaDetailPage({ ventaId, onBack }) {
             <div className="col-span-2">
               <dt className="mb-1 text-slate-400">Flujo</dt>
               <dd>
+                {canChangeVenta ? (
                 <select
                   className="select select-bordered w-full"
                   disabled={saving}
@@ -182,6 +232,9 @@ export default function VentaDetailPage({ ventaId, onBack }) {
                     </option>
                   ))}
                 </select>
+                ) : (
+                  venta.flujo_detalle?.nombre ?? '—'
+                )}
               </dd>
             </div>
             <div className="col-span-2">
@@ -210,6 +263,7 @@ export default function VentaDetailPage({ ventaId, onBack }) {
                     <p className="font-medium">{nombre}</p>
                     {descripcion ? <p className="text-sm text-slate-500">{descripcion}</p> : null}
                   </div>
+                  {canChangePaso ? (
                   <select
                     className="select select-bordered select-sm w-44"
                     disabled={saving}
@@ -222,6 +276,9 @@ export default function VentaDetailPage({ ventaId, onBack }) {
                       </option>
                     ))}
                   </select>
+                  ) : (
+                    <span className="text-xs text-slate-500">{paso.estado}</span>
+                  )}
                 </div>
               </li>
             )

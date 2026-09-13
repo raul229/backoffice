@@ -1,6 +1,8 @@
 import { IconAlert, IconCalendar, IconCheck, IconClock } from '../lib/icons.jsx'
 import { computeKpis } from '../lib/venta.js'
 import VentasTable from '../components/VentasTable.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
+import { displayName } from '../lib/auth.js'
 
 function KpiCard({ icon: Icon, color, value, label, hint }) {
   return (
@@ -32,7 +34,9 @@ export default function DashboardPage({
   onFilters,
   onOpen,
   onNavigate,
+  onDelete,
 }) {
+  const { user, can } = useAuth()
   const kpis = computeKpis(ventas)
   const recientes = [...filtered]
     .sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
@@ -42,14 +46,16 @@ export default function DashboardPage({
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-blue-600">¡Hola, Raúl!</h1>
+          <h1 className="text-2xl font-bold text-blue-600">¡Hola, {user?.first_name || displayName(user)}!</h1>
           <p className="text-sm text-slate-500">
             Aquí tienes el resumen de tus ventas y el estado actual del proceso.
           </p>
         </div>
-        <button type="button" className="btn rounded-full border-none bg-blue-600 text-white hover:bg-blue-700" onClick={() => onNavigate({ page: 'venta-nueva' })}>
-          Nueva venta
-        </button>
+        {can('api.add_venta') ? (
+          <button type="button" className="btn rounded-full border-none bg-blue-600 text-white hover:bg-blue-700" onClick={() => onNavigate({ page: 'venta-nueva' })}>
+            Nueva venta
+          </button>
+        ) : null}
       </div>
 
       {isError ? (
@@ -102,10 +108,11 @@ export default function DashboardPage({
             </button>
           </div>
           <VentasTable
+            emptyLabel="No hay ventas con esos filtros."
             isPending={isPending}
+            onDelete={onDelete}
             onOpen={onOpen}
             ventas={recientes}
-            emptyLabel="No hay ventas con esos filtros."
           />
         </section>
 

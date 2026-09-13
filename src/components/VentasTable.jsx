@@ -53,6 +53,7 @@ export default function VentasTable({
   ventas,
   isPending,
   onOpen,
+  onDelete,
   emptyLabel = 'Aún no hay ventas registradas.',
 }) {
   const table = useTable({
@@ -114,6 +115,15 @@ export default function VentasTable({
                   >
                     Ver
                   </button>
+                  {onDelete ? (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-xs text-rose-600"
+                      onClick={() => onDelete(row.original)}
+                    >
+                      Eliminar
+                    </button>
+                  ) : null}
                 </td>
               </tr>
             ))

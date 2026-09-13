@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 
@@ -152,6 +153,18 @@ class Venta(models.Model):
     flujo=models.ForeignKey(Flujo, on_delete=models.PROTECT)
     promociones = models.ManyToManyField(Promocion, through=PromocionVenta)
     estado = models.CharField(max_length=20, choices=EstadoVenta.choices, default=EstadoVenta.EN_PROCESO)
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ventas",
+    )
+
+    class Meta:
+        permissions = [
+            ("view_all_ventas", "Puede ver todas las ventas"),
+        ]
     
 class VentaPaso(models.Model):
     venta=models.ForeignKey(Venta, on_delete=models.CASCADE)

@@ -5,19 +5,25 @@ import {
   IconChart,
   IconCog,
   IconHome,
+  IconLock,
   IconSearch,
   IconUsers,
 } from '../lib/icons.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
+import { displayName, initials, roleLabel } from '../lib/auth.js'
 
 const NAV = [
-  { id: 'inicio', label: 'Inicio', icon: IconHome },
-  { id: 'ventas', label: 'Ventas', icon: IconCart },
-  { id: 'clientes', label: 'Clientes', icon: IconUsers },
-  { id: 'reportes', label: 'Reportes', icon: IconChart },
-  { id: 'configuracion', label: 'Configuración', icon: IconCog },
+  { id: 'inicio', label: 'Inicio', icon: IconHome, permission: 'api.view_venta' },
+  { id: 'ventas', label: 'Ventas', icon: IconCart, permission: 'api.view_venta' },
+  { id: 'clientes', label: 'Clientes', icon: IconUsers, permission: 'api.view_cliente' },
+  { id: 'reportes', label: 'Reportes', icon: IconChart, permission: 'api.view_venta' },
+  { id: 'configuracion', label: 'Configuración', icon: IconCog, permission: 'api.change_flujo' },
+  { id: 'roles', label: 'Roles y usuarios', icon: IconLock, permission: 'auth.change_group' },
 ]
 
 export default function AppShell({ page, search, onSearch, onNavigate, children }) {
+  const { user, can, logout } = useAuth()
+  const nav = NAV.filter((item) => can(item.permission))
   return (
     <div className="flex min-h-screen">
       <aside className="bo-sidebar flex w-60 shrink-0 flex-col px-4 py-5 text-white">
@@ -29,7 +35,7 @@ export default function AppShell({ page, search, onSearch, onNavigate, children 
         </div>
 
         <nav className="flex flex-1 flex-col gap-1">
-          {NAV.map((item) => {
+          {nav.map((item) => {
             const active = page === item.id
             const Icon = item.icon
             return (
@@ -70,14 +76,17 @@ export default function AppShell({ page, search, onSearch, onNavigate, children 
           <button type="button" className="grid h-10 w-10 place-items-center rounded-full bg-white text-slate-500 shadow-sm">
             <IconBell className="h-5 w-5" />
           </button>
-          <div className="flex items-center gap-3 rounded-full bg-white py-1.5 pl-1.5 pr-4 shadow-sm">
+          <div className="flex items-center gap-3 rounded-full bg-white py-1.5 pl-1.5 pr-3 shadow-sm">
             <div className="grid h-9 w-9 place-items-center rounded-full bg-slate-200 text-sm font-semibold text-slate-700">
-              RZ
+              {initials(user)}
             </div>
             <div className="leading-tight">
-              <p className="text-sm font-semibold">Raul Zambrano</p>
-              <p className="text-xs text-slate-500">Back Office</p>
+              <p className="text-sm font-semibold">{displayName(user)}</p>
+              <p className="text-xs text-slate-500">{roleLabel(user)}</p>
             </div>
+            <button type="button" className="btn btn-ghost btn-xs" onClick={() => logout()}>
+              Salir
+            </button>
           </div>
         </header>
         <main className="flex-1 px-6 pb-8">{children}</main>

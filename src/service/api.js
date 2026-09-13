@@ -1,13 +1,39 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api";
+const API_URL = import.meta.env.VITE_API_URL ?? "/api";
+
+function csrfToken() {
+  const match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
 
 async function request(path, options = {}) {
+  const headers = {
+    "Content-Type": "application/json",
+    ...options.headers,
+  };
+  const token = csrfToken();
+  if (token) {
+    headers["X-CSRFToken"] = token;
+  }
+
   const response = await fetch(`${API_URL}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
+    credentials: "include",
     ...options,
+    headers,
   });
+
+  if (response.status === 401) {
+    window.dispatchEvent(new Event("auth:required"));
+  }
+  if (response.status === 403 && !path.startsWith("/auth/")) {
+    try {
+      const data = await response.clone().json();
+      if (String(data.detail || "").includes("Authentication credentials")) {
+        window.dispatchEvent(new Event("auth:required"));
+      }
+    } catch {
+      /* ignore */
+    }
+  }
 
   if (!response.ok) {
     const fallbackMessage =
@@ -15,12 +41,14 @@ async function request(path, options = {}) {
     let message;
     try {
       const data = await response.json();
-      message = Object.entries(data)
-        .map(
-          ([key, value]) =>
-            `${key}: ${Array.isArray(value) ? value.join(", ") : value}`,
-        )
-        .join(" | ");
+      message =
+        data.detail ||
+        Object.entries(data)
+          .map(
+            ([key, value]) =>
+              `${key}: ${Array.isArray(value) ? value.join(", ") : value}`,
+          )
+          .join(" | ");
     } catch {
       message = fallbackMessage;
     }
@@ -28,11 +56,81 @@ async function request(path, options = {}) {
   }
 
   if (response.status === 204) {
-    console.log("No content");
     return null;
   }
 
   return response.json();
+}
+
+export function getCsrf() {
+  return request("/auth/csrf/");
+}
+
+export function login(username, password) {
+  return request("/auth/login/", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export function logout() {
+  return request("/auth/logout/", { method: "POST" });
+}
+
+export function getMe() {
+  return request("/auth/me/");
+}
+
+export function getPermissionCatalog() {
+  return request("/auth/permissions/");
+}
+
+export function getRoles() {
+  return request("/auth/roles/");
+}
+
+export function createRole(payload) {
+  return request("/auth/roles/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateRole(id, payload) {
+  return request(`/auth/roles/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteRole(id) {
+  return request(`/auth/roles/${id}/`, {
+    method: "DELETE",
+  });
+}
+
+export function getUsers() {
+  return request("/auth/users/");
+}
+
+export function createUser(payload) {
+  return request("/auth/users/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateUser(id, payload) {
+  return request(`/auth/users/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteUser(id) {
+  return request(`/auth/users/${id}/`, {
+    method: "DELETE",
+  });
 }
 
 export function getChoices() {
@@ -62,10 +160,36 @@ export function createPaso(payload) {
   });
 }
 
+export function updatePaso(id, payload) {
+  return request(`/pasos/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deletePaso(id) {
+  return request(`/pasos/${id}/`, {
+    method: "DELETE",
+  });
+}
+
 export function createFlujo(payload) {
   return request("/flujos/", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export function updateFlujo(id, payload) {
+  return request(`/flujos/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteFlujo(id) {
+  return request(`/flujos/${id}/`, {
+    method: "DELETE",
   });
 }
 
@@ -126,6 +250,18 @@ export function updateVenta(id, payload) {
   return request(`/ventas/${id}/`, {
     method: "PATCH",
     body: JSON.stringify(payload),
+  });
+}
+
+export function deleteVenta(id) {
+  return request(`/ventas/${id}/`, {
+    method: "DELETE",
+  });
+}
+
+export function deleteCliente(id) {
+  return request(`/clientes/${id}/`, {
+    method: "DELETE",
   });
 }
 

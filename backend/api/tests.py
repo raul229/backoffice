@@ -1,3 +1,4 @@
+from django.contrib.auth.models import Group, User
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -5,6 +6,9 @@ from .models import Cliente, Flujo, FlujoPaso, Paso, Producto, Promocion, TipoCl
 
 
 class ApiEndpointsTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_superuser("tester", "tester@test.com", "pass")
+        self.client.force_authenticate(self.user)
     def test_choices_endpoint_returns_frontend_options(self):
         response = self.client.get("/api/choices/")
 
@@ -171,3 +175,161 @@ class ApiEndpointsTests(APITestCase):
             [paso["flujo_paso_detalle"]["paso_detalle"]["nombre"] for paso in detalle.data["pasos"]],
             ["Uno", "Dos"],
         )
+
+
+    def test_user_only_sees_own_ventas(self):
+        grupo = Group.objects.get(name="Asesor")
+        ana = User.objects.create_user("ana_venta", password="secret")
+        luis = User.objects.create_user("luis_venta", password="secret")
+        ana.groups.add(grupo)
+        luis.groups.add(grupo)
+
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        producto = Producto.objects.create(nombre="Fibra 10", velocidad=10, precio=20)
+        flujo = Flujo.objects.create(nombre="Flujo propio", tipo_cliente=TipoCliente.PERSONA)
+        paso = Paso.objects.create(nombre="Uno", descripcion="Uno")
+        FlujoPaso.objects.create(flujo=flujo, paso=paso, orden=1)
+
+        self.client.force_authenticate(ana)
+        created = self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(created.data["creado_por"], ana.id)
+
+        self.client.force_authenticate(luis)
+        lista = self.client.get("/api/ventas/")
+        self.assertEqual(lista.status_code, status.HTTP_200_OK)
+        self.assertEqual(lista.data, [])
+        detalle = self.client.get(f"/api/ventas/{created.data['id']}/")
+        self.assertEqual(detalle.status_code, status.HTTP_404_NOT_FOUND)
+
+        supervisor = User.objects.create_user("super_venta", password="secret")
+        supervisor.groups.add(Group.objects.get(name="Supervisor"))
+        self.client.force_authenticate(supervisor)
+        todas = self.client.get("/api/ventas/")
+        self.assertEqual(len(todas.data), 1)
+
+
+class AuthAndPermissionsTests(APITestCase):
+    def test_login_and_me(self):
+        User.objects.create_user("loginuser", password="secret123")
+        response = self.client.post(
+            "/api/auth/login/",
+            {"username": "loginuser", "password": "secret123"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["username"], "loginuser")
+        me = self.client.get("/api/auth/me/")
+        self.assertEqual(me.status_code, status.HTTP_200_OK)
+
+    def test_anonymous_cannot_list_ventas(self):
+        response = self.client.get("/api/ventas/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_asesor_cannot_delete_flujo_paso(self):
+        group = Group.objects.get(name="Asesor")
+        user = User.objects.create_user("ana", password="secret")
+        user.groups.add(group)
+        self.client.force_authenticate(user)
+
+        flujo = Flujo.objects.create(nombre="Flujo", tipo_cliente=TipoCliente.PERSONA)
+        paso = Paso.objects.create(nombre="Uno", descripcion="Uno")
+        flujo_paso = FlujoPaso.objects.create(flujo=flujo, paso=paso, orden=1)
+
+        response = self.client.delete(f"/api/flujo-pasos/{flujo_paso.id}/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_can_create_role_and_user(self):
+        admin = User.objects.create_superuser("roleadmin", "role@test.com", "pass")
+        self.client.force_authenticate(admin)
+
+        catalog = self.client.get("/api/auth/permissions/")
+        self.assertEqual(catalog.status_code, status.HTTP_200_OK)
+        self.assertTrue(catalog.data)
+
+        created = self.client.post(
+            "/api/auth/roles/",
+            {"name": "Auditor", "permissions": ["api.view_venta", "api.view_all_ventas"]},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        self.assertIn("api.view_all_ventas", created.data["permissions"])
+
+        user = self.client.post(
+            "/api/auth/users/",
+            {
+                "username": "auditor1",
+                "password": "secret123",
+                "first_name": "Ada",
+                "groups": [created.data["id"]],
+            },
+            format="json",
+        )
+        self.assertEqual(user.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(user.data["groups"], ["Auditor"])
+        self.assertTrue(user.data["is_active"])
+
+    def test_rename_and_delete_user(self):
+        admin = User.objects.create_superuser("renameadmin", "r@test.com", "pass")
+        other = User.objects.create_user("viejo", password="secret")
+        self.client.force_authenticate(admin)
+
+        renamed = self.client.patch(
+            f"/api/auth/users/{other.id}/",
+            {"username": "nuevo", "first_name": "Ana"},
+            format="json",
+        )
+        self.assertEqual(renamed.status_code, status.HTTP_200_OK)
+        self.assertEqual(renamed.data["username"], "nuevo")
+        self.assertEqual(renamed.data["first_name"], "Ana")
+
+        blocked = self.client.delete(f"/api/auth/users/{admin.id}/")
+        self.assertEqual(blocked.status_code, status.HTTP_400_BAD_REQUEST)
+
+        deleted = self.client.delete(f"/api/auth/users/{other.id}/")
+        self.assertEqual(deleted.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_rename_flujo_and_delete_venta(self):
+        admin = User.objects.create_superuser("flujoadmin", "f@test.com", "pass")
+        self.client.force_authenticate(admin)
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        producto = Producto.objects.create(nombre="Fibra 10", velocidad=10, precio=20)
+        flujo = Flujo.objects.create(nombre="Original", tipo_cliente=TipoCliente.PERSONA)
+        paso = Paso.objects.create(nombre="Uno", descripcion="Uno")
+        FlujoPaso.objects.create(flujo=flujo, paso=paso, orden=1)
+
+        renamed = self.client.patch(
+            f"/api/flujos/{flujo.id}/",
+            {"nombre": "Flujo persona"},
+            format="json",
+        )
+        self.assertEqual(renamed.status_code, status.HTTP_200_OK)
+        self.assertEqual(renamed.data["nombre"], "Flujo persona")
+
+        paso_renamed = self.client.patch(
+            f"/api/pasos/{paso.id}/",
+            {"nombre": "Validación"},
+            format="json",
+        )
+        self.assertEqual(paso_renamed.status_code, status.HTTP_200_OK)
+        self.assertEqual(paso_renamed.data["nombre"], "Validación")
+
+        created = self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+
+        blocked_flujo = self.client.delete(f"/api/flujos/{flujo.id}/")
+        self.assertEqual(blocked_flujo.status_code, status.HTTP_400_BAD_REQUEST)
+
+        deleted = self.client.delete(f"/api/ventas/{created.data['id']}/")
+        self.assertEqual(deleted.status_code, status.HTTP_204_NO_CONTENT)
+
+        deleted_flujo = self.client.delete(f"/api/flujos/{flujo.id}/")
+        self.assertEqual(deleted_flujo.status_code, status.HTTP_204_NO_CONTENT)
