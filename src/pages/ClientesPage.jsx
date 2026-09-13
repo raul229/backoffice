@@ -4,11 +4,13 @@ import { deleteCliente, getClientes } from '../service/api.js'
 import { celularCliente, documentoCliente, nombreCliente, tipoClienteLabel } from '../lib/venta.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
+import ConfirmModal from '../components/ConfirmModal.jsx'
 
 export default function ClientesPage({ search }) {
   const { can } = useAuth()
   const queryClient = useQueryClient()
   const [selected, setSelected] = useState(null)
+  const [toDelete, setToDelete] = useState(null)
   const { isPending, isError, error, data: clientes } = useQuery({
     queryKey: ['clientes'],
     queryFn: getClientes,
@@ -19,6 +21,7 @@ export default function ClientesPage({ search }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientes'] })
       setSelected(null)
+      setToDelete(null)
     },
   })
 
@@ -88,15 +91,7 @@ export default function ClientesPage({ search }) {
                           type="button"
                           className="btn btn-ghost btn-xs text-rose-600"
                           disabled={deleteMutation.isPending}
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `¿Eliminar a ${nombreCliente(cliente)}? No se puede si tiene ventas.`,
-                              )
-                            ) {
-                              deleteMutation.mutate(cliente.id)
-                            }
-                          }}
+                          onClick={() => setToDelete(cliente)}
                         >
                           Eliminar
                         </button>
@@ -116,15 +111,17 @@ export default function ClientesPage({ search }) {
           cliente={selected}
           deleting={deleteMutation.isPending}
           onClose={() => setSelected(null)}
-          onDelete={() => {
-            if (
-              window.confirm(
-                `¿Eliminar a ${nombreCliente(selected)}? No se puede si tiene ventas.`,
-              )
-            ) {
-              deleteMutation.mutate(selected.id)
-            }
-          }}
+          onDelete={() => setToDelete(selected)}
+        />
+      ) : null}
+      {toDelete ? (
+        <ConfirmModal
+          open
+          title="Eliminar cliente"
+          message={`¿Eliminar a ${nombreCliente(toDelete)}? No se puede si tiene ventas. Esta acción no se puede deshacer.`}
+          onCancel={() => setToDelete(null)}
+          onConfirm={() => deleteMutation.mutate(toDelete.id)}
+          pending={deleteMutation.isPending}
         />
       ) : null}
     </div>

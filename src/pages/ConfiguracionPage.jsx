@@ -15,15 +15,13 @@ import {
 import { tipoClienteLabel } from '../lib/venta.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
-
-function confirmDelete(label) {
-  return window.confirm(`¿Eliminar ${label}? Esta acción no se puede deshacer.`)
-}
+import ConfirmModal from '../components/ConfirmModal.jsx'
 
 export default function ConfiguracionPage() {
   const { can } = useAuth()
   const queryClient = useQueryClient()
   const [modal, setModal] = useState(null)
+  const [confirm, setConfirm] = useState(null)
   const [error, setError] = useState('')
   const [ok, setOk] = useState('')
 
@@ -104,6 +102,7 @@ export default function ConfiguracionPage() {
     onSuccess: () => {
       notify('Paso eliminado.')
       close()
+      setConfirm(null)
     },
     onError: (err) => setError(err.message),
   })
@@ -122,6 +121,7 @@ export default function ConfiguracionPage() {
     onSuccess: () => {
       notify('Flujo eliminado.')
       close()
+      setConfirm(null)
     },
     onError: (err) => setError(err.message),
   })
@@ -206,11 +206,13 @@ export default function ConfiguracionPage() {
                       <button
                         type="button"
                         className="btn btn-ghost btn-xs text-rose-600"
-                        onClick={() => {
-                          if (confirmDelete(`el paso “${paso.nombre}”`)) {
-                            deletePasoMutation.mutate(paso.id)
-                          }
-                        }}
+                        onClick={() =>
+                          setConfirm({
+                            title: 'Eliminar paso',
+                            message: `¿Eliminar el paso “${paso.nombre}”? Esta acción no se puede deshacer.`,
+                            run: () => deletePasoMutation.mutate(paso.id),
+                          })
+                        }
                       >
                         Eliminar
                       </button>
@@ -272,11 +274,13 @@ export default function ConfiguracionPage() {
                         <button
                           type="button"
                           className="btn btn-ghost btn-xs text-rose-600"
-                          onClick={() => {
-                            if (confirmDelete(`el flujo “${flujo.nombre}”`)) {
-                              deleteFlujoMutation.mutate(flujo.id)
-                            }
-                          }}
+                          onClick={() =>
+                            setConfirm({
+                              title: 'Eliminar flujo',
+                              message: `¿Eliminar el flujo “${flujo.nombre}”? Esta acción no se puede deshacer.`,
+                              run: () => deleteFlujoMutation.mutate(flujo.id),
+                            })
+                          }
                         >
                           Eliminar
                         </button>
@@ -289,6 +293,17 @@ export default function ConfiguracionPage() {
           </table>
         )}
       </section>
+
+      {confirm ? (
+        <ConfirmModal
+          open
+          title={confirm.title}
+          message={confirm.message}
+          pending={deletePasoMutation.isPending || deleteFlujoMutation.isPending}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => confirm.run()}
+        />
+      ) : null}
 
       {modal?.type === 'create-paso' ? (
         <PasoFormModal
@@ -303,11 +318,13 @@ export default function ConfiguracionPage() {
         <PasoFormModal
           editing={modal.editing}
           onClose={close}
-          onDelete={() => {
-            if (confirmDelete(`el paso “${selectedPaso.nombre}”`)) {
-              deletePasoMutation.mutate(selectedPaso.id)
-            }
-          }}
+          onDelete={() =>
+            setConfirm({
+              title: 'Eliminar paso',
+              message: `¿Eliminar el paso “${selectedPaso.nombre}”? Esta acción no se puede deshacer.`,
+              run: () => deletePasoMutation.mutate(selectedPaso.id),
+            })
+          }
           onSave={(form) =>
             updatePasoMutation.mutate({
               id: selectedPaso.id,
@@ -341,11 +358,13 @@ export default function ConfiguracionPage() {
             })
           }}
           onClose={close}
-          onDelete={() => {
-            if (confirmDelete(`el flujo “${selectedFlujo.nombre}”`)) {
-              deleteFlujoMutation.mutate(selectedFlujo.id)
-            }
-          }}
+          onDelete={() =>
+            setConfirm({
+              title: 'Eliminar flujo',
+              message: `¿Eliminar el flujo “${selectedFlujo.nombre}”? Esta acción no se puede deshacer.`,
+              run: () => deleteFlujoMutation.mutate(selectedFlujo.id),
+            })
+          }
           onRemovePaso={(id) => deleteLinkMutation.mutate(id)}
           onSave={(nombre) =>
             updateFlujoMutation.mutate({ id: selectedFlujo.id, payload: { nombre } })

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
+import ConfirmModal from '../components/ConfirmModal.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { getVenta, getFlujos, updateVenta, updateVentaPaso, deleteVenta } from '../service/api.js'
 import {
@@ -28,6 +29,7 @@ function pasoColor(estado) {
 export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   const { can } = useAuth()
   const [editing, setEditing] = useState(false)
+  const [confirm, setConfirm] = useState(null)
   const queryClient = useQueryClient()
   const { isPending, isError, error, data: venta } = useQuery({
     queryKey: ['venta', ventaId],
@@ -91,6 +93,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   const showPasoSelects = editing && canChangePaso
 
   return (
+    <>
     <Modal
       open
       wide
@@ -106,11 +109,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
               type="button"
               className="btn btn-ghost text-rose-600"
               disabled={saving}
-              onClick={() => {
-                if (window.confirm(`¿Eliminar ${numeroVenta(venta)}?`)) {
-                  deleteMutation.mutate()
-                }
-              }}
+              onClick={() => setConfirm({ type: 'delete' })}
             >
               Eliminar
             </button>
@@ -231,13 +230,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
                   onChange={(event) => {
                     const next = Number(event.target.value)
                     if (next === venta.flujo) return
-                    if (
-                      window.confirm(
-                        'Cambiar el flujo recrea los pasos de esta venta. ¿Continuar?',
-                      )
-                    ) {
-                      ventaMutation.mutate({ flujo: next })
-                    }
+                    setConfirm({ type: 'flujo', flujoId: next })
                   }}
                   value={venta.flujo}
                 >
@@ -301,5 +294,31 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
         </ol>
       </section>
     </Modal>
+    {confirm?.type === 'delete' ? (
+      <ConfirmModal
+        open
+        title="Eliminar venta"
+        message={`¿Eliminar ${numeroVenta(venta)}? Esta acción no se puede deshacer.`}
+        pending={deleteMutation.isPending}
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => deleteMutation.mutate()}
+      />
+    ) : null}
+    {confirm?.type === 'flujo' ? (
+      <ConfirmModal
+        open
+        danger={false}
+        confirmLabel="Cambiar"
+        title="Cambiar flujo"
+        message="Cambiar el flujo recrea los pasos de esta venta. ¿Continuar?"
+        pending={ventaMutation.isPending}
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => {
+          ventaMutation.mutate({ flujo: confirm.flujoId })
+          setConfirm(null)
+        }}
+      />
+    ) : null}
+    </>
   )
 }

@@ -14,6 +14,7 @@ import {
 import { displayName } from '../lib/auth.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
+import ConfirmModal from '../components/ConfirmModal.jsx'
 
 const emptyUser = {
   username: '',
@@ -28,6 +29,7 @@ export default function RolesPage() {
   const { user: currentUser } = useAuth()
   const queryClient = useQueryClient()
   const [modal, setModal] = useState(null)
+  const [confirm, setConfirm] = useState(null)
   const [error, setError] = useState('')
   const [ok, setOk] = useState('')
 
@@ -75,6 +77,7 @@ export default function RolesPage() {
       setError('')
       invalidate()
       close()
+      setConfirm(null)
     },
     onError: (err) => setError(err.message),
   })
@@ -108,6 +111,7 @@ export default function RolesPage() {
       setError('')
       invalidate()
       close()
+      setConfirm(null)
     },
     onError: (err) => setError(err.message),
   })
@@ -192,11 +196,13 @@ export default function RolesPage() {
                   <button
                     type="button"
                     className="btn btn-ghost btn-xs text-rose-600"
-                    onClick={() => {
-                      if (window.confirm(`¿Eliminar el rol “${role.name}”?`)) {
-                        removeRole.mutate(role.id)
-                      }
-                    }}
+                    onClick={() =>
+                      setConfirm({
+                        title: 'Eliminar rol',
+                        message: `¿Eliminar el rol “${role.name}”? Esta acción no se puede deshacer.`,
+                        run: () => removeRole.mutate(role.id),
+                      })
+                    }
                   >
                     Eliminar
                   </button>
@@ -245,11 +251,13 @@ export default function RolesPage() {
                     <button
                       type="button"
                       className="btn btn-ghost btn-xs text-rose-600"
-                      onClick={() => {
-                        if (window.confirm(`¿Eliminar al usuario “${user.username}”?`)) {
-                          removeUser.mutate(user.id)
-                        }
-                      }}
+                      onClick={() =>
+                        setConfirm({
+                          title: 'Eliminar usuario',
+                          message: `¿Eliminar al usuario “${user.username}”? Esta acción no se puede deshacer.`,
+                          run: () => removeUser.mutate(user.id),
+                        })
+                      }
                     >
                       Eliminar
                     </button>
@@ -260,6 +268,17 @@ export default function RolesPage() {
           </tbody>
         </table>
       </section>
+
+      {confirm ? (
+        <ConfirmModal
+          open
+          title={confirm.title}
+          message={confirm.message}
+          pending={removeRole.isPending || removeUser.isPending}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => confirm.run()}
+        />
+      ) : null}
 
       {modal?.type === 'create-role' ? (
         <CreateRoleModal
@@ -274,11 +293,13 @@ export default function RolesPage() {
           catalog={catalog}
           editing={modal.editing}
           onClose={close}
-          onDelete={() => {
-            if (window.confirm(`¿Eliminar el rol “${selectedRole.name}”?`)) {
-              removeRole.mutate(selectedRole.id)
-            }
-          }}
+          onDelete={() =>
+            setConfirm({
+              title: 'Eliminar rol',
+              message: `¿Eliminar el rol “${selectedRole.name}”? Esta acción no se puede deshacer.`,
+              run: () => removeRole.mutate(selectedRole.id),
+            })
+          }
           onSave={(payload) => saveRole.mutate({ id: selectedRole.id, payload })}
           pending={saveRole.isPending}
           role={selectedRole}
@@ -302,11 +323,13 @@ export default function RolesPage() {
           currentUserId={currentUser?.id}
           editing={modal.editing}
           onClose={close}
-          onDelete={() => {
-            if (window.confirm(`¿Eliminar al usuario “${selectedUser.username}”?`)) {
-              removeUser.mutate(selectedUser.id)
-            }
-          }}
+          onDelete={() =>
+            setConfirm({
+              title: 'Eliminar usuario',
+              message: `¿Eliminar al usuario “${selectedUser.username}”? Esta acción no se puede deshacer.`,
+              run: () => removeUser.mutate(selectedUser.id),
+            })
+          }
           onSave={(payload) => patchUser.mutate({ id: selectedUser.id, payload })}
           pending={patchUser.isPending}
           roles={roles}

@@ -10,6 +10,7 @@ import ConfiguracionPage from './pages/ConfiguracionPage.jsx'
 import PlaceholderPage from './pages/PlaceholderPage.jsx'
 import RolesPage from './pages/RolesPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
+import ConfirmModal from './components/ConfirmModal.jsx'
 import { useAuth } from './context/AuthContext.jsx'
 import { deleteVenta, getVentas } from './service/api.js'
 import { filterVentas, numeroVenta } from './lib/venta.js'
@@ -27,6 +28,7 @@ function App() {
   const queryClient = useQueryClient()
   const [route, setRoute] = useState({ page: 'inicio' })
   const [filters, setFilters] = useState(emptyFilters)
+  const [ventaToDelete, setVentaToDelete] = useState(null)
 
   const ventasQuery = useQuery({
     queryKey: ['tabla-ventas'],
@@ -39,10 +41,7 @@ function App() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tabla-ventas'] }),
   })
 
-  const handleDeleteVenta = (venta) => {
-    if (!window.confirm(`¿Eliminar ${numeroVenta(venta)}?`)) return
-    deleteVentaMutation.mutate(venta)
-  }
+  const handleDeleteVenta = (venta) => setVentaToDelete(venta)
 
   const ventas = ventasQuery.data ?? []
   const filtered = useMemo(() => filterVentas(ventas, filters), [ventas, filters])
@@ -127,6 +126,18 @@ function App() {
       search={filters.search}
     >
       {content}
+      {ventaToDelete ? (
+        <ConfirmModal
+          open
+          title="Eliminar venta"
+          message={`¿Eliminar ${numeroVenta(ventaToDelete)}? Esta acción no se puede deshacer.`}
+          onCancel={() => setVentaToDelete(null)}
+          onConfirm={() => {
+            deleteVentaMutation.mutate(ventaToDelete)
+            setVentaToDelete(null)
+          }}
+        />
+      ) : null}
       {route.page === 'venta-detalle' ? (
         <VentaDetailPage
           onBack={() => setRoute({ page: route.from || 'inicio' })}
