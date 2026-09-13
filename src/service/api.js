@@ -140,6 +140,14 @@ export function deleteUser(id) {
   });
 }
 
+export function lookupRuc(ruc) {
+  return request(`/lookup/ruc/?ruc=${encodeURIComponent(ruc)}`);
+}
+
+export function lookupDireccion(query) {
+  return request(`/lookup/direccion/?q=${encodeURIComponent(query)}`);
+}
+
 export function getChoices() {
   return request("/choices/");
 }

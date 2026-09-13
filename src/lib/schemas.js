@@ -91,6 +91,13 @@ function requireNuevaVentaCliente(value, ctx) {
     })
   }
 
+  if (value.ruc) {
+    const ruc = digitCode(11, 'El RUC debe tener 11 dígitos').safeParse(value.ruc)
+    if (!ruc.success) {
+      ctx.addIssue({ code: 'custom', path: ['ruc'], message: ruc.error.issues[0]?.message })
+    }
+  }
+
   if (value.tipo_cliente === 'EMPRESA') {
     const ruc = digitCode(11, 'El RUC debe tener 11 dígitos').safeParse(value.ruc)
     if (!ruc.success) {

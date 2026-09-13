@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .auth_views import change_password, csrf, login_view, logout_view, me
 from .roles_views import permission_catalog, role_detail, roles, user_detail, users
+from .lookup_views import lookup_direccion, lookup_ruc
 from .views import (
     ClienteViewSet,
     DireccionViewSet,
@@ -36,6 +37,8 @@ router.register("venta-pasos", VentaPasoViewSet)
 urlpatterns = [
     path("", include(router.urls)),
     path("choices/", choices, name="api-choices"),
+    path("lookup/ruc/", lookup_ruc, name="api-lookup-ruc"),
+    path("lookup/direccion/", lookup_direccion, name="api-lookup-direccion"),
     path("auth/csrf/", csrf, name="api-csrf"),
     path("auth/login/", login_view, name="api-login"),
     path("auth/logout/", logout_view, name="api-logout"),

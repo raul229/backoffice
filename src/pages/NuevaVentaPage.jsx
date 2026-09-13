@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import CatalogEmpty from '../components/CatalogEmpty.jsx'
 import Field from '../components/Field.jsx'
 import { SelectField, TextField } from '../components/FormFields.jsx'
+import Modal from '../components/Modal.jsx'
 import {
   createDireccion,
   createEmpresa,
@@ -13,7 +14,10 @@ import {
   getFlujos,
   getProductos,
   getPromociones,
+  lookupDireccion,
+  lookupRuc,
 } from '../service/api.js'
+import { parseDireccion } from '../lib/address.js'
 import { DOCUMENT_LENGTH, digitCode, nuevaVentaClienteSchema, nuevaVentaSchema, requiredText, validateDocumentNumber } from '../lib/schemas.js'
 import { flujosPorTipo } from '../lib/venta.js'
 
@@ -36,6 +40,7 @@ const defaultValues = {
   producto: '',
   flujo: '',
   promociones: [],
+  cliente_id: '',
 }
 
 function personaPayload(value) {
@@ -62,19 +67,71 @@ function direccionPayload(value, clienteId) {
 }
 
 function step0Fields(tipoCliente) {
-  const fields = ['numero_documento', 'nombres', 'apellidos', 'celular', 'direccion', 'numero', 'distrito']
+  const fields = ['ruc', 'numero_documento', 'nombres', 'apellidos', 'celular', 'direccion', 'numero', 'distrito']
   if (tipoCliente === 'EMPRESA') {
-    fields.unshift('ruc', 'razon_social')
+    fields.splice(1, 0, 'razon_social')
   } else {
-    fields.splice(4, 0, 'distrito_nacimiento', 'padre', 'madre')
+    fields.splice(5, 0, 'distrito_nacimiento', 'padre', 'madre')
   }
   return fields
+}
+
+const LOOKUP_FIELDS = [
+  'tipo_cliente',
+  'razon_social',
+  'tipo_documento',
+  'numero_documento',
+  'nombres',
+  'apellidos',
+  'celular',
+  'distrito_nacimiento',
+  'padre',
+  'madre',
+  'tipo_direccion',
+  'direccion',
+  'numero',
+  'distrito',
+  'producto',
+  'flujo',
+  'promociones',
+]
+
+function cambiarTipoCliente(form, tipo, { lastRucLookup, setLookupStatus, setRepresentantes, setStep }) {
+  if (form.getFieldValue('tipo_cliente') === tipo) return
+  form.reset({ ...defaultValues, tipo_cliente: tipo })
+  lastRucLookup.current = ''
+  setLookupStatus('')
+  setRepresentantes([])
+  setStep(0)
+}
+
+function applyDireccion(form, data) {
+  for (const name of ['tipo_direccion', 'direccion', 'numero', 'distrito']) {
+    if (data[name]) form.setFieldValue(name, data[name])
+  }
+}
+
+function applyLookup(form, data) {
+  if (data.tipo_cliente && data.tipo_cliente !== form.getFieldValue('tipo_cliente')) {
+    form.setFieldValue('flujo', '')
+  }
+  for (const name of LOOKUP_FIELDS) {
+    const value = data[name]
+    if (value == null || value === '') continue
+    form.setFieldValue(name, value)
+  }
+  form.setFieldValue('cliente_id', data.cliente_id ? String(data.cliente_id) : '')
 }
 
 export default function NuevaVentaPage({ onCancel, onCreated }) {
   const queryClient = useQueryClient()
   const [step, setStep] = useState(0)
   const [formError, setFormError] = useState('')
+  const [lookupStatus, setLookupStatus] = useState('')
+  const [representantes, setRepresentantes] = useState([])
+  const [direccionSugerencias, setDireccionSugerencias] = useState([])
+  const lastRucLookup = useRef('')
+  const direccionTimer = useRef(0)
 
   const choicesQuery = useQuery({ queryKey: ['choices'], queryFn: getChoices })
   const productosQuery = useQuery({ queryKey: ['productos'], queryFn: getProductos })
@@ -83,18 +140,20 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
 
   const mutation = useMutation({
     mutationFn: async (value) => {
-      let clienteId
-      if (value.tipo_cliente === 'EMPRESA') {
-        const representante = await createPersona(personaPayload(value))
-        const empresa = await createEmpresa({
-          ruc: value.ruc,
-          razon_social: value.razon_social,
-          representante_legal: representante.id,
-        })
-        clienteId = empresa.cliente
-      } else {
-        const persona = await createPersona(personaPayload(value))
-        clienteId = persona.cliente
+      let clienteId = value.cliente_id ? Number(value.cliente_id) : null
+      if (!clienteId) {
+        if (value.tipo_cliente === 'EMPRESA') {
+          const representante = await createPersona(personaPayload(value))
+          const empresa = await createEmpresa({
+            ruc: value.ruc,
+            razon_social: value.razon_social,
+            representante_legal: representante.id,
+          })
+          clienteId = empresa.cliente
+        } else {
+          const persona = await createPersona(personaPayload(value))
+          clienteId = persona.cliente
+        }
       }
       await createDireccion(direccionPayload(value, clienteId))
       return createVenta({
@@ -126,6 +185,64 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
   const tiposDocumento = choicesQuery.data?.tipos_documento ?? [{ value: 'DNI', label: 'DNI' }]
   const tiposDireccion = choicesQuery.data?.tipos_direccion ?? [{ value: 'CALLE', label: 'Calle' }]
 
+  const buscarDireccion = (query) => {
+    window.clearTimeout(direccionTimer.current)
+    direccionTimer.current = window.setTimeout(async () => {
+      const parsed = parseDireccion(query)
+      if (parsed.numero || parsed.distrito) {
+        applyDireccion(form, parsed)
+        setDireccionSugerencias([])
+        return
+      }
+      if (!query || query.length < 2) {
+        setDireccionSugerencias([])
+        return
+      }
+      try {
+        const data = await lookupDireccion(query)
+        if (data.parsed?.direccion) {
+          applyDireccion(form, data.parsed)
+          setDireccionSugerencias([])
+          return
+        }
+        const items = data.items ?? []
+        if (items.length === 1 && items[0].direccion.startsWith(query)) {
+          applyDireccion(form, items[0])
+          setDireccionSugerencias([])
+        } else {
+          setDireccionSugerencias(items)
+        }
+      } catch {
+        setDireccionSugerencias([])
+      }
+    }, 280)
+  }
+
+  const buscarPorRuc = async (ruc) => {
+    if (!/^\d{11}$/.test(ruc) || lastRucLookup.current === ruc) return
+    lastRucLookup.current = ruc
+    setLookupStatus('Buscando RUC...')
+    try {
+      const data = await lookupRuc(ruc)
+      applyLookup(form, data)
+      const reps = data.representantes ?? []
+      setRepresentantes(reps)
+      if (reps.length > 1) {
+        setLookupStatus('Se encontraron varios representantes. Elige con cuál completar el formulario.')
+      } else {
+        setLookupStatus(
+          data.source === 'cliente'
+            ? 'Se completó con datos de un cliente ya registrado.'
+            : 'Se completó con datos de SUNAT.',
+        )
+      }
+    } catch (error) {
+      form.setFieldValue('cliente_id', '')
+      setRepresentantes([])
+      setLookupStatus(error.message || 'No se encontraron datos para este RUC.')
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -148,9 +265,9 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
           <li className={`step ${step >= 1 ? 'step-primary' : ''}`}>Producto y flujo</li>
         </ul>
 
-        {formError ? (
-          <div className="alert alert-error mb-4">
-            <span>{formError}</span>
+        {lookupStatus ? (
+          <div className="alert mb-4 bg-slate-100 text-slate-700">
+            <span>{lookupStatus}</span>
           </div>
         ) : null}
 
@@ -177,10 +294,14 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                           className={`flex-1 rounded-full py-2 text-sm ${
                             values.tipo_cliente === 'PERSONA' ? 'bg-white font-medium shadow' : 'text-slate-500'
                           }`}
-                          onClick={() => {
-                            form.setFieldValue('tipo_cliente', 'PERSONA')
-                            form.setFieldValue('flujo', '')
-                          }}
+                          onClick={() =>
+                            cambiarTipoCliente(form, 'PERSONA', {
+                              lastRucLookup,
+                              setLookupStatus,
+                              setRepresentantes,
+                              setStep,
+                            })
+                          }
                         >
                           Persona Natural
                         </button>
@@ -189,27 +310,59 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                           className={`flex-1 rounded-full py-2 text-sm ${
                             values.tipo_cliente === 'EMPRESA' ? 'bg-white font-medium shadow' : 'text-slate-500'
                           }`}
-                          onClick={() => {
-                            form.setFieldValue('tipo_cliente', 'EMPRESA')
-                            form.setFieldValue('flujo', '')
-                            form.setFieldValue('distrito_nacimiento', '')
-                            form.setFieldValue('padre', '')
-                            form.setFieldValue('madre', '')
-                          }}
+                          onClick={() =>
+                            cambiarTipoCliente(form, 'EMPRESA', {
+                              lastRucLookup,
+                              setLookupStatus,
+                              setRepresentantes,
+                              setStep,
+                            })
+                          }
                         >
                           Persona Jurídica
                         </button>
                       </div>
 
+                      <Field
+                        form={form}
+                        name="ruc"
+                        listeners={{
+                          onChange: ({ value }) => {
+                            const ruc = String(value || '')
+                            if (ruc.length !== 11) {
+                              lastRucLookup.current = ''
+                              form.setFieldValue('cliente_id', '')
+                              setLookupStatus('')
+                              setRepresentantes([])
+                            }
+                            buscarPorRuc(ruc)
+                          },
+                        }}
+                        validators={
+                          values.tipo_cliente === 'EMPRESA'
+                            ? digitCode(11, 'El RUC debe tener 11 dígitos')
+                            : undefined
+                        }
+                      >
+                        {(field) => (
+                          <TextField
+                            className={values.tipo_cliente === 'PERSONA' ? 'md:col-span-2' : ''}
+                            field={field}
+                            inputMode="numeric"
+                            label={
+                              values.tipo_cliente === 'EMPRESA'
+                                ? 'RUC'
+                                : 'RUC (opcional, autocompleta si ya existe o en SUNAT)'
+                            }
+                            maxLength={11}
+                            onBlur={() => buscarPorRuc(field.state.value)}
+                          />
+                        )}
+                      </Field>
                       {values.tipo_cliente === 'EMPRESA' ? (
                         <>
-                          <Field form={form} name="ruc" validators={digitCode(11, 'El RUC debe tener 11 dígitos')}>
-                            {(field) => (
-                              <TextField field={field} inputMode="numeric" label="RUC" maxLength={11} />
-                            )}
-                          </Field>
                           <Field form={form} name="razon_social" validators={requiredText()}>
-                            {(field) => <TextField field={field} label="Razón social" />}
+                            {(field) => <TextField field={field} label="Razón social" normalize="upper" />}
                           </Field>
                           <p className="text-sm font-medium text-slate-600 md:col-span-2">Representante legal</p>
                         </>
@@ -311,10 +464,10 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
             {(tipoCliente) => (
           <div className={`mt-4 grid gap-4 md:grid-cols-2 ${step !== 0 ? 'hidden' : ''}`}>
               <Field form={form} name="nombres" validators={requiredText()}>
-                {(field) => <TextField field={field} label="Nombres" />}
+                {(field) => <TextField field={field} label="Nombres" normalize="upper" />}
               </Field>
               <Field form={form} name="apellidos" validators={requiredText()}>
-                {(field) => <TextField field={field} label="Apellidos" />}
+                {(field) => <TextField field={field} label="Apellidos" normalize="upper" />}
               </Field>
               <Field
                 form={form}
@@ -328,13 +481,13 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
               {tipoCliente === 'PERSONA' ? (
                 <>
                   <Field form={form} name="distrito_nacimiento" validators={requiredText()}>
-                    {(field) => <TextField field={field} label="Distrito de nacimiento" />}
+                    {(field) => <TextField field={field} label="Distrito de nacimiento" normalize="upper" />}
                   </Field>
                   <Field form={form} name="padre" validators={requiredText()}>
-                    {(field) => <TextField field={field} label="Padre" />}
+                    {(field) => <TextField field={field} label="Padre" normalize="upper" />}
                   </Field>
                   <Field form={form} name="madre" validators={requiredText()}>
-                    {(field) => <TextField field={field} label="Madre" />}
+                    {(field) => <TextField field={field} label="Madre" normalize="upper" />}
                   </Field>
                 </>
               ) : null}
@@ -349,13 +502,46 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                 )}
               </Field>
               <Field form={form} name="direccion" validators={requiredText()}>
-                {(field) => <TextField field={field} label="Dirección" />}
+                {(field) => (
+                  <div className="relative">
+                    <TextField
+                      autoComplete="off"
+                      field={field}
+                      label="Dirección"
+                      normalize="upper"
+                      onBlur={() => {
+                        const parsed = parseDireccion(field.state.value)
+                        if (parsed.numero || parsed.distrito) applyDireccion(form, parsed)
+                      }}
+                      onValueChange={buscarDireccion}
+                    />
+                    {direccionSugerencias.length > 0 ? (
+                      <ul className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                        {direccionSugerencias.map((item) => (
+                          <li key={`${item.tipo_direccion}-${item.direccion}-${item.numero}-${item.distrito}`}>
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => {
+                                applyDireccion(form, item)
+                                setDireccionSugerencias([])
+                              }}
+                            >
+                              {item.tipo_direccion} {item.direccion} {item.numero}, {item.distrito}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                )}
               </Field>
               <Field form={form} name="numero" validators={requiredText()}>
-                {(field) => <TextField field={field} label="Número" />}
+                {(field) => <TextField field={field} label="Número" normalize="upper" />}
               </Field>
               <Field form={form} name="distrito" validators={requiredText()}>
-                {(field) => <TextField field={field} label="Distrito" />}
+                {(field) => <TextField field={field} label="Distrito" normalize="upper" />}
               </Field>
             </div>
             )}
@@ -404,6 +590,40 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
           </div>
         </form>
       </section>
+
+      <Modal
+        open={representantes.length > 1}
+        title="Selecciona el representante legal"
+        onClose={() => setRepresentantes([])}
+      >
+        <p className="mb-3 text-sm text-slate-500">
+          SUNAT reportó más de un representante. Elige con qué datos completar el formulario.
+        </p>
+        <div className="space-y-2">
+          {representantes.map((rep) => (
+            <button
+              key={`${rep.tipo_documento}-${rep.numero_documento}`}
+              type="button"
+              className="btn h-auto w-full justify-start whitespace-normal rounded-xl border border-slate-200 bg-white py-3 text-left font-normal hover:bg-slate-50"
+              onClick={() => {
+                applyLookup(form, rep)
+                setRepresentantes([])
+                setLookupStatus(
+                  `Representante seleccionado: ${rep.nombre_completo}${rep.cargo ? ` (${rep.cargo})` : ''}.`,
+                )
+              }}
+            >
+              <span>
+                <span className="block font-medium">{rep.nombre_completo}</span>
+                <span className="block text-xs text-slate-500">
+                  {rep.cargo ? `${rep.cargo} · ` : ''}
+                  {rep.tipo_documento} {rep.numero_documento}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </Modal>
     </div>
   )
 }

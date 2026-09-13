@@ -1,8 +1,9 @@
 from django.contrib.auth.models import Group, User
 from rest_framework import status
 from rest_framework.test import APITestCase
+from unittest.mock import patch
 
-from .models import Cliente, Flujo, FlujoPaso, Paso, Producto, Promocion, TipoCliente
+from .models import Cliente, Direccion, Empresa, Flujo, FlujoPaso, Paso, Persona, Producto, Promocion, TipoCliente
 
 
 class ApiEndpointsTests(APITestCase):
@@ -403,3 +404,292 @@ class AuthAndPermissionsTests(APITestCase):
 
         deleted_flujo = self.client.delete(f"/api/flujos/{flujo.id}/")
         self.assertEqual(deleted_flujo.status_code, status.HTTP_204_NO_CONTENT)
+
+
+SUNAT_EMPRESA_HTML = """
+<div class="list-group-item">
+  <div class="row">
+    <div class="col-sm-5">
+      <h4 class="list-group-item-heading">Número de RUC:</h4>
+    </div>
+    <div class="col-sm-7">
+      <h4 class="list-group-item-heading">20522317285 - INDOTECH SAC</h4>
+    </div>
+  </div>
+</div>
+<div class="list-group-item">
+  <div class="row">
+    <div class="col-sm-5">
+      <h4 class="list-group-item-heading">Domicilio Fiscal:</h4>
+    </div>
+    <div class="col-sm-7">
+      <p class="list-group-item-text">CAL.LUIGGI BARSATO NRO. 167 LIMA - LIMA - SAN BORJA</p>
+    </div>
+  </div>
+</div>
+"""
+
+SUNAT_PERSONA_HTML = """
+<div class="list-group-item">
+  <div class="row">
+    <div class="col-sm-5">
+      <h4 class="list-group-item-heading">Número de RUC:</h4>
+    </div>
+    <div class="col-sm-7">
+      <h4 class="list-group-item-heading">10123456789 - PEREZ LOPEZ, JUAN CARLOS</h4>
+    </div>
+  </div>
+</div>
+"""
+
+
+class LookupRucTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_superuser("tester", "tester@test.com", "pass")
+        self.client.force_authenticate(self.user)
+
+    def test_parse_sunat_html_empresa_and_persona(self):
+        from .sunat import parse_sunat_html
+
+        empresa = parse_sunat_html(SUNAT_EMPRESA_HTML)
+        self.assertEqual(empresa["ruc"], "20522317285")
+        self.assertEqual(empresa["razon_social"], "INDOTECH SAC")
+        self.assertEqual(empresa["tipo_cliente"], "EMPRESA")
+        self.assertEqual(empresa["distrito"], "SAN BORJA")
+        self.assertEqual(empresa["numero"], "167")
+        self.assertEqual(empresa["tipo_direccion"], "CALLE")
+
+        persona = parse_sunat_html(SUNAT_PERSONA_HTML)
+        self.assertEqual(persona["tipo_cliente"], "PERSONA")
+        self.assertEqual(persona["tipo_documento"], "DNI")
+        self.assertEqual(persona["numero_documento"], "12345678")
+        self.assertEqual(persona["nombres"], "JUAN CARLOS")
+        self.assertEqual(persona["apellidos"], "PEREZ LOPEZ")
+
+    def test_lookup_uses_existing_cliente_and_last_sale(self):
+        representante = Persona.objects.create(
+            cliente=Cliente.objects.create(tipo=TipoCliente.PERSONA),
+            tipo_documento="DNI",
+            numero_documento="87654321",
+            nombres="Ana",
+            apellidos="Perez",
+            celular="987654321",
+        )
+        empresa_cliente = Cliente.objects.create(tipo=TipoCliente.EMPRESA)
+        Empresa.objects.create(
+            cliente=empresa_cliente,
+            ruc="20522317285",
+            razon_social="INDOTECH SAC",
+            representante_legal=representante,
+        )
+        Direccion.objects.create(
+            cliente=empresa_cliente,
+            tipo="CALLE",
+            direccion="Luiggi Barsato",
+            numero="167",
+            distrito="San Borja",
+        )
+        producto = Producto.objects.create(nombre="Fibra", velocidad=200, precio=79)
+        flujo = Flujo.objects.create(nombre="Empresa", tipo_cliente=TipoCliente.EMPRESA)
+        promo = Promocion.objects.create(nombre="Promo", descripcion="x")
+        venta = self.client.post(
+            "/api/ventas/",
+            {
+                "cliente": empresa_cliente.id,
+                "producto": producto.id,
+                "flujo": flujo.id,
+                "promociones": [promo.id],
+            },
+            format="json",
+        )
+        self.assertEqual(venta.status_code, status.HTTP_201_CREATED)
+
+        with patch("api.lookup_views.consultar_sunat") as mocked:
+            response = self.client.get("/api/lookup/ruc/", {"ruc": "20522317285"})
+            mocked.assert_not_called()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["source"], "cliente")
+        self.assertEqual(response.data["cliente_id"], empresa_cliente.id)
+        self.assertEqual(response.data["razon_social"], "INDOTECH SAC")
+        self.assertEqual(response.data["nombres"], "Ana")
+        self.assertEqual(response.data["producto"], str(producto.id))
+        self.assertEqual(response.data["promociones"], [str(promo.id)])
+
+    def test_lookup_falls_back_to_sunat(self):
+        with patch(
+            "api.lookup_views.consultar_sunat",
+            return_value={
+                "ruc": "20522317285",
+                "razon_social": "INDOTECH SAC",
+                "tipo_cliente": "EMPRESA",
+                "tipo_direccion": "CALLE",
+                "direccion": "Luiggi Barsato",
+                "numero": "167",
+                "distrito": "SAN BORJA",
+            },
+        ):
+            response = self.client.get("/api/lookup/ruc/", {"ruc": "20522317285"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["source"], "sunat")
+        self.assertEqual(response.data["razon_social"], "INDOTECH SAC")
+        self.assertIsNone(response.data.get("cliente_id"))
+
+    def test_parse_representantes_html(self):
+        from .sunat import parse_representantes
+
+        html = """
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Documento</th>
+              <th>Nro. Documento</th>
+              <th>Nombre</th>
+              <th>Cargo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>DNI</td>
+              <td>12345678</td>
+              <td>PEREZ LOPEZ JUAN CARLOS</td>
+              <td>GERENTE GENERAL</td>
+            </tr>
+            <tr>
+              <td>DNI</td>
+              <td>87654321</td>
+              <td>RAMOS DIAZ ANA MARIA</td>
+              <td>APODERADO</td>
+            </tr>
+          </tbody>
+        </table>
+        """
+        reps = parse_representantes(html)
+        self.assertEqual(len(reps), 2)
+        self.assertEqual(reps[0]["tipo_documento"], "DNI")
+        self.assertEqual(reps[0]["numero_documento"], "12345678")
+        self.assertEqual(reps[0]["nombres"], "JUAN CARLOS")
+        self.assertEqual(reps[0]["apellidos"], "PEREZ LOPEZ")
+        self.assertEqual(reps[0]["cargo"], "GERENTE GENERAL")
+
+    def test_lookup_sunat_single_representante_fills_form(self):
+        with patch(
+            "api.lookup_views.consultar_sunat",
+            return_value={
+                "ruc": "20123456789",
+                "razon_social": "EMPRESA SAC",
+                "tipo_cliente": "EMPRESA",
+                "representantes": [
+                    {
+                        "tipo_documento": "DNI",
+                        "numero_documento": "12345678",
+                        "nombres": "JUAN CARLOS",
+                        "apellidos": "PEREZ LOPEZ",
+                        "nombre_completo": "PEREZ LOPEZ JUAN CARLOS",
+                        "cargo": "GERENTE GENERAL",
+                    }
+                ],
+            },
+        ):
+            response = self.client.get("/api/lookup/ruc/", {"ruc": "20123456789"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["nombres"], "JUAN CARLOS")
+        self.assertNotIn("representantes", response.data)
+
+    def test_lookup_sunat_multiple_representantes_are_listed(self):
+        with patch(
+            "api.lookup_views.consultar_sunat",
+            return_value={
+                "ruc": "20123456789",
+                "razon_social": "EMPRESA SAC",
+                "tipo_cliente": "EMPRESA",
+                "representantes": [
+                    {
+                        "tipo_documento": "DNI",
+                        "numero_documento": "12345678",
+                        "nombres": "JUAN",
+                        "apellidos": "PEREZ",
+                        "nombre_completo": "PEREZ JUAN",
+                        "cargo": "GERENTE",
+                    },
+                    {
+                        "tipo_documento": "DNI",
+                        "numero_documento": "87654321",
+                        "nombres": "ANA",
+                        "apellidos": "RAMOS",
+                        "nombre_completo": "RAMOS ANA",
+                        "cargo": "APODERADO",
+                    },
+                ],
+            },
+        ):
+            response = self.client.get("/api/lookup/ruc/", {"ruc": "20123456789"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["representantes"]), 2)
+        self.assertNotIn("nombres", response.data)
+
+    def test_persona_and_direccion_are_saved_uppercase(self):
+        persona = self.client.post(
+            "/api/personas/",
+            {
+                "tipo_documento": "DNI",
+                "numero_documento": "12345678",
+                "nombres": "Ana María",
+                "apellidos": "Pérez",
+                "distrito_nacimiento": "lima",
+                "padre": "carlos",
+                "madre": "maria",
+                "celular": "987654321",
+            },
+            format="json",
+        )
+        self.assertEqual(persona.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(persona.data["nombres"], "ANA MARÍA")
+        self.assertEqual(persona.data["apellidos"], "PÉREZ")
+
+        direccion = self.client.post(
+            "/api/direcciones/",
+            {
+                "cliente": persona.data["cliente"],
+                "tipo": "CALLE",
+                "direccion": "luiggi barsato",
+                "numero": "167",
+                "distrito": "san borja",
+            },
+            format="json",
+        )
+        self.assertEqual(direccion.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(direccion.data["direccion"], "LUIGGI BARSATO")
+        self.assertEqual(direccion.data["distrito"], "SAN BORJA")
+
+    def test_lookup_direccion_returns_saved_and_parsed(self):
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        Direccion.objects.create(
+            cliente=cliente,
+            tipo="CALLE",
+            direccion="LUIGGI BARSATO",
+            numero="167",
+            distrito="SAN BORJA",
+        )
+        Direccion.objects.create(
+            cliente=cliente,
+            tipo="AVENIDA",
+            direccion="JAVIER PRADO",
+            numero="100",
+            distrito="SAN ISIDRO",
+        )
+        saved = self.client.get("/api/lookup/direccion/", {"q": "luiggi"})
+        self.assertEqual(saved.status_code, status.HTTP_200_OK)
+        self.assertEqual(saved.data["items"][0]["direccion"], "LUIGGI BARSATO")
+
+        parsed = self.client.get(
+            "/api/lookup/direccion/",
+            {"q": "CAL.LUIGGI BARSATO NRO. 167 LIMA - LIMA - SAN BORJA"},
+        )
+        self.assertEqual(parsed.data["parsed"]["tipo_direccion"], "CALLE")
+        self.assertEqual(parsed.data["parsed"]["numero"], "167")
+        self.assertEqual(parsed.data["parsed"]["distrito"], "SAN BORJA")
+

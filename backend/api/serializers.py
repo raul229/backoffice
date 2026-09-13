@@ -1,6 +1,8 @@
 from django.db import transaction
 from rest_framework import serializers
 
+from .normalize import uppercase_fields
+
 from .models import (
     Cliente,
     Direccion,
@@ -47,6 +49,13 @@ class DireccionSerializer(serializers.ModelSerializer):
             "referencia",
         ]
 
+    def validate(self, attrs):
+        uppercase_fields(
+            attrs,
+            ["direccion", "numero", "distrito", "urbanizacion", "manzana", "lote", "referencia"],
+        )
+        return attrs
+
 
 class PersonaSerializer(serializers.ModelSerializer):
     cliente = serializers.PrimaryKeyRelatedField(
@@ -69,6 +78,7 @@ class PersonaSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, attrs):
+        uppercase_fields(attrs, ["nombres", "apellidos", "distrito_nacimiento", "padre", "madre"])
         tipo = attrs.get("tipo_documento") or getattr(self.instance, "tipo_documento", None)
         numero = attrs.get("numero_documento") or getattr(self.instance, "numero_documento", "")
         expected = 8 if tipo == TipoDocumento.DNI else 9 if tipo == TipoDocumento.CE else None
@@ -110,6 +120,10 @@ class EmpresaSerializer(serializers.ModelSerializer):
             "representante_legal",
             "representante_legal_detalle",
         ]
+
+    def validate(self, attrs):
+        uppercase_fields(attrs, ["razon_social"])
+        return attrs
 
     def create(self, validated_data):
         cliente = validated_data.get("cliente")

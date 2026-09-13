@@ -1,3 +1,5 @@
+import { normalizeUpper } from '../lib/address.js'
+
 function errorMessage(error) {
   if (!error) return ''
   if (typeof error === 'string') return error
@@ -22,6 +24,9 @@ export function TextField({
   maxLength,
   autoComplete,
   className = '',
+  onBlur,
+  onValueChange,
+  normalize,
 }) {
   const invalid = field.state.meta.isTouched && !field.state.meta.isValid
   return (
@@ -33,8 +38,15 @@ export function TextField({
         inputMode={inputMode}
         maxLength={maxLength}
         name={field.name}
-        onBlur={field.handleBlur}
-        onChange={(event) => field.handleChange(event.target.value)}
+        onBlur={(event) => {
+          field.handleBlur()
+          onBlur?.(event)
+        }}
+        onChange={(event) => {
+          const next = normalize === 'upper' ? normalizeUpper(event.target.value) : event.target.value
+          field.handleChange(next)
+          onValueChange?.(next)
+        }}
         placeholder={placeholder}
         type={type}
         value={field.state.value ?? ''}
