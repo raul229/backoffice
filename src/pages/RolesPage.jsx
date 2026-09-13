@@ -11,22 +11,23 @@ import {
   updateRole,
   updateUser,
 } from '../service/api.js'
+import { displayName } from '../lib/auth.js'
 import { useAuth } from '../context/AuthContext.jsx'
+import Modal from '../components/Modal.jsx'
+
+const emptyUser = {
+  username: '',
+  password: '',
+  first_name: '',
+  last_name: '',
+  groups: [],
+  is_active: true,
+}
 
 export default function RolesPage() {
   const { user: currentUser } = useAuth()
   const queryClient = useQueryClient()
-  const [selectedRoleId, setSelectedRoleId] = useState(null)
-  const [roleName, setRoleName] = useState('')
-  const [rolePerms, setRolePerms] = useState([])
-  const [newRoleName, setNewRoleName] = useState('')
-  const [userForm, setUserForm] = useState({
-    username: '',
-    password: '',
-    first_name: '',
-    last_name: '',
-    groups: [],
-  })
+  const [modal, setModal] = useState(null)
   const [error, setError] = useState('')
   const [ok, setOk] = useState('')
 
@@ -37,68 +38,54 @@ export default function RolesPage() {
   const roles = rolesQuery.data ?? []
   const users = usersQuery.data ?? []
   const catalog = catalogQuery.data ?? []
-  const selected = useMemo(
-    () => roles.find((role) => role.id === selectedRoleId) ?? null,
-    [roles, selectedRoleId],
-  )
-
-  useEffect(() => {
-    if (!selectedRoleId && roles[0]) {
-      setSelectedRoleId(roles[0].id)
-    }
-  }, [roles, selectedRoleId])
-
-  useEffect(() => {
-    if (!selected) return
-    setRoleName(selected.name)
-    setRolePerms(selected.permissions)
-  }, [selected])
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['roles'] })
     queryClient.invalidateQueries({ queryKey: ['users'] })
   }
 
-  const saveRole = useMutation({
-    mutationFn: () => updateRole(selected.id, { name: roleName, permissions: rolePerms }),
-    onSuccess: () => {
-      setOk('Rol actualizado.')
+  const close = () => setModal(null)
+
+  const addRole = useMutation({
+    mutationFn: (name) => createRole({ name, permissions: [] }),
+    onSuccess: (role) => {
+      setOk('Rol creado.')
       setError('')
       invalidate()
+      setModal({ type: 'role', id: role.id, editing: true })
     },
     onError: (err) => setError(err.message),
   })
 
-  const addRole = useMutation({
-    mutationFn: () => createRole({ name: newRoleName, permissions: [] }),
-    onSuccess: (role) => {
-      setNewRoleName('')
-      setSelectedRoleId(role.id)
-      setOk('Rol creado.')
+  const saveRole = useMutation({
+    mutationFn: ({ id, payload }) => updateRole(id, payload),
+    onSuccess: () => {
+      setOk('Rol actualizado.')
       setError('')
       invalidate()
+      close()
     },
     onError: (err) => setError(err.message),
   })
 
   const removeRole = useMutation({
-    mutationFn: (id) => deleteRole(id),
+    mutationFn: deleteRole,
     onSuccess: () => {
-      setSelectedRoleId(null)
       setOk('Rol eliminado.')
       setError('')
       invalidate()
+      close()
     },
     onError: (err) => setError(err.message),
   })
 
   const addUser = useMutation({
-    mutationFn: () => createUser(userForm),
+    mutationFn: (payload) => createUser(payload),
     onSuccess: () => {
-      setUserForm({ username: '', password: '', first_name: '', last_name: '', groups: [] })
       setOk('Usuario creado.')
       setError('')
       invalidate()
+      close()
     },
     onError: (err) => setError(err.message),
   })
@@ -109,6 +96,7 @@ export default function RolesPage() {
       setOk('Usuario actualizado.')
       setError('')
       invalidate()
+      close()
     },
     onError: (err) => setError(err.message),
   })
@@ -119,23 +107,45 @@ export default function RolesPage() {
       setOk('Usuario eliminado.')
       setError('')
       invalidate()
+      close()
     },
     onError: (err) => setError(err.message),
   })
 
-  const togglePerm = (code) => {
-    setRolePerms((current) =>
-      current.includes(code) ? current.filter((item) => item !== code) : [...current, code],
-    )
-  }
+  const selectedRole = useMemo(
+    () => roles.find((role) => role.id === modal?.id) ?? null,
+    [modal, roles],
+  )
+  const selectedUser = useMemo(
+    () => users.find((user) => user.id === modal?.id) ?? null,
+    [modal, users],
+  )
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold">Roles y usuarios</h1>
-        <p className="text-sm text-slate-500">
-          Los roles usan los grupos y permisos de Django. Sin “ver todas las ventas”, cada usuario solo ve las que registró.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Roles y usuarios</h1>
+          <p className="text-sm text-slate-500">
+            Abre un registro para verlo o editarlo. Los cambios solo se guardan desde el modal.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className="btn btn-sm rounded-full border-none bg-blue-600 text-white"
+            onClick={() => setModal({ type: 'create-role' })}
+          >
+            Nuevo rol
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm rounded-full border-none bg-blue-600 text-white"
+            onClick={() => setModal({ type: 'create-user' })}
+          >
+            Nuevo usuario
+          </button>
+        </div>
       </div>
 
       {error ? (
@@ -149,276 +159,423 @@ export default function RolesPage() {
         </div>
       ) : null}
 
-      <div className="grid items-start gap-4 xl:grid-cols-[260px_1fr]">
-        <section className="bo-card p-4">
-          <h2 className="mb-3 font-semibold">Roles</h2>
-          <div className="mb-3 flex gap-2">
-            <input
-              className="input input-bordered input-sm flex-1"
-              onChange={(event) => setNewRoleName(event.target.value)}
-              placeholder="Nuevo rol"
-              value={newRoleName}
-            />
-            <button
-              type="button"
-              className="btn btn-sm rounded-full border-none bg-blue-600 text-white"
-              disabled={!newRoleName.trim() || addRole.isPending}
-              onClick={() => addRole.mutate()}
-            >
-              Crear
-            </button>
-          </div>
-          <ul className="space-y-1">
+      <section className="bo-card overflow-x-auto p-5">
+        <h2 className="mb-3 font-semibold">Roles</h2>
+        <table className="table">
+          <thead>
+            <tr className="text-slate-400">
+              <th>Rol</th>
+              <th>Usuarios</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
             {roles.map((role) => (
-              <li key={role.id}>
-                <button
-                  type="button"
-                  className={`w-full rounded-xl px-3 py-2 text-left text-sm ${
-                    selectedRoleId === role.id ? 'bg-blue-600 text-white' : 'hover:bg-slate-100'
-                  }`}
-                  onClick={() => setSelectedRoleId(role.id)}
-                >
-                  {role.name}
-                  <span className="block text-xs opacity-70">{role.users_count} usuarios</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="bo-card p-5">
-          {selected ? (
-            <>
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                <input
-                  className="input input-bordered max-w-sm"
-                  onChange={(event) => setRoleName(event.target.value)}
-                  value={roleName}
-                />
-                <div className="flex gap-2">
+              <tr key={role.id}>
+                <td className="font-medium">{role.name}</td>
+                <td>{role.users_count}</td>
+                <td className="text-right">
                   <button
                     type="button"
-                    className="btn btn-sm rounded-full border-none bg-blue-600 text-white"
-                    disabled={saveRole.isPending}
-                    onClick={() => saveRole.mutate()}
+                    className="btn btn-ghost btn-xs"
+                    onClick={() => setModal({ type: 'role', id: role.id, editing: false })}
                   >
-                    Guardar nombre y permisos
+                    Ver
                   </button>
                   <button
                     type="button"
-                    className="btn btn-ghost btn-sm text-rose-600"
+                    className="btn btn-ghost btn-xs"
+                    onClick={() => setModal({ type: 'role', id: role.id, editing: true })}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs text-rose-600"
                     onClick={() => {
-                      if (window.confirm(`¿Eliminar el rol “${selected.name}”?`)) {
-                        removeRole.mutate(selected.id)
+                      if (window.confirm(`¿Eliminar el rol “${role.name}”?`)) {
+                        removeRole.mutate(role.id)
                       }
                     }}
                   >
-                    Eliminar rol
+                    Eliminar
                   </button>
-                </div>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                {catalog.map((section) => (
-                  <fieldset key={section.group} className="rounded-xl bg-slate-50 p-3">
-                    <legend className="px-1 text-sm font-semibold">{section.group}</legend>
-                    <div className="space-y-2">
-                      {section.items.map(([code, label]) => (
-                        <label key={code} className="flex items-start gap-2 text-sm">
-                          <input
-                            checked={rolePerms.includes(code)}
-                            className="checkbox checkbox-sm mt-0.5"
-                            onChange={() => togglePerm(code)}
-                            type="checkbox"
-                          />
-                          <span>
-                            {label}
-                            <span className="block text-xs text-slate-400">{code}</span>
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </fieldset>
-                ))}
-              </div>
-            </>
-          ) : (
-            <p className="text-sm text-slate-500">Selecciona un rol.</p>
-          )}
-        </section>
-      </div>
-
-      <section className="bo-card p-5">
-        <h2 className="mb-4 font-semibold">Usuarios</h2>
-        <div className="mb-4 grid gap-2 md:grid-cols-6">
-          <input
-            className="input input-bordered"
-            onChange={(event) => setUserForm((current) => ({ ...current, username: event.target.value }))}
-            placeholder="Usuario"
-            value={userForm.username}
-          />
-          <input
-            className="input input-bordered"
-            onChange={(event) => setUserForm((current) => ({ ...current, password: event.target.value }))}
-            placeholder="Contraseña"
-            type="password"
-            value={userForm.password}
-          />
-          <input
-            className="input input-bordered"
-            onChange={(event) => setUserForm((current) => ({ ...current, first_name: event.target.value }))}
-            placeholder="Nombre"
-            value={userForm.first_name}
-          />
-          <input
-            className="input input-bordered"
-            onChange={(event) => setUserForm((current) => ({ ...current, last_name: event.target.value }))}
-            placeholder="Apellido"
-            value={userForm.last_name}
-          />
-          <select
-            className="select select-bordered"
-            onChange={(event) =>
-              setUserForm((current) => ({
-                ...current,
-                groups: event.target.value ? [Number(event.target.value)] : [],
-              }))
-            }
-            value={userForm.groups[0] ?? ''}
-          >
-            <option value="">Sin rol</option>
-            {roles.map((role) => (
-              <option key={role.id} value={role.id}>
-                {role.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="btn rounded-full border-none bg-blue-600 text-white"
-            disabled={!userForm.username || !userForm.password || addUser.isPending}
-            onClick={() => addUser.mutate()}
-          >
-            Crear usuario
-          </button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="table">
-            <thead>
-              <tr className="text-slate-400">
-                <th>Usuario</th>
-                <th>Nombre</th>
-                <th>Apellido</th>
-                <th>Rol</th>
-                <th>Estado</th>
-                <th></th>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => (
-                <UserRow
-                  key={user.id}
-                  currentUserId={currentUser?.id}
-                  onDelete={() => {
-                    if (window.confirm(`¿Eliminar al usuario “${user.username}”?`)) {
-                      removeUser.mutate(user.id)
-                    }
-                  }}
-                  onSave={(payload) => patchUser.mutate({ id: user.id, payload })}
-                  roles={roles}
-                  user={user}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </section>
+
+      <section className="bo-card overflow-x-auto p-5">
+        <h2 className="mb-3 font-semibold">Usuarios</h2>
+        <table className="table">
+          <thead>
+            <tr className="text-slate-400">
+              <th>Usuario</th>
+              <th>Nombre</th>
+              <th>Rol</th>
+              <th>Estado</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((user) => (
+              <tr key={user.id}>
+                <td className="font-medium">{user.username}</td>
+                <td>{displayName(user)}</td>
+                <td>{user.groups[0] || 'Sin rol'}</td>
+                <td>{user.is_active ? 'Activo' : 'Inactivo'}</td>
+                <td className="text-right">
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs"
+                    onClick={() => setModal({ type: 'user', id: user.id, editing: false })}
+                  >
+                    Ver
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs"
+                    onClick={() => setModal({ type: 'user', id: user.id, editing: true })}
+                  >
+                    Editar
+                  </button>
+                  {user.id === currentUser?.id ? null : (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-xs text-rose-600"
+                      onClick={() => {
+                        if (window.confirm(`¿Eliminar al usuario “${user.username}”?`)) {
+                          removeUser.mutate(user.id)
+                        }
+                      }}
+                    >
+                      Eliminar
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      {modal?.type === 'create-role' ? (
+        <CreateRoleModal
+          onClose={close}
+          onCreate={(name) => addRole.mutate(name)}
+          pending={addRole.isPending}
+        />
+      ) : null}
+
+      {modal?.type === 'role' && selectedRole ? (
+        <RoleModal
+          catalog={catalog}
+          editing={modal.editing}
+          onClose={close}
+          onDelete={() => {
+            if (window.confirm(`¿Eliminar el rol “${selectedRole.name}”?`)) {
+              removeRole.mutate(selectedRole.id)
+            }
+          }}
+          onSave={(payload) => saveRole.mutate({ id: selectedRole.id, payload })}
+          pending={saveRole.isPending}
+          role={selectedRole}
+        />
+      ) : null}
+
+      {modal?.type === 'create-user' ? (
+        <UserModal
+          editing
+          isCreate
+          onClose={close}
+          onSave={(payload) => addUser.mutate(payload)}
+          pending={addUser.isPending}
+          roles={roles}
+          user={emptyUser}
+        />
+      ) : null}
+
+      {modal?.type === 'user' && selectedUser ? (
+        <UserModal
+          currentUserId={currentUser?.id}
+          editing={modal.editing}
+          onClose={close}
+          onDelete={() => {
+            if (window.confirm(`¿Eliminar al usuario “${selectedUser.username}”?`)) {
+              removeUser.mutate(selectedUser.id)
+            }
+          }}
+          onSave={(payload) => patchUser.mutate({ id: selectedUser.id, payload })}
+          pending={patchUser.isPending}
+          roles={roles}
+          user={selectedUser}
+        />
+      ) : null}
     </div>
   )
 }
 
-function UserRow({ user, roles, currentUserId, onSave, onDelete }) {
-  const [username, setUsername] = useState(user.username)
-  const [firstName, setFirstName] = useState(user.first_name ?? '')
-  const [lastName, setLastName] = useState(user.last_name ?? '')
-  const isSelf = user.id === currentUserId
+function CreateRoleModal({ onClose, onCreate, pending }) {
+  const [name, setName] = useState('')
+  return (
+    <Modal
+      open
+      title="Nuevo rol"
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="btn border-none bg-blue-600 text-white"
+            disabled={!name.trim() || pending}
+            onClick={() => onCreate(name.trim())}
+          >
+            Crear
+          </button>
+        </>
+      }
+    >
+      <label className="block text-sm">
+        <span className="mb-1 block text-slate-500">Nombre</span>
+        <input
+          className="input input-bordered w-full"
+          onChange={(event) => setName(event.target.value)}
+          value={name}
+        />
+      </label>
+    </Modal>
+  )
+}
+
+function RoleModal({ role, catalog, editing, onClose, onSave, onDelete, pending }) {
+  const [name, setName] = useState(role.name)
+  const [perms, setPerms] = useState(role.permissions)
+  const canEdit = editing
 
   useEffect(() => {
-    setUsername(user.username)
-    setFirstName(user.first_name ?? '')
-    setLastName(user.last_name ?? '')
-  }, [user.first_name, user.last_name, user.username])
+    setName(role.name)
+    setPerms(role.permissions)
+  }, [role])
+
+  const toggle = (code) => {
+    if (!canEdit) return
+    setPerms((current) =>
+      current.includes(code) ? current.filter((item) => item !== code) : [...current, code],
+    )
+  }
 
   return (
-    <tr>
-      <td>
-        <input
-          className="input input-bordered input-sm w-32"
-          onChange={(event) => setUsername(event.target.value)}
-          value={username}
-        />
-      </td>
-      <td>
-        <input
-          className="input input-bordered input-sm w-32"
-          onChange={(event) => setFirstName(event.target.value)}
-          value={firstName}
-        />
-      </td>
-      <td>
-        <input
-          className="input input-bordered input-sm w-32"
-          onChange={(event) => setLastName(event.target.value)}
-          value={lastName}
-        />
-      </td>
-      <td>
-        <select
-          className="select select-bordered select-sm"
-          onChange={(event) =>
-            onSave({ groups: event.target.value ? [Number(event.target.value)] : [] })
-          }
-          value={roles.find((role) => user.groups.includes(role.name))?.id ?? ''}
-        >
-          <option value="">Sin rol</option>
-          {roles.map((role) => (
-            <option key={role.id} value={role.id}>
-              {role.name}
-            </option>
-          ))}
-        </select>
-      </td>
-      <td>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            checked={user.is_active}
-            className="checkbox checkbox-sm"
-            disabled={isSelf}
-            onChange={(event) => onSave({ is_active: event.target.checked })}
-            type="checkbox"
-          />
-          {user.is_active ? 'Activo' : 'Inactivo'}
-        </label>
-      </td>
-      <td className="whitespace-nowrap text-right">
-        <button
-          type="button"
-          className="btn btn-ghost btn-xs"
-          onClick={() =>
-            onSave({
-              username: username.trim(),
-              first_name: firstName.trim(),
-              last_name: lastName.trim(),
-            })
-          }
-        >
-          Guardar
-        </button>
-        {isSelf ? null : (
-          <button type="button" className="btn btn-ghost btn-xs text-rose-600" onClick={onDelete}>
-            Eliminar
+    <Modal
+      open
+      wide
+      title={canEdit ? `Editar rol: ${role.name}` : `Rol: ${role.name}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Cerrar
           </button>
+          {canEdit ? (
+            <>
+              <button type="button" className="btn btn-ghost text-rose-600" onClick={onDelete}>
+                Eliminar
+              </button>
+              <button
+                type="button"
+                className="btn border-none bg-blue-600 text-white"
+                disabled={!name.trim() || pending}
+                onClick={() => onSave({ name: name.trim(), permissions: perms })}
+              >
+                Guardar
+              </button>
+            </>
+          ) : null}
+        </>
+      }
+    >
+      <label className="mb-4 block text-sm">
+        <span className="mb-1 block text-slate-500">Nombre</span>
+        {canEdit ? (
+          <input
+            className="input input-bordered w-full"
+            onChange={(event) => setName(event.target.value)}
+            value={name}
+          />
+        ) : (
+          <p className="font-medium">{role.name}</p>
         )}
-      </td>
-    </tr>
+      </label>
+      <div className="grid gap-4 md:grid-cols-2">
+        {catalog.map((section) => (
+          <fieldset key={section.group} className="rounded-xl bg-slate-50 p-3">
+            <legend className="px-1 text-sm font-semibold">{section.group}</legend>
+            <div className="space-y-2">
+              {section.items.map(([code, label]) => (
+                <label key={code} className="flex items-start gap-2 text-sm">
+                  <input
+                    checked={perms.includes(code)}
+                    className="checkbox checkbox-sm mt-0.5"
+                    disabled={!canEdit}
+                    onChange={() => toggle(code)}
+                    type="checkbox"
+                  />
+                  <span>
+                    {label}
+                    <span className="block text-xs text-slate-400">{code}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ))}
+      </div>
+    </Modal>
+  )
+}
+
+function UserModal({ user, roles, editing, isCreate, currentUserId, onClose, onSave, onDelete, pending }) {
+  const [form, setForm] = useState({
+    username: user.username ?? '',
+    password: '',
+    first_name: user.first_name ?? '',
+    last_name: user.last_name ?? '',
+    groups: roles.find((role) => user.groups?.includes(role.name))?.id
+      ? [roles.find((role) => user.groups.includes(role.name)).id]
+      : [],
+    is_active: user.is_active !== false,
+  })
+  const canEdit = editing || isCreate
+  const isSelf = user.id === currentUserId
+
+  const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }))
+
+  return (
+    <Modal
+      open
+      title={isCreate ? 'Nuevo usuario' : canEdit ? `Editar ${user.username}` : `Usuario ${user.username}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Cerrar
+          </button>
+          {canEdit && !isCreate && !isSelf ? (
+            <button type="button" className="btn btn-ghost text-rose-600" onClick={onDelete}>
+              Eliminar
+            </button>
+          ) : null}
+          {canEdit ? (
+            <button
+              type="button"
+              className="btn border-none bg-blue-600 text-white"
+              disabled={!form.username.trim() || (isCreate && !form.password) || pending}
+              onClick={() => {
+                const payload = {
+                  username: form.username.trim(),
+                  first_name: form.first_name.trim(),
+                  last_name: form.last_name.trim(),
+                  groups: form.groups,
+                  is_active: form.is_active,
+                }
+                if (form.password) payload.password = form.password
+                onSave(payload)
+              }}
+            >
+              {isCreate ? 'Crear' : 'Guardar'}
+            </button>
+          ) : null}
+        </>
+      }
+    >
+      <div className="grid gap-3">
+        <label className="text-sm">
+          <span className="mb-1 block text-slate-500">Usuario</span>
+          {canEdit ? (
+            <input
+              className="input input-bordered w-full"
+              onChange={(event) => setField('username', event.target.value)}
+              value={form.username}
+            />
+          ) : (
+            <p className="font-medium">{user.username}</p>
+          )}
+        </label>
+        {canEdit ? (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">
+              {isCreate ? 'Contraseña' : 'Nueva contraseña (opcional)'}
+            </span>
+            <input
+              className="input input-bordered w-full"
+              onChange={(event) => setField('password', event.target.value)}
+              type="password"
+              value={form.password}
+            />
+          </label>
+        ) : null}
+        <label className="text-sm">
+          <span className="mb-1 block text-slate-500">Nombre</span>
+          {canEdit ? (
+            <input
+              className="input input-bordered w-full"
+              onChange={(event) => setField('first_name', event.target.value)}
+              value={form.first_name}
+            />
+          ) : (
+            <p>{user.first_name || '—'}</p>
+          )}
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-slate-500">Apellido</span>
+          {canEdit ? (
+            <input
+              className="input input-bordered w-full"
+              onChange={(event) => setField('last_name', event.target.value)}
+              value={form.last_name}
+            />
+          ) : (
+            <p>{user.last_name || '—'}</p>
+          )}
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-slate-500">Rol</span>
+          {canEdit ? (
+            <select
+              className="select select-bordered w-full"
+              onChange={(event) =>
+                setField('groups', event.target.value ? [Number(event.target.value)] : [])
+              }
+              value={form.groups[0] ?? ''}
+            >
+              <option value="">Sin rol</option>
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p>{user.groups?.[0] || 'Sin rol'}</p>
+          )}
+        </label>
+        {!isCreate ? (
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              checked={form.is_active}
+              className="checkbox checkbox-sm"
+              disabled={!canEdit || isSelf}
+              onChange={(event) => setField('is_active', event.target.checked)}
+              type="checkbox"
+            />
+            Cuenta activa
+          </label>
+        ) : null}
+      </div>
+    </Modal>
   )
 }

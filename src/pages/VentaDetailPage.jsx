@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext.jsx'
+import Modal from '../components/Modal.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { getVenta, getFlujos, updateVenta, updateVentaPaso, deleteVenta } from '../service/api.js'
 import {
@@ -25,6 +27,7 @@ function pasoColor(estado) {
 
 export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   const { can } = useAuth()
+  const [editing, setEditing] = useState(false)
   const queryClient = useQueryClient()
   const { isPending, isError, error, data: venta } = useQuery({
     queryKey: ['venta', ventaId],
@@ -56,14 +59,20 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   })
 
   if (isPending) {
-    return <p className="p-6">Cargando venta...</p>
+    return (
+      <Modal open title="Venta" onClose={onBack}>
+        <p>Cargando venta...</p>
+      </Modal>
+    )
   }
 
   if (isError) {
     return (
-      <div className="alert alert-error">
-        <span>{error.message}</span>
-      </div>
+      <Modal open title="Venta" onClose={onBack}>
+        <div className="alert alert-error">
+          <span>{error.message}</span>
+        </div>
+      </Modal>
     )
   }
 
@@ -78,66 +87,51 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   const canChangePaso = can('api.change_ventapaso')
   const canDeleteVenta = can('api.delete_venta')
   const saving = pasoMutation.isPending || ventaMutation.isPending || deleteMutation.isPending
+  const showVentaSelects = editing && canChangeVenta
+  const showPasoSelects = editing && canChangePaso
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <button type="button" className="text-sm text-blue-600" onClick={onBack}>
-            ← Volver
+    <Modal
+      open
+      wide
+      title={numeroVenta(venta)}
+      onClose={onBack}
+      footer={
+        <>
+          <button type="button" className="btn btn-ghost" onClick={onBack}>
+            Cerrar
           </button>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold">{numeroVenta(venta)}</h1>
-            <StatusBadge venta={venta} />
-          </div>
-          <p className="text-sm text-slate-500">Registrada {formatFecha(venta.fecha)}</p>
-        </div>
-        {canChangeVenta ? (
-        <div className="flex flex-wrap items-end gap-2">
-        <label className="text-sm">
-          <span className="mb-1 block text-slate-500">Estado de la venta</span>
-          <select
-            className="select select-bordered"
-            disabled={saving}
-            onChange={(event) => ventaMutation.mutate({ estado: event.target.value })}
-            value={venta.estado}
-          >
-            {VENTA_ESTADOS.map((estado) => (
-              <option key={estado} value={estado}>
-                {estado}
-              </option>
-            ))}
-          </select>
-        </label>
-        {canDeleteVenta ? (
-          <button
-            type="button"
-            className="btn btn-ghost text-rose-600"
-            disabled={saving}
-            onClick={() => {
-              if (window.confirm(`¿Eliminar ${numeroVenta(venta)}?`)) {
-                deleteMutation.mutate()
-              }
-            }}
-          >
-            Eliminar venta
-          </button>
-        ) : null}
-        </div>
-        ) : canDeleteVenta ? (
-          <button
-            type="button"
-            className="btn btn-ghost text-rose-600"
-            disabled={saving}
-            onClick={() => {
-              if (window.confirm(`¿Eliminar ${numeroVenta(venta)}?`)) {
-                deleteMutation.mutate()
-              }
-            }}
-          >
-            Eliminar venta
-          </button>
-        ) : null}
+          {canDeleteVenta ? (
+            <button
+              type="button"
+              className="btn btn-ghost text-rose-600"
+              disabled={saving}
+              onClick={() => {
+                if (window.confirm(`¿Eliminar ${numeroVenta(venta)}?`)) {
+                  deleteMutation.mutate()
+                }
+              }}
+            >
+              Eliminar
+            </button>
+          ) : null}
+          {canChangeVenta || canChangePaso ? (
+            editing ? (
+              <button type="button" className="btn border-none bg-blue-600 text-white" onClick={() => setEditing(false)}>
+                Listo
+              </button>
+            ) : (
+              <button type="button" className="btn border-none bg-blue-600 text-white" onClick={() => setEditing(true)}>
+                Editar
+              </button>
+            )
+          ) : null}
+        </>
+      }
+    >
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <StatusBadge venta={venta} />
+        <p className="text-sm text-slate-500">Registrada {formatFecha(venta.fecha)}</p>
       </div>
 
       {ventaMutation.isError ? (
@@ -195,6 +189,27 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
           <h2 className="mb-4 font-semibold">Producto</h2>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
             <div>
+              <dt className="mb-1 text-slate-400">Estado</dt>
+              <dd>
+                {showVentaSelects ? (
+                  <select
+                    className="select select-bordered w-full"
+                    disabled={saving}
+                    onChange={(event) => ventaMutation.mutate({ estado: event.target.value })}
+                    value={venta.estado}
+                  >
+                    {VENTA_ESTADOS.map((estado) => (
+                      <option key={estado} value={estado}>
+                        {estado}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  venta.estado
+                )}
+              </dd>
+            </div>
+            <div>
               <dt className="text-slate-400">Plan</dt>
               <dd className="font-medium">{venta.producto_detalle?.nombre ?? '—'}</dd>
             </div>
@@ -209,7 +224,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
             <div className="col-span-2">
               <dt className="mb-1 text-slate-400">Flujo</dt>
               <dd>
-                {canChangeVenta ? (
+                {showVentaSelects ? (
                 <select
                   className="select select-bordered w-full"
                   disabled={saving}
@@ -263,7 +278,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
                     <p className="font-medium">{nombre}</p>
                     {descripcion ? <p className="text-sm text-slate-500">{descripcion}</p> : null}
                   </div>
-                  {canChangePaso ? (
+                  {showPasoSelects ? (
                   <select
                     className="select select-bordered select-sm w-44"
                     disabled={saving}
@@ -285,6 +300,6 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
           })}
         </ol>
       </section>
-    </div>
+    </Modal>
   )
 }

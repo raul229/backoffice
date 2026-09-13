@@ -1,11 +1,14 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteCliente, getClientes } from '../service/api.js'
 import { celularCliente, documentoCliente, nombreCliente, tipoClienteLabel } from '../lib/venta.js'
 import { useAuth } from '../context/AuthContext.jsx'
+import Modal from '../components/Modal.jsx'
 
 export default function ClientesPage({ search }) {
   const { can } = useAuth()
   const queryClient = useQueryClient()
+  const [selected, setSelected] = useState(null)
   const { isPending, isError, error, data: clientes } = useQuery({
     queryKey: ['clientes'],
     queryFn: getClientes,
@@ -13,7 +16,10 @@ export default function ClientesPage({ search }) {
   const canDelete = can('api.delete_cliente')
   const deleteMutation = useMutation({
     mutationFn: deleteCliente,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clientes'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clientes'] })
+      setSelected(null)
+    },
   })
 
   const filtered = (clientes ?? []).filter((cliente) => {
@@ -50,17 +56,17 @@ export default function ClientesPage({ search }) {
                 <th>Tipo</th>
                 <th>Documento</th>
                 <th>Contacto</th>
-                {canDelete ? <th></th> : null}
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {isPending ? (
                 <tr>
-                  <td colSpan={canDelete ? 5 : 4}>Cargando clientes...</td>
+                  <td colSpan={5}>Cargando clientes...</td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={canDelete ? 5 : 4}>No hay clientes para mostrar.</td>
+                  <td colSpan={5}>No hay clientes para mostrar.</td>
                 </tr>
               ) : (
                 filtered.map((cliente) => (
@@ -69,8 +75,15 @@ export default function ClientesPage({ search }) {
                     <td>{tipoClienteLabel(cliente.tipo)}</td>
                     <td>{documentoCliente(cliente) || '—'}</td>
                     <td>{celularCliente(cliente) || '—'}</td>
-                    {canDelete ? (
-                      <td className="text-right">
+                    <td className="text-right">
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-xs"
+                        onClick={() => setSelected(cliente)}
+                      >
+                        Ver
+                      </button>
+                      {canDelete ? (
                         <button
                           type="button"
                           className="btn btn-ghost btn-xs text-rose-600"
@@ -87,8 +100,8 @@ export default function ClientesPage({ search }) {
                         >
                           Eliminar
                         </button>
-                      </td>
-                    ) : null}
+                      ) : null}
+                    </td>
                   </tr>
                 ))
               )}
@@ -96,6 +109,115 @@ export default function ClientesPage({ search }) {
           </table>
         </section>
       )}
+
+      {selected ? (
+        <ClienteModal
+          canDelete={canDelete}
+          cliente={selected}
+          deleting={deleteMutation.isPending}
+          onClose={() => setSelected(null)}
+          onDelete={() => {
+            if (
+              window.confirm(
+                `¿Eliminar a ${nombreCliente(selected)}? No se puede si tiene ventas.`,
+              )
+            ) {
+              deleteMutation.mutate(selected.id)
+            }
+          }}
+        />
+      ) : null}
     </div>
+  )
+}
+
+function ClienteModal({ cliente, canDelete, deleting, onClose, onDelete }) {
+  const persona = cliente.persona
+  const empresa = cliente.empresa
+  const representante = empresa?.representante_legal_detalle
+  const direccion = cliente.direcciones?.[0]
+  return (
+    <Modal
+      open
+      title={nombreCliente(cliente)}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Cerrar
+          </button>
+          {canDelete ? (
+            <button
+              type="button"
+              className="btn btn-ghost text-rose-600"
+              disabled={deleting}
+              onClick={onDelete}
+            >
+              Eliminar
+            </button>
+          ) : null}
+        </>
+      }
+    >
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+        <div>
+          <dt className="text-slate-400">Tipo</dt>
+          <dd>{tipoClienteLabel(cliente.tipo)}</dd>
+        </div>
+        <div>
+          <dt className="text-slate-400">Documento</dt>
+          <dd>{documentoCliente(cliente) || '—'}</dd>
+        </div>
+        {persona ? (
+          <>
+            <div>
+              <dt className="text-slate-400">Nombres</dt>
+              <dd>{persona.nombres}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">Apellidos</dt>
+              <dd>{persona.apellidos}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">Celular</dt>
+              <dd>{persona.celular || '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">Distrito de nacimiento</dt>
+              <dd>{persona.distrito_nacimiento || '—'}</dd>
+            </div>
+          </>
+        ) : null}
+        {empresa ? (
+          <>
+            <div>
+              <dt className="text-slate-400">RUC</dt>
+              <dd>{empresa.ruc}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">Razón social</dt>
+              <dd>{empresa.razon_social}</dd>
+            </div>
+          </>
+        ) : null}
+        {representante ? (
+          <div className="col-span-2">
+            <dt className="text-slate-400">Representante legal</dt>
+            <dd>
+              {representante.nombres} {representante.apellidos} · {representante.tipo_documento}{' '}
+              {representante.numero_documento}
+            </dd>
+          </div>
+        ) : null}
+        <div className="col-span-2">
+          <dt className="text-slate-400">Dirección</dt>
+          <dd>
+            {direccion
+              ? `${direccion.tipo} ${direccion.direccion} ${direccion.numero}, ${direccion.distrito}`
+              : 'Sin dirección'}
+          </dd>
+        </div>
+      </dl>
+    </Modal>
   )
 }

@@ -55,24 +55,23 @@ function App() {
     return <LoginPage />
   }
 
-  const openVenta = (venta) => setRoute({ page: 'venta-detalle', ventaId: venta.id })
-  const page = route.page
+  const openVenta = (venta) =>
+    setRoute({
+      page: 'venta-detalle',
+      ventaId: venta.id,
+      from: route.page === 'venta-detalle' ? route.from || 'inicio' : route.page,
+    })
+  const listPage = route.page === 'venta-detalle' ? route.from || 'inicio' : route.page
+  const page = listPage
 
   const content = (() => {
-    if (page === 'venta-detalle') {
-      return (
-        <VentaDetailPage
-          onBack={() => setRoute({ page: 'inicio' })}
-          onDeleted={() => setRoute({ page: 'ventas' })}
-          ventaId={route.ventaId}
-        />
-      )
-    }
     if (page === 'venta-nueva' && can('api.add_venta')) {
       return (
         <NuevaVentaPage
           onCancel={() => setRoute({ page: 'inicio' })}
-          onCreated={(venta) => setRoute({ page: 'venta-detalle', ventaId: venta.id })}
+          onCreated={(venta) =>
+            setRoute({ page: 'venta-detalle', ventaId: venta.id, from: 'inicio' })
+          }
         />
       )
     }
@@ -124,10 +123,17 @@ function App() {
     <AppShell
       onNavigate={setRoute}
       onSearch={(search) => setFilters((current) => ({ ...current, search }))}
-      page={page === 'venta-detalle' || page === 'venta-nueva' ? 'ventas' : page}
+      page={page === 'venta-nueva' ? 'ventas' : page}
       search={filters.search}
     >
       {content}
+      {route.page === 'venta-detalle' ? (
+        <VentaDetailPage
+          onBack={() => setRoute({ page: route.from || 'inicio' })}
+          onDeleted={() => setRoute({ page: route.from || 'ventas' })}
+          ventaId={route.ventaId}
+        />
+      ) : null}
     </AppShell>
   )
 }
