@@ -1,6 +1,8 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
+from django.db import transaction
+from django.db.models import F
 
 from .models import (
     Cliente,
@@ -83,6 +85,16 @@ class FlujoPasoViewSet(ModelViewSet):
         "flujo_id", "orden"
     )
     serializer_class = FlujoPasoSerializer
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        flujo_id = instance.flujo_id
+        instance.delete()
+        restantes = FlujoPaso.objects.filter(flujo_id=flujo_id)
+        restantes.update(orden=F("orden") + 1000)
+        for index, item in enumerate(restantes.order_by("orden"), start=1):
+            item.orden = index
+            item.save(update_fields=["orden"])
 
 
 class VentaViewSet(ModelViewSet):

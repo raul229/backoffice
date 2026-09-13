@@ -125,3 +125,22 @@ class ApiEndpointsTests(APITestCase):
         self.assertEqual(updated.status_code, status.HTTP_200_OK)
         self.assertEqual(len(updated.data["pasos"]), 2)
         self.assertEqual(updated.data["flujo"], flujo_b.id)
+
+    def test_delete_flujo_paso_used_by_venta(self):
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        producto = Producto.objects.create(nombre="Fibra 50", velocidad=50, precio=40)
+        flujo = Flujo.objects.create(nombre="Flujo", tipo_cliente=TipoCliente.PERSONA)
+        paso_uno = Paso.objects.create(nombre="Uno", descripcion="Uno")
+        paso_dos = Paso.objects.create(nombre="Dos", descripcion="Dos")
+        primero = FlujoPaso.objects.create(flujo=flujo, paso=paso_uno, orden=1)
+        FlujoPaso.objects.create(flujo=flujo, paso=paso_dos, orden=2)
+
+        self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+
+        response = self.client.delete(f"/api/flujo-pasos/{primero.id}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(list(flujo.flujopaso_set.order_by("orden").values_list("orden", "paso__nombre")), [(1, "Dos")])

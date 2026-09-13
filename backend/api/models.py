@@ -155,7 +155,7 @@ class Venta(models.Model):
     
 class VentaPaso(models.Model):
     venta=models.ForeignKey(Venta, on_delete=models.CASCADE)
-    flujo_paso=models.ForeignKey(FlujoPaso, on_delete=models.PROTECT)
+    flujo_paso=models.ForeignKey(FlujoPaso, on_delete=models.CASCADE)
     estado=models.CharField(max_length=20, choices=EstadoPaso.choices, default=EstadoPaso.PENDIENTE)
     
 
