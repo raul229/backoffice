@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react'
+import { useForm } from '@tanstack/react-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import Field from '../components/Field.jsx'
+import { SelectField, TextAreaField, TextField } from '../components/FormFields.jsx'
+import { createFlujoSchema, flujoNombreSchema, pasoFormSchema, withSchema } from '../lib/schemas.js'
 import {
   createFlujo,
   createFlujoPaso,
@@ -380,14 +384,23 @@ export default function ConfiguracionPage() {
 
 function PasoFormModal({ paso, flujos, editing = true, onClose, onSave, onDelete, pending }) {
   const isCreate = !paso
-  const [nombre, setNombre] = useState(paso?.nombre ?? '')
-  const [descripcion, setDescripcion] = useState(paso?.descripcion ?? '')
-  const [flujoId, setFlujoId] = useState('')
+  const form = useForm({
+    defaultValues: {
+      nombre: paso?.nombre ?? '',
+      descripcion: paso?.descripcion ?? '',
+      flujoId: '',
+    },
+    validators: withSchema(pasoFormSchema),
+    onSubmit: ({ value }) => onSave({ nombre: value.nombre, descripcion: value.descripcion, flujoId: value.flujoId }),
+  })
 
   useEffect(() => {
-    setNombre(paso?.nombre ?? '')
-    setDescripcion(paso?.descripcion ?? '')
-  }, [paso])
+    form.reset({
+      nombre: paso?.nombre ?? '',
+      descripcion: paso?.descripcion ?? '',
+      flujoId: '',
+    })
+  }, [form, paso])
 
   return (
     <Modal
@@ -405,60 +418,57 @@ function PasoFormModal({ paso, flujos, editing = true, onClose, onSave, onDelete
             </button>
           ) : null}
           {editing ? (
-            <button
-              type="button"
-              className="btn border-none bg-blue-600 text-white"
-              disabled={!nombre.trim() || pending}
-              onClick={() => onSave({ nombre, descripcion, flujoId })}
-            >
-              {isCreate ? 'Crear' : 'Guardar'}
-            </button>
+            <form.Subscribe selector={(state) => [state.values.nombre, state.isSubmitting]}>
+              {([nombre, isSubmitting]) => (
+                <button
+                  type="button"
+                  className="btn border-none bg-blue-600 text-white"
+                  disabled={!nombre.trim() || pending || isSubmitting}
+                  onClick={() => form.handleSubmit()}
+                >
+                  {isCreate ? 'Crear' : 'Guardar'}
+                </button>
+              )}
+            </form.Subscribe>
           ) : null}
         </>
       }
     >
       <div className="grid gap-3">
-        <label className="text-sm">
-          <span className="mb-1 block text-slate-500">Nombre</span>
-          {editing ? (
-            <input
-              className="input input-bordered w-full"
-              onChange={(event) => setNombre(event.target.value)}
-              value={nombre}
-            />
-          ) : (
-            <p className="font-medium">{paso.nombre}</p>
-          )}
-        </label>
-        <label className="text-sm">
-          <span className="mb-1 block text-slate-500">Descripción</span>
-          {editing ? (
-            <textarea
-              className="textarea textarea-bordered w-full"
-              onChange={(event) => setDescripcion(event.target.value)}
-              rows={3}
-              value={descripcion}
-            />
-          ) : (
-            <p>{paso.descripcion || '—'}</p>
-          )}
-        </label>
-        {isCreate ? (
+        {editing ? (
+          <Field form={form} name="nombre">
+            {(field) => <TextField field={field} label="Nombre" />}
+          </Field>
+        ) : (
           <label className="text-sm">
-            <span className="mb-1 block text-slate-500">Agregar a un flujo (opcional)</span>
-            <select
-              className="select select-bordered w-full"
-              onChange={(event) => setFlujoId(event.target.value)}
-              value={flujoId}
-            >
-              <option value="">Solo catálogo</option>
-              {(flujos ?? []).map((flujo) => (
-                <option key={flujo.id} value={flujo.id}>
-                  {flujo.nombre}
-                </option>
-              ))}
-            </select>
+            <span className="mb-1 block text-slate-500">Nombre</span>
+            <p className="font-medium">{paso.nombre}</p>
           </label>
+        )}
+        {editing ? (
+          <Field form={form} name="descripcion">
+            {(field) => <TextAreaField field={field} label="Descripción" />}
+          </Field>
+        ) : (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">Descripción</span>
+            <p>{paso.descripcion || '—'}</p>
+          </label>
+        )}
+        {isCreate ? (
+          <Field form={form} name="flujoId">
+            {(field) => (
+              <SelectField
+                field={field}
+                label="Agregar a un flujo (opcional)"
+                options={(flujos ?? []).map((flujo) => ({
+                  value: String(flujo.id),
+                  label: flujo.nombre,
+                }))}
+                placeholder="Solo catálogo"
+              />
+            )}
+          </Field>
         ) : null}
       </div>
     </Modal>
@@ -466,8 +476,11 @@ function PasoFormModal({ paso, flujos, editing = true, onClose, onSave, onDelete
 }
 
 function CreateFlujoModal({ onClose, onSave, pending }) {
-  const [nombre, setNombre] = useState('')
-  const [tipoCliente, setTipoCliente] = useState('PERSONA')
+  const form = useForm({
+    defaultValues: { nombre: '', tipo_cliente: 'PERSONA' },
+    validators: withSchema(createFlujoSchema),
+    onSubmit: ({ value }) => onSave({ nombre: value.nombre.trim(), tipo_cliente: value.tipo_cliente }),
+  })
   return (
     <Modal
       open
@@ -478,37 +491,38 @@ function CreateFlujoModal({ onClose, onSave, pending }) {
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             Cancelar
           </button>
-          <button
-            type="button"
-            className="btn border-none bg-blue-600 text-white"
-            disabled={!nombre.trim() || pending}
-            onClick={() => onSave({ nombre: nombre.trim(), tipo_cliente: tipoCliente })}
-          >
-            Crear
-          </button>
+          <form.Subscribe selector={(state) => [state.values.nombre, state.isSubmitting]}>
+            {([nombre, isSubmitting]) => (
+              <button
+                type="button"
+                className="btn border-none bg-blue-600 text-white"
+                disabled={!nombre.trim() || pending || isSubmitting}
+                onClick={() => form.handleSubmit()}
+              >
+                Crear
+              </button>
+            )}
+          </form.Subscribe>
         </>
       }
     >
       <div className="grid gap-3">
-        <label className="text-sm">
-          <span className="mb-1 block text-slate-500">Nombre</span>
-          <input
-            className="input input-bordered w-full"
-            onChange={(event) => setNombre(event.target.value)}
-            value={nombre}
-          />
-        </label>
-        <label className="text-sm">
-          <span className="mb-1 block text-slate-500">Tipo de cliente</span>
-          <select
-            className="select select-bordered w-full"
-            onChange={(event) => setTipoCliente(event.target.value)}
-            value={tipoCliente}
-          >
-            <option value="PERSONA">Persona Natural</option>
-            <option value="EMPRESA">Persona Jurídica</option>
-          </select>
-        </label>
+        <Field form={form} name="nombre">
+          {(field) => <TextField field={field} label="Nombre" />}
+        </Field>
+        <Field form={form} name="tipo_cliente">
+          {(field) => (
+            <SelectField
+              field={field}
+              includeEmpty={false}
+              label="Tipo de cliente"
+              options={[
+                { value: 'PERSONA', label: 'Persona Natural' },
+                { value: 'EMPRESA', label: 'Persona Jurídica' },
+              ]}
+            />
+          )}
+        </Field>
       </div>
     </Modal>
   )
@@ -527,14 +541,18 @@ function FlujoModal({
   addPending,
   removePending,
 }) {
-  const [nombre, setNombre] = useState(flujo.nombre)
+  const form = useForm({
+    defaultValues: { nombre: flujo.nombre },
+    validators: withSchema(flujoNombreSchema),
+    onSubmit: ({ value }) => onSave(value.nombre.trim()),
+  })
   const ordered = [...(flujo.pasos_detalle ?? [])].sort((a, b) => a.orden - b.orden)
   const usados = new Set(ordered.map((item) => item.paso))
   const disponibles = pasos.filter((paso) => !usados.has(paso.id))
 
   useEffect(() => {
-    setNombre(flujo.nombre)
-  }, [flujo.nombre])
+    form.reset({ nombre: flujo.nombre })
+  }, [form, flujo.nombre])
 
   return (
     <Modal
@@ -552,32 +570,34 @@ function FlujoModal({
               <button type="button" className="btn btn-ghost text-rose-600" onClick={onDelete}>
                 Eliminar
               </button>
-              <button
-                type="button"
-                className="btn border-none bg-blue-600 text-white"
-                disabled={!nombre.trim() || pending}
-                onClick={() => onSave(nombre.trim())}
-              >
-                Guardar nombre
-              </button>
+              <form.Subscribe selector={(state) => [state.values.nombre, state.isSubmitting]}>
+                {([nombre, isSubmitting]) => (
+                  <button
+                    type="button"
+                    className="btn border-none bg-blue-600 text-white"
+                    disabled={!nombre.trim() || pending || isSubmitting}
+                    onClick={() => form.handleSubmit()}
+                  >
+                    Guardar nombre
+                  </button>
+                )}
+              </form.Subscribe>
             </>
           ) : null}
         </>
       }
     >
       <p className="mb-3 text-sm text-slate-500">{tipoClienteLabel(flujo.tipo_cliente)}</p>
-      <label className="mb-4 block text-sm">
-        <span className="mb-1 block text-slate-500">Nombre</span>
-        {editing ? (
-          <input
-            className="input input-bordered w-full"
-            onChange={(event) => setNombre(event.target.value)}
-            value={nombre}
-          />
+      {editing ? (
+          <Field form={form} name="nombre">
+            {(field) => <TextField className="mb-4 block" field={field} label="Nombre" />}
+          </Field>
         ) : (
-          <p className="font-medium">{flujo.nombre}</p>
+          <label className="mb-4 block text-sm">
+            <span className="mb-1 block text-slate-500">Nombre</span>
+            <p className="font-medium">{flujo.nombre}</p>
+          </label>
         )}
-      </label>
       {editing ? (
         <select
           className="select select-bordered mb-4 w-full"

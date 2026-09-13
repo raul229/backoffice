@@ -36,6 +36,33 @@ class ApiEndpointsTests(APITestCase):
         cliente = Cliente.objects.get(id=response.data["cliente"])
         self.assertEqual(cliente.tipo, TipoCliente.PERSONA)
 
+    def test_create_persona_carnet_extranjeria_requires_nine_digits(self):
+        response = self.client.post(
+            "/api/personas/",
+            {
+                "tipo_documento": "CE",
+                "numero_documento": "12345678",
+                "nombres": "Luis",
+                "apellidos": "Diaz",
+                "celular": "987654321",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        response = self.client.post(
+            "/api/personas/",
+            {
+                "tipo_documento": "CE",
+                "numero_documento": "123456789",
+                "nombres": "Luis",
+                "apellidos": "Diaz",
+                "celular": "987654321",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
     def test_create_venta_generates_workflow_steps(self):
         cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
         producto = Producto.objects.create(nombre="Fibra 500", velocidad=500, precio=99)

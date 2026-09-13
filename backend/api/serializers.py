@@ -68,6 +68,22 @@ class PersonaSerializer(serializers.ModelSerializer):
             "celular",
         ]
 
+    def validate(self, attrs):
+        tipo = attrs.get("tipo_documento") or getattr(self.instance, "tipo_documento", None)
+        numero = attrs.get("numero_documento") or getattr(self.instance, "numero_documento", "")
+        expected = 8 if tipo == TipoDocumento.DNI else 9 if tipo == TipoDocumento.CE else None
+        if expected and (not str(numero).isdigit() or len(str(numero)) != expected):
+            raise serializers.ValidationError(
+                {
+                    "numero_documento": (
+                        "El DNI debe tener 8 dígitos"
+                        if expected == 8
+                        else "El carné de extranjería debe tener 9 dígitos"
+                    )
+                }
+            )
+        return attrs
+
     def create(self, validated_data):
         cliente = validated_data.get("cliente")
         if cliente is None:

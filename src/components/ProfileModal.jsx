@@ -1,7 +1,11 @@
+import { useForm } from '@tanstack/react-form'
 import { useState } from 'react'
+import Field from './Field.jsx'
+import { TextField } from './FormFields.jsx'
 import Modal from './Modal.jsx'
-import { changePassword } from '../service/api.js'
 import { displayName, roleLabel } from '../lib/auth.js'
+import { changePasswordSchema, withSchema } from '../lib/schemas.js'
+import { changePassword } from '../service/api.js'
 
 const emptyForm = {
   current_password: '',
@@ -10,36 +14,24 @@ const emptyForm = {
 }
 
 export default function ProfileModal({ user, onClose }) {
-  const [form, setForm] = useState(emptyForm)
   const [error, setError] = useState('')
   const [ok, setOk] = useState('')
-  const [pending, setPending] = useState(false)
 
-  const setField = (field, value) => {
-    setForm((current) => ({ ...current, [field]: value }))
-    setError('')
-    setOk('')
-  }
-
-  const submit = async (event) => {
-    event.preventDefault()
-    setError('')
-    setOk('')
-    if (form.new_password !== form.confirm_password) {
-      setError('Las contraseñas nuevas no coinciden.')
-      return
-    }
-    setPending(true)
-    try {
-      await changePassword(form)
-      setForm(emptyForm)
-      setOk('Contraseña actualizada.')
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setPending(false)
-    }
-  }
+  const form = useForm({
+    defaultValues: emptyForm,
+    validators: withSchema(changePasswordSchema),
+    onSubmit: async ({ value }) => {
+      setError('')
+      setOk('')
+      try {
+        await changePassword(value)
+        form.reset()
+        setOk('Contraseña actualizada.')
+      } catch (err) {
+        setError(err.message)
+      }
+    },
+  })
 
   return (
     <Modal open title="Perfil" onClose={onClose}>
@@ -58,7 +50,14 @@ export default function ProfileModal({ user, onClose }) {
         </div>
       </dl>
 
-      <form className="border-t border-slate-100 pt-4" onSubmit={submit}>
+      <form
+        className="border-t border-slate-100 pt-4"
+        onSubmit={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          form.handleSubmit()
+        }}
+      >
         <h4 className="mb-3 font-semibold">Cambiar contraseña</h4>
         {error ? (
           <div className="alert alert-error mb-3">
@@ -70,53 +69,55 @@ export default function ProfileModal({ user, onClose }) {
             <span>{ok}</span>
           </div>
         ) : null}
-        <label className="mb-3 block text-sm">
-          <span className="mb-1 block text-slate-500">Contraseña actual</span>
-          <input
-            autoComplete="current-password"
-            className="input input-bordered w-full"
-            onChange={(event) => setField('current_password', event.target.value)}
-            type="password"
-            value={form.current_password}
-          />
-        </label>
-        <label className="mb-3 block text-sm">
-          <span className="mb-1 block text-slate-500">Nueva contraseña</span>
-          <input
-            autoComplete="new-password"
-            className="input input-bordered w-full"
-            onChange={(event) => setField('new_password', event.target.value)}
-            type="password"
-            value={form.new_password}
-          />
-        </label>
-        <label className="mb-4 block text-sm">
-          <span className="mb-1 block text-slate-500">Confirmar nueva contraseña</span>
-          <input
-            autoComplete="new-password"
-            className="input input-bordered w-full"
-            onChange={(event) => setField('confirm_password', event.target.value)}
-            type="password"
-            value={form.confirm_password}
-          />
-        </label>
+        <Field form={form} name="current_password">
+          {(field) => (
+            <TextField
+              autoComplete="current-password"
+              className="mb-3 block"
+              field={field}
+              label="Contraseña actual"
+              type="password"
+            />
+          )}
+        </Field>
+        <Field form={form} name="new_password">
+          {(field) => (
+            <TextField
+              autoComplete="new-password"
+              className="mb-3 block"
+              field={field}
+              label="Nueva contraseña"
+              type="password"
+            />
+          )}
+        </Field>
+        <Field form={form} name="confirm_password">
+          {(field) => (
+            <TextField
+              autoComplete="new-password"
+              className="mb-4 block"
+              field={field}
+              label="Confirmar nueva contraseña"
+              type="password"
+            />
+          )}
+        </Field>
         <p className="mb-4 text-xs text-slate-400">Mínimo 8 caracteres. La sesión se mantiene al guardar.</p>
         <div className="flex justify-end gap-2">
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             Cerrar
           </button>
-          <button
-            type="submit"
-            className="btn border-none bg-blue-600 text-white"
-            disabled={
-              pending ||
-              !form.current_password ||
-              !form.new_password ||
-              !form.confirm_password
-            }
-          >
-            {pending ? 'Guardando...' : 'Actualizar contraseña'}
-          </button>
+          <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
+            {([canSubmit, isSubmitting]) => (
+              <button
+                type="submit"
+                className="btn border-none bg-blue-600 text-white"
+                disabled={!canSubmit || isSubmitting}
+              >
+                {isSubmitting ? 'Guardando...' : 'Actualizar contraseña'}
+              </button>
+            )}
+          </form.Subscribe>
         </div>
       </form>
     </Modal>

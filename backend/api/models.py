@@ -34,9 +34,9 @@ class Persona(models.Model):
     numero_documento = models.CharField(max_length=9)
     nombres = models.CharField(max_length=100)
     apellidos = models.CharField(max_length=100)
-    distrito_nacimiento = models.CharField(max_length=100)
-    padre = models.CharField(max_length=100)
-    madre = models.CharField(max_length=100)
+    distrito_nacimiento = models.CharField(max_length=100, blank=True)
+    padre = models.CharField(max_length=100, blank=True)
+    madre = models.CharField(max_length=100, blank=True)
     celular = models.CharField(max_length=9)
     
     def __str__(self):

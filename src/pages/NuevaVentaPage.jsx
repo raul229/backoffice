@@ -1,6 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
+import { useForm } from '@tanstack/react-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import CatalogEmpty from '../components/CatalogEmpty.jsx'
+import Field from '../components/Field.jsx'
+import { SelectField, TextField } from '../components/FormFields.jsx'
 import {
   createDireccion,
   createEmpresa,
@@ -11,9 +14,10 @@ import {
   getProductos,
   getPromociones,
 } from '../service/api.js'
+import { DOCUMENT_LENGTH, digitCode, nuevaVentaClienteSchema, nuevaVentaSchema, requiredText, validateDocumentNumber } from '../lib/schemas.js'
 import { flujosPorTipo } from '../lib/venta.js'
 
-const emptyForm = {
+const defaultValues = {
   tipo_cliente: 'PERSONA',
   tipo_documento: 'DNI',
   numero_documento: '',
@@ -34,33 +38,42 @@ const emptyForm = {
   promociones: [],
 }
 
-function personaPayload(form) {
+function personaPayload(value) {
   return {
-    tipo_documento: form.tipo_documento,
-    numero_documento: form.numero_documento,
-    nombres: form.nombres,
-    apellidos: form.apellidos,
-    distrito_nacimiento: form.distrito_nacimiento,
-    padre: form.padre,
-    madre: form.madre,
-    celular: form.celular,
+    tipo_documento: value.tipo_documento,
+    numero_documento: value.numero_documento,
+    nombres: value.nombres,
+    apellidos: value.apellidos,
+    distrito_nacimiento: value.distrito_nacimiento,
+    padre: value.padre,
+    madre: value.madre,
+    celular: value.celular,
   }
 }
 
-function direccionPayload(form, clienteId) {
+function direccionPayload(value, clienteId) {
   return {
     cliente: clienteId,
-    tipo: form.tipo_direccion,
-    direccion: form.direccion,
-    numero: form.numero,
-    distrito: form.distrito,
+    tipo: value.tipo_direccion,
+    direccion: value.direccion,
+    numero: value.numero,
+    distrito: value.distrito,
   }
+}
+
+function step0Fields(tipoCliente) {
+  const fields = ['numero_documento', 'nombres', 'apellidos', 'celular', 'direccion', 'numero', 'distrito']
+  if (tipoCliente === 'EMPRESA') {
+    fields.unshift('ruc', 'razon_social')
+  } else {
+    fields.splice(4, 0, 'distrito_nacimiento', 'padre', 'madre')
+  }
+  return fields
 }
 
 export default function NuevaVentaPage({ onCancel, onCreated }) {
   const queryClient = useQueryClient()
   const [step, setStep] = useState(0)
-  const [form, setForm] = useState(emptyForm)
   const [formError, setFormError] = useState('')
 
   const choicesQuery = useQuery({ queryKey: ['choices'], queryFn: getChoices })
@@ -69,26 +82,26 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
   const promocionesQuery = useQuery({ queryKey: ['promociones'], queryFn: getPromociones })
 
   const mutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (value) => {
       let clienteId
-      if (form.tipo_cliente === 'EMPRESA') {
-        const representante = await createPersona(personaPayload(form))
+      if (value.tipo_cliente === 'EMPRESA') {
+        const representante = await createPersona(personaPayload(value))
         const empresa = await createEmpresa({
-          ruc: form.ruc,
-          razon_social: form.razon_social,
+          ruc: value.ruc,
+          razon_social: value.razon_social,
           representante_legal: representante.id,
         })
         clienteId = empresa.cliente
       } else {
-        const persona = await createPersona(personaPayload(form))
+        const persona = await createPersona(personaPayload(value))
         clienteId = persona.cliente
       }
-      await createDireccion(direccionPayload(form, clienteId))
+      await createDireccion(direccionPayload(value, clienteId))
       return createVenta({
         cliente: clienteId,
-        producto: Number(form.producto),
-        flujo: Number(form.flujo),
-        promociones: form.promociones.map(Number),
+        producto: Number(value.producto),
+        flujo: Number(value.flujo),
+        promociones: value.promociones.map(Number),
       })
     },
     onSuccess: (venta) => {
@@ -99,38 +112,19 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
     onError: (error) => setFormError(error.message),
   })
 
-  const setField = (name, value) => setForm((current) => ({ ...current, [name]: value }))
+  const form = useForm({
+    defaultValues,
+    validators: { onSubmit: nuevaVentaSchema },
+    onSubmit: async ({ value }) => {
+      setFormError('')
+      await mutation.mutateAsync(value)
+    },
+  })
+
   const productos = productosQuery.data ?? []
-  const flujos = flujosPorTipo(flujosQuery.data, form.tipo_cliente)
-  const flujoSeleccionado = flujos.find((flujo) => String(flujo.id) === String(form.flujo))
   const promociones = promocionesQuery.data ?? []
-  const tiposDocumento = choicesQuery.data?.tipos_documento ?? []
-  const tiposDireccion = choicesQuery.data?.tipos_direccion ?? []
-
-  const personaCompleta =
-    form.numero_documento &&
-    form.nombres &&
-    form.apellidos &&
-    form.celular &&
-    form.distrito_nacimiento &&
-    form.padre &&
-    form.madre
-  const direccionCompleta = form.direccion && form.numero && form.distrito
-  const empresaCompleta = form.ruc.length === 11 && form.razon_social
-  const canNext =
-    personaCompleta &&
-    direccionCompleta &&
-    (form.tipo_cliente === 'PERSONA' || empresaCompleta)
-  const canSubmit = form.producto && form.flujo
-
-  const elegirTipo = (tipo) => {
-    setForm((current) => ({ ...current, tipo_cliente: tipo, flujo: '' }))
-  }
-
-  const pasosFlujo = useMemo(
-    () => [...(flujoSeleccionado?.pasos_detalle ?? [])].sort((a, b) => a.orden - b.orden),
-    [flujoSeleccionado],
-  )
+  const tiposDocumento = choicesQuery.data?.tipos_documento ?? [{ value: 'DNI', label: 'DNI' }]
+  const tiposDireccion = choicesQuery.data?.tipos_direccion ?? [{ value: 'CALLE', label: 'Calle' }]
 
   return (
     <div className="space-y-4">
@@ -160,265 +154,255 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
           </div>
         ) : null}
 
-        {step === 0 ? (
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="md:col-span-2 flex rounded-full bg-slate-100 p-1">
-              <button
-                type="button"
-                className={`flex-1 rounded-full py-2 text-sm ${form.tipo_cliente === 'PERSONA' ? 'bg-white font-medium shadow' : 'text-slate-500'}`}
-                onClick={() => elegirTipo('PERSONA')}
-              >
-                Persona Natural
-              </button>
-              <button
-                type="button"
-                className={`flex-1 rounded-full py-2 text-sm ${form.tipo_cliente === 'EMPRESA' ? 'bg-white font-medium shadow' : 'text-slate-500'}`}
-                onClick={() => elegirTipo('EMPRESA')}
-              >
-                Persona Jurídica
-              </button>
-            </div>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            form.handleSubmit()
+          }}
+        >
+          <form.Subscribe selector={(state) => state.values}>
+            {(values) => {
+              const flujos = flujosPorTipo(flujosQuery.data, values.tipo_cliente)
+              const flujoSeleccionado = flujos.find((flujo) => String(flujo.id) === String(values.flujo))
+              const pasosFlujo = [...(flujoSeleccionado?.pasos_detalle ?? [])].sort(
+                (a, b) => a.orden - b.orden,
+              )
+              return (
+                <>
+                  <div className={`grid gap-4 md:grid-cols-2 ${step !== 0 ? 'hidden' : ''}`}>
+                      <div className="flex rounded-full bg-slate-100 p-1 md:col-span-2">
+                        <button
+                          type="button"
+                          className={`flex-1 rounded-full py-2 text-sm ${
+                            values.tipo_cliente === 'PERSONA' ? 'bg-white font-medium shadow' : 'text-slate-500'
+                          }`}
+                          onClick={() => {
+                            form.setFieldValue('tipo_cliente', 'PERSONA')
+                            form.setFieldValue('flujo', '')
+                          }}
+                        >
+                          Persona Natural
+                        </button>
+                        <button
+                          type="button"
+                          className={`flex-1 rounded-full py-2 text-sm ${
+                            values.tipo_cliente === 'EMPRESA' ? 'bg-white font-medium shadow' : 'text-slate-500'
+                          }`}
+                          onClick={() => {
+                            form.setFieldValue('tipo_cliente', 'EMPRESA')
+                            form.setFieldValue('flujo', '')
+                            form.setFieldValue('distrito_nacimiento', '')
+                            form.setFieldValue('padre', '')
+                            form.setFieldValue('madre', '')
+                          }}
+                        >
+                          Persona Jurídica
+                        </button>
+                      </div>
 
-            {form.tipo_cliente === 'EMPRESA' ? (
-              <>
-                <label className="text-sm">
-                  <span className="mb-1 block text-slate-500">RUC</span>
-                  <input
-                    className="input input-bordered w-full"
-                    maxLength={11}
-                    onChange={(event) => setField('ruc', event.target.value)}
-                    value={form.ruc}
-                  />
-                </label>
-                <label className="text-sm">
-                  <span className="mb-1 block text-slate-500">Razón social</span>
-                  <input
-                    className="input input-bordered w-full"
-                    onChange={(event) => setField('razon_social', event.target.value)}
-                    value={form.razon_social}
-                  />
-                </label>
-                <p className="md:col-span-2 text-sm font-medium text-slate-600">Representante legal</p>
-              </>
-            ) : null}
+                      {values.tipo_cliente === 'EMPRESA' ? (
+                        <>
+                          <Field form={form} name="ruc" validators={digitCode(11, 'El RUC debe tener 11 dígitos')}>
+                            {(field) => (
+                              <TextField field={field} inputMode="numeric" label="RUC" maxLength={11} />
+                            )}
+                          </Field>
+                          <Field form={form} name="razon_social" validators={requiredText()}>
+                            {(field) => <TextField field={field} label="Razón social" />}
+                          </Field>
+                          <p className="text-sm font-medium text-slate-600 md:col-span-2">Representante legal</p>
+                        </>
+                      ) : null}
 
-            <label className="text-sm">
-              <span className="mb-1 block text-slate-500">Tipo de documento</span>
-              <select
-                className="select select-bordered w-full"
-                onChange={(event) => setField('tipo_documento', event.target.value)}
-                value={form.tipo_documento}
+                      <Field
+                        form={form}
+                        name="tipo_documento"
+                        listeners={{
+                          onChange: ({ fieldApi }) => {
+                            fieldApi.form.validateField('numero_documento', 'change')
+                          },
+                        }}
+                      >
+                        {(field) => (
+                          <SelectField
+                            field={field}
+                            includeEmpty={false}
+                            label="Tipo de documento"
+                            options={tiposDocumento}
+                          />
+                        )}
+                      </Field>
+                      <Field form={form} name="numero_documento" validators={validateDocumentNumber}>
+                        {(field) => (
+                          <TextField
+                            field={field}
+                            inputMode="numeric"
+                            label="N° de documento"
+                            maxLength={DOCUMENT_LENGTH[values.tipo_documento] ?? DOCUMENT_LENGTH.DNI}
+                          />
+                        )}
+                      </Field>
+                    </div>
+                  <div className={`grid gap-4 md:grid-cols-2 ${step !== 1 ? 'hidden' : ''}`}>
+                      <Field form={form} name="producto" validators={requiredText('Selecciona un producto')}>
+                        {(field) => (
+                          <SelectField
+                            className="md:col-span-2"
+                            field={field}
+                            label="Producto"
+                            options={productos.map((producto) => ({
+                              value: String(producto.id),
+                              label: `${producto.nombre} · ${producto.velocidad} Mbps · S/ ${producto.precio}`,
+                            }))}
+                            placeholder="Selecciona un producto"
+                          />
+                        )}
+                      </Field>
+                      <Field form={form} name="flujo" validators={requiredText('Selecciona un flujo')}>
+                        {(field) => (
+                          <SelectField
+                            className="md:col-span-2"
+                            field={field}
+                            label={`Flujo ${values.tipo_cliente === 'EMPRESA' ? '(RUC 20 / empresa)' : '(RUC 10 / persona natural)'}`}
+                            options={flujos.map((flujo) => ({
+                              value: String(flujo.id),
+                              label: flujo.nombre,
+                            }))}
+                            placeholder="Selecciona un flujo"
+                          />
+                        )}
+                      </Field>
+                      {flujos.length === 0 ? (
+                        <p className="text-xs text-orange-600 md:col-span-2">
+                          No hay un flujo configurado para este tipo de cliente.
+                        </p>
+                      ) : null}
+                      {pasosFlujo.length ? (
+                        <ol className="rounded-xl bg-slate-50 p-4 text-sm md:col-span-2">
+                          {pasosFlujo.map((paso) => (
+                            <li key={paso.id} className="mb-1">
+                              {paso.orden}. {paso.paso_detalle?.nombre}
+                            </li>
+                          ))}
+                        </ol>
+                      ) : null}
+                      <Field form={form} name="promociones">
+                        {(field) => (
+                          <SelectField
+                            className="md:col-span-2"
+                            field={field}
+                            label="Promociones"
+                            multiple
+                            options={promociones.map((promo) => ({
+                              value: String(promo.id),
+                              label: promo.nombre,
+                            }))}
+                          />
+                        )}
+                      </Field>
+                    </div>
+                </>
+              )
+            }}
+          </form.Subscribe>
+
+          <form.Subscribe selector={(state) => state.values.tipo_cliente}>
+            {(tipoCliente) => (
+          <div className={`mt-4 grid gap-4 md:grid-cols-2 ${step !== 0 ? 'hidden' : ''}`}>
+              <Field form={form} name="nombres" validators={requiredText()}>
+                {(field) => <TextField field={field} label="Nombres" />}
+              </Field>
+              <Field form={form} name="apellidos" validators={requiredText()}>
+                {(field) => <TextField field={field} label="Apellidos" />}
+              </Field>
+              <Field
+                form={form}
+                name="celular"
+                validators={digitCode(9, 'El celular debe tener 9 dígitos')}
               >
-                {(tiposDocumento.length ? tiposDocumento : [{ value: 'DNI', label: 'DNI' }]).map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-slate-500">N° de documento</span>
-              <input
-                className="input input-bordered w-full"
-                maxLength={9}
-                onChange={(event) => setField('numero_documento', event.target.value)}
-                value={form.numero_documento}
-              />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-slate-500">Nombres</span>
-              <input
-                className="input input-bordered w-full"
-                onChange={(event) => setField('nombres', event.target.value)}
-                value={form.nombres}
-              />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-slate-500">Apellidos</span>
-              <input
-                className="input input-bordered w-full"
-                onChange={(event) => setField('apellidos', event.target.value)}
-                value={form.apellidos}
-              />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-slate-500">Celular</span>
-              <input
-                className="input input-bordered w-full"
-                maxLength={9}
-                onChange={(event) => setField('celular', event.target.value)}
-                value={form.celular}
-              />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-slate-500">Distrito de nacimiento</span>
-              <input
-                className="input input-bordered w-full"
-                onChange={(event) => setField('distrito_nacimiento', event.target.value)}
-                value={form.distrito_nacimiento}
-              />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-slate-500">Padre</span>
-              <input
-                className="input input-bordered w-full"
-                onChange={(event) => setField('padre', event.target.value)}
-                value={form.padre}
-              />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-slate-500">Madre</span>
-              <input
-                className="input input-bordered w-full"
-                onChange={(event) => setField('madre', event.target.value)}
-                value={form.madre}
-              />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-slate-500">Tipo de vía</span>
-              <select
-                className="select select-bordered w-full"
-                onChange={(event) => setField('tipo_direccion', event.target.value)}
-                value={form.tipo_direccion}
-              >
-                {(tiposDireccion.length ? tiposDireccion : [{ value: 'CALLE', label: 'Calle' }]).map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-slate-500">Dirección</span>
-              <input
-                className="input input-bordered w-full"
-                onChange={(event) => setField('direccion', event.target.value)}
-                value={form.direccion}
-              />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-slate-500">Número</span>
-              <input
-                className="input input-bordered w-full"
-                onChange={(event) => setField('numero', event.target.value)}
-                value={form.numero}
-              />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-slate-500">Distrito</span>
-              <input
-                className="input input-bordered w-full"
-                onChange={(event) => setField('distrito', event.target.value)}
-                value={form.distrito}
-              />
-            </label>
-          </div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="text-sm md:col-span-2">
-              <span className="mb-1 block text-slate-500">Producto</span>
-              <select
-                className="select select-bordered w-full"
-                onChange={(event) => setField('producto', event.target.value)}
-                value={form.producto}
-              >
-                <option value="">Selecciona un producto</option>
-                {productos.map((producto) => (
-                  <option key={producto.id} value={producto.id}>
-                    {producto.nombre} · {producto.velocidad} Mbps · S/ {producto.precio}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm md:col-span-2">
-              <span className="mb-1 block text-slate-500">
-                Flujo {form.tipo_cliente === 'EMPRESA' ? '(RUC 20 / empresa)' : '(RUC 10 / persona natural)'}
-              </span>
-              <select
-                className="select select-bordered w-full"
-                onChange={(event) => setField('flujo', event.target.value)}
-                value={form.flujo}
-              >
-                <option value="">Selecciona un flujo</option>
-                {flujos.map((flujo) => (
-                  <option key={flujo.id} value={flujo.id}>
-                    {flujo.nombre}
-                  </option>
-                ))}
-              </select>
-              {flujos.length === 0 ? (
-                <span className="mt-1 block text-xs text-orange-600">
-                  No hay un flujo configurado para este tipo de cliente.
-                </span>
+                {(field) => (
+                  <TextField field={field} inputMode="numeric" label="Celular" maxLength={9} />
+                )}
+              </Field>
+              {tipoCliente === 'PERSONA' ? (
+                <>
+                  <Field form={form} name="distrito_nacimiento" validators={requiredText()}>
+                    {(field) => <TextField field={field} label="Distrito de nacimiento" />}
+                  </Field>
+                  <Field form={form} name="padre" validators={requiredText()}>
+                    {(field) => <TextField field={field} label="Padre" />}
+                  </Field>
+                  <Field form={form} name="madre" validators={requiredText()}>
+                    {(field) => <TextField field={field} label="Madre" />}
+                  </Field>
+                </>
               ) : null}
-            </label>
-            {pasosFlujo.length ? (
-              <ol className="md:col-span-2 rounded-xl bg-slate-50 p-4 text-sm">
-                {pasosFlujo.map((paso) => (
-                  <li key={paso.id} className="mb-1">
-                    {paso.orden}. {paso.paso_detalle?.nombre}
-                  </li>
-                ))}
-              </ol>
-            ) : null}
-            <label className="text-sm md:col-span-2">
-              <span className="mb-1 block text-slate-500">Promociones</span>
-              <select
-                className="select select-bordered w-full"
-                multiple
-                onChange={(event) =>
-                  setField(
-                    'promociones',
-                    Array.from(event.target.selectedOptions, (option) => option.value),
-                  )
-                }
-                value={form.promociones}
-              >
-                {promociones.map((promo) => (
-                  <option key={promo.id} value={promo.id}>
-                    {promo.nombre}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        )}
+              <Field form={form} name="tipo_direccion">
+                {(field) => (
+                  <SelectField
+                    field={field}
+                    includeEmpty={false}
+                    label="Tipo de vía"
+                    options={tiposDireccion}
+                  />
+                )}
+              </Field>
+              <Field form={form} name="direccion" validators={requiredText()}>
+                {(field) => <TextField field={field} label="Dirección" />}
+              </Field>
+              <Field form={form} name="numero" validators={requiredText()}>
+                {(field) => <TextField field={field} label="Número" />}
+              </Field>
+              <Field form={form} name="distrito" validators={requiredText()}>
+                {(field) => <TextField field={field} label="Distrito" />}
+              </Field>
+            </div>
+            )}
+          </form.Subscribe>
 
-        <div className="mt-6 flex justify-end gap-2">
-          {step === 1 ? (
-            <button type="button" className="btn btn-ghost rounded-full" onClick={() => setStep(0)}>
-              Atrás
-            </button>
-          ) : null}
-          {step === 0 ? (
-            <button
-              type="button"
-              className="btn rounded-full border-none bg-blue-600 text-white hover:bg-blue-700"
-              disabled={!canNext}
-              onClick={() => {
-                setForm((current) => ({
-                  ...current,
-                  flujo: current.flujo || (flujos.length === 1 ? String(flujos[0].id) : ''),
-                }))
-                setStep(1)
-              }}
-            >
-              Siguiente
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="btn rounded-full border-none bg-blue-600 text-white hover:bg-blue-700"
-              disabled={!canSubmit || mutation.isPending}
-              onClick={() => {
-                setFormError('')
-                mutation.mutate()
-              }}
-            >
-              {mutation.isPending ? 'Guardando...' : 'Crear venta'}
-            </button>
-          )}
-        </div>
+          <div className="mt-6 flex justify-end gap-2">
+            {step === 1 ? (
+              <button type="button" className="btn btn-ghost rounded-full" onClick={() => setStep(0)}>
+                Atrás
+              </button>
+            ) : null}
+            {step === 0 ? (
+              <button
+                type="button"
+                className="btn rounded-full border-none bg-blue-600 text-white hover:bg-blue-700"
+                onClick={async () => {
+                  const values = form.state.values
+                  const parsed = nuevaVentaClienteSchema.safeParse(values)
+                  const tipo = values.tipo_cliente
+                  const results = await Promise.all(
+                    step0Fields(tipo).map((name) => form.validateField(name, 'submit')),
+                  )
+                  if (!parsed.success || results.some((errors) => errors?.length)) return
+                  const flujos = flujosPorTipo(flujosQuery.data, tipo)
+                  if (!form.getFieldValue('flujo') && flujos.length === 1) {
+                    form.setFieldValue('flujo', String(flujos[0].id))
+                  }
+                  setStep(1)
+                }}
+              >
+                Siguiente
+              </button>
+            ) : (
+              <form.Subscribe selector={(state) => state.isSubmitting}>
+                {(isSubmitting) => (
+                  <button
+                    type="submit"
+                    className="btn rounded-full border-none bg-blue-600 text-white hover:bg-blue-700"
+                    disabled={isSubmitting || mutation.isPending}
+                  >
+                    {mutation.isPending ? 'Guardando...' : 'Crear venta'}
+                  </button>
+                )}
+              </form.Subscribe>
+            )}
+          </div>
+        </form>
       </section>
     </div>
   )

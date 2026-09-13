@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useForm } from '@tanstack/react-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import Field from '../components/Field.jsx'
+import { CheckboxField, SelectField, TextField } from '../components/FormFields.jsx'
+import { roleNameSchema, roleSchema, userFormSchema, withSchema } from '../lib/schemas.js'
 import {
   createRole,
   createUser,
@@ -341,7 +345,11 @@ export default function RolesPage() {
 }
 
 function CreateRoleModal({ onClose, onCreate, pending }) {
-  const [name, setName] = useState('')
+  const form = useForm({
+    defaultValues: { name: '' },
+    validators: withSchema(roleNameSchema),
+    onSubmit: ({ value }) => onCreate(value.name.trim()),
+  })
   return (
     <Modal
       open
@@ -352,45 +360,39 @@ function CreateRoleModal({ onClose, onCreate, pending }) {
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             Cancelar
           </button>
-          <button
-            type="button"
-            className="btn border-none bg-blue-600 text-white"
-            disabled={!name.trim() || pending}
-            onClick={() => onCreate(name.trim())}
-          >
-            Crear
-          </button>
+          <form.Subscribe selector={(state) => [state.values.name, state.isSubmitting]}>
+            {([name, isSubmitting]) => (
+              <button
+                type="button"
+                className="btn border-none bg-blue-600 text-white"
+                disabled={!name.trim() || pending || isSubmitting}
+                onClick={() => form.handleSubmit()}
+              >
+                Crear
+              </button>
+            )}
+          </form.Subscribe>
         </>
       }
     >
-      <label className="block text-sm">
-        <span className="mb-1 block text-slate-500">Nombre</span>
-        <input
-          className="input input-bordered w-full"
-          onChange={(event) => setName(event.target.value)}
-          value={name}
-        />
-      </label>
+      <Field form={form} name="name">
+        {(field) => <TextField field={field} label="Nombre" />}
+      </Field>
     </Modal>
   )
 }
 
 function RoleModal({ role, catalog, editing, onClose, onSave, onDelete, pending }) {
-  const [name, setName] = useState(role.name)
-  const [perms, setPerms] = useState(role.permissions)
   const canEdit = editing
+  const form = useForm({
+    defaultValues: { name: role.name, permissions: role.permissions },
+    validators: withSchema(roleSchema),
+    onSubmit: ({ value }) => onSave({ name: value.name.trim(), permissions: value.permissions }),
+  })
 
   useEffect(() => {
-    setName(role.name)
-    setPerms(role.permissions)
-  }, [role])
-
-  const toggle = (code) => {
-    if (!canEdit) return
-    setPerms((current) =>
-      current.includes(code) ? current.filter((item) => item !== code) : [...current, code],
-    )
-  }
+    form.reset({ name: role.name, permissions: role.permissions })
+  }, [form, role])
 
   return (
     <Modal
@@ -408,74 +410,103 @@ function RoleModal({ role, catalog, editing, onClose, onSave, onDelete, pending 
               <button type="button" className="btn btn-ghost text-rose-600" onClick={onDelete}>
                 Eliminar
               </button>
-              <button
-                type="button"
-                className="btn border-none bg-blue-600 text-white"
-                disabled={!name.trim() || pending}
-                onClick={() => onSave({ name: name.trim(), permissions: perms })}
-              >
-                Guardar
-              </button>
+              <form.Subscribe selector={(state) => [state.values.name, state.isSubmitting]}>
+                {([name, isSubmitting]) => (
+                  <button
+                    type="button"
+                    className="btn border-none bg-blue-600 text-white"
+                    disabled={!name.trim() || pending || isSubmitting}
+                    onClick={() => form.handleSubmit()}
+                  >
+                    Guardar
+                  </button>
+                )}
+              </form.Subscribe>
             </>
           ) : null}
         </>
       }
     >
-      <label className="mb-4 block text-sm">
-        <span className="mb-1 block text-slate-500">Nombre</span>
         {canEdit ? (
-          <input
-            className="input input-bordered w-full"
-            onChange={(event) => setName(event.target.value)}
-            value={name}
-          />
+          <Field form={form} name="name">
+            {(field) => <TextField className="mb-4 block" field={field} label="Nombre" />}
+          </Field>
         ) : (
-          <p className="font-medium">{role.name}</p>
+          <label className="mb-4 block text-sm">
+            <span className="mb-1 block text-slate-500">Nombre</span>
+            <p className="font-medium">{role.name}</p>
+          </label>
         )}
-      </label>
-      <div className="grid gap-4 md:grid-cols-2">
-        {catalog.map((section) => (
-          <fieldset key={section.group} className="rounded-xl bg-slate-50 p-3">
-            <legend className="px-1 text-sm font-semibold">{section.group}</legend>
-            <div className="space-y-2">
-              {section.items.map(([code, label]) => (
-                <label key={code} className="flex items-start gap-2 text-sm">
-                  <input
-                    checked={perms.includes(code)}
-                    className="checkbox checkbox-sm mt-0.5"
-                    disabled={!canEdit}
-                    onChange={() => toggle(code)}
-                    type="checkbox"
-                  />
-                  <span>
-                    {label}
-                    <span className="block text-xs text-slate-400">{code}</span>
-                  </span>
-                </label>
+        <form.Subscribe selector={(state) => state.values.permissions}>
+          {(perms) => (
+            <div className="grid gap-4 md:grid-cols-2">
+              {catalog.map((section) => (
+                <fieldset key={section.group} className="rounded-xl bg-slate-50 p-3">
+                  <legend className="px-1 text-sm font-semibold">{section.group}</legend>
+                  <div className="space-y-2">
+                    {section.items.map(([code, label]) => (
+                      <label key={code} className="flex items-start gap-2 text-sm">
+                        <input
+                          checked={perms.includes(code)}
+                          className="checkbox checkbox-sm mt-0.5"
+                          disabled={!canEdit}
+                          onChange={() => {
+                            if (!canEdit) return
+                            form.setFieldValue(
+                              'permissions',
+                              perms.includes(code)
+                                ? perms.filter((item) => item !== code)
+                                : [...perms, code],
+                            )
+                          }}
+                          type="checkbox"
+                        />
+                        <span>
+                          {label}
+                          <span className="block text-xs text-slate-400">{code}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
               ))}
             </div>
-          </fieldset>
-        ))}
-      </div>
+          )}
+        </form.Subscribe>
     </Modal>
   )
 }
 
 function UserModal({ user, roles, editing, isCreate, currentUserId, onClose, onSave, onDelete, pending }) {
-  const [form, setForm] = useState({
-    username: user.username ?? '',
-    password: '',
-    first_name: user.first_name ?? '',
-    last_name: user.last_name ?? '',
-    groups: roles.find((role) => user.groups?.includes(role.name))?.id
-      ? [roles.find((role) => user.groups.includes(role.name)).id]
-      : [],
-    is_active: user.is_active !== false,
-  })
   const canEdit = editing || isCreate
   const isSelf = user.id === currentUserId
+  const initialGroup =
+    roles.find((role) => user.groups?.includes(role.name))?.id != null
+      ? String(roles.find((role) => user.groups.includes(role.name)).id)
+      : ''
 
-  const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }))
+  const form = useForm({
+    defaultValues: {
+      username: user.username ?? '',
+      password: '',
+      first_name: user.first_name ?? '',
+      last_name: user.last_name ?? '',
+      groups: initialGroup,
+      is_active: user.is_active !== false,
+    },
+    validators: withSchema(userFormSchema(isCreate)),
+    onSubmit: ({ value }) => {
+      const payload = {
+        username: value.username.trim(),
+        first_name: value.first_name.trim(),
+        last_name: value.last_name.trim(),
+        groups: value.groups ? [Number(value.groups)] : [],
+        is_active: value.is_active,
+      }
+      if (value.password) payload.password = value.password
+      onSave(payload)
+    },
+  })
 
   return (
     <Modal
@@ -493,112 +524,95 @@ function UserModal({ user, roles, editing, isCreate, currentUserId, onClose, onS
             </button>
           ) : null}
           {canEdit ? (
-            <button
-              type="button"
-              className="btn border-none bg-blue-600 text-white"
-              disabled={!form.username.trim() || (isCreate && !form.password) || pending}
-              onClick={() => {
-                const payload = {
-                  username: form.username.trim(),
-                  first_name: form.first_name.trim(),
-                  last_name: form.last_name.trim(),
-                  groups: form.groups,
-                  is_active: form.is_active,
-                }
-                if (form.password) payload.password = form.password
-                onSave(payload)
-              }}
-            >
-              {isCreate ? 'Crear' : 'Guardar'}
-            </button>
+            <form.Subscribe selector={(state) => [state.values, state.isSubmitting]}>
+              {([values, isSubmitting]) => (
+                <button
+                  type="button"
+                  className="btn border-none bg-blue-600 text-white"
+                  disabled={
+                    !values.username.trim() || (isCreate && !values.password) || pending || isSubmitting
+                  }
+                  onClick={() => form.handleSubmit()}
+                >
+                  {isCreate ? 'Crear' : 'Guardar'}
+                </button>
+              )}
+            </form.Subscribe>
           ) : null}
         </>
       }
     >
-      <div className="grid gap-3">
-        <label className="text-sm">
-          <span className="mb-1 block text-slate-500">Usuario</span>
+        <div className="grid gap-3">
           {canEdit ? (
-            <input
-              className="input input-bordered w-full"
-              onChange={(event) => setField('username', event.target.value)}
-              value={form.username}
-            />
+            <Field form={form} name="username">
+              {(field) => <TextField field={field} label="Usuario" />}
+            </Field>
           ) : (
-            <p className="font-medium">{user.username}</p>
+            <label className="text-sm">
+              <span className="mb-1 block text-slate-500">Usuario</span>
+              <p className="font-medium">{user.username}</p>
+            </label>
           )}
-        </label>
-        {canEdit ? (
-          <label className="text-sm">
-            <span className="mb-1 block text-slate-500">
-              {isCreate ? 'Contraseña' : 'Nueva contraseña (opcional)'}
-            </span>
-            <input
-              className="input input-bordered w-full"
-              onChange={(event) => setField('password', event.target.value)}
-              type="password"
-              value={form.password}
-            />
-          </label>
-        ) : null}
-        <label className="text-sm">
-          <span className="mb-1 block text-slate-500">Nombre</span>
           {canEdit ? (
-            <input
-              className="input input-bordered w-full"
-              onChange={(event) => setField('first_name', event.target.value)}
-              value={form.first_name}
-            />
-          ) : (
-            <p>{user.first_name || '—'}</p>
-          )}
-        </label>
-        <label className="text-sm">
-          <span className="mb-1 block text-slate-500">Apellido</span>
+            <Field form={form} name="password">
+              {(field) => (
+                <TextField
+                  field={field}
+                  label={isCreate ? 'Contraseña' : 'Nueva contraseña (opcional)'}
+                  type="password"
+                />
+              )}
+            </Field>
+          ) : null}
           {canEdit ? (
-            <input
-              className="input input-bordered w-full"
-              onChange={(event) => setField('last_name', event.target.value)}
-              value={form.last_name}
-            />
+            <Field form={form} name="first_name">
+              {(field) => <TextField field={field} label="Nombre" />}
+            </Field>
           ) : (
-            <p>{user.last_name || '—'}</p>
+            <label className="text-sm">
+              <span className="mb-1 block text-slate-500">Nombre</span>
+              <p>{user.first_name || '—'}</p>
+            </label>
           )}
-        </label>
-        <label className="text-sm">
-          <span className="mb-1 block text-slate-500">Rol</span>
           {canEdit ? (
-            <select
-              className="select select-bordered w-full"
-              onChange={(event) =>
-                setField('groups', event.target.value ? [Number(event.target.value)] : [])
-              }
-              value={form.groups[0] ?? ''}
-            >
-              <option value="">Sin rol</option>
-              {roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.name}
-                </option>
-              ))}
-            </select>
+            <Field form={form} name="last_name">
+              {(field) => <TextField field={field} label="Apellido" />}
+            </Field>
           ) : (
-            <p>{user.groups?.[0] || 'Sin rol'}</p>
+            <label className="text-sm">
+              <span className="mb-1 block text-slate-500">Apellido</span>
+              <p>{user.last_name || '—'}</p>
+            </label>
           )}
-        </label>
-        {!isCreate ? (
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              checked={form.is_active}
-              className="checkbox checkbox-sm"
-              disabled={!canEdit || isSelf}
-              onChange={(event) => setField('is_active', event.target.checked)}
-              type="checkbox"
-            />
-            Cuenta activa
-          </label>
-        ) : null}
-      </div>
+          {canEdit ? (
+            <Field form={form} name="groups">
+              {(field) => (
+                <SelectField
+                  field={field}
+                  label="Rol"
+                  options={roles.map((role) => ({ value: String(role.id), label: role.name }))}
+                  placeholder="Sin rol"
+                />
+              )}
+            </Field>
+          ) : (
+            <label className="text-sm">
+              <span className="mb-1 block text-slate-500">Rol</span>
+              <p>{user.groups?.[0] || 'Sin rol'}</p>
+            </label>
+          )}
+          {!isCreate ? (
+            canEdit ? (
+              <Field form={form} name="is_active">
+                {(field) => (
+                  <CheckboxField disabled={isSelf} field={field} label="Cuenta activa" />
+                )}
+              </Field>
+            ) : (
+              <p className="text-sm">{user.is_active !== false ? 'Cuenta activa' : 'Cuenta inactiva'}</p>
+            )
+          ) : null}
+        </div>
     </Modal>
   )
 }
