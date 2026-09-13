@@ -81,6 +81,13 @@ export function getMe() {
   return request("/auth/me/");
 }
 
+export function changePassword(payload) {
+  return request("/auth/change-password/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getPermissionCatalog() {
   return request("/auth/permissions/");
 }

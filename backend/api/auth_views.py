@@ -1,4 +1,6 @@
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -59,3 +61,44 @@ def logout_view(request):
 @permission_classes([IsAuthenticated])
 def me(request):
     return Response(serialize_user(request.user))
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def change_password(request):
+    current = request.data.get("current_password") or ""
+    new = request.data.get("new_password") or ""
+    confirm = request.data.get("confirm_password") or ""
+
+    if not request.user.check_password(current):
+        return Response(
+            {"current_password": "La contraseña actual no es correcta."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if not new:
+        return Response(
+            {"new_password": "La nueva contraseña es obligatoria."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if new != confirm:
+        return Response(
+            {"confirm_password": "Las contraseñas no coinciden."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if new == current:
+        return Response(
+            {"new_password": "La nueva contraseña debe ser distinta a la actual."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        validate_password(new, request.user)
+    except DjangoValidationError as error:
+        return Response(
+            {"new_password": list(error.messages)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    request.user.set_password(new)
+    request.user.save(update_fields=["password"])
+    update_session_auth_hash(request, request.user)
+    return Response({"detail": "Contraseña actualizada."})

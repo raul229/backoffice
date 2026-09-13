@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .auth_views import csrf, login_view, logout_view, me
+from .auth_views import change_password, csrf, login_view, logout_view, me
 from .roles_views import permission_catalog, role_detail, roles, user_detail, users
 from .views import (
     ClienteViewSet,
@@ -40,6 +40,7 @@ urlpatterns = [
     path("auth/login/", login_view, name="api-login"),
     path("auth/logout/", logout_view, name="api-logout"),
     path("auth/me/", me, name="api-me"),
+    path("auth/change-password/", change_password, name="api-change-password"),
     path("auth/permissions/", permission_catalog, name="api-permissions"),
     path("auth/roles/", roles, name="api-roles"),
     path("auth/roles/<int:pk>/", role_detail, name="api-role-detail"),

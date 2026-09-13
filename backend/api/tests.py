@@ -226,6 +226,49 @@ class AuthAndPermissionsTests(APITestCase):
         me = self.client.get("/api/auth/me/")
         self.assertEqual(me.status_code, status.HTTP_200_OK)
 
+    def test_change_password(self):
+        User.objects.create_user("claveuser", password="secret123")
+        self.client.post(
+            "/api/auth/login/",
+            {"username": "claveuser", "password": "secret123"},
+            format="json",
+        )
+        bad = self.client.post(
+            "/api/auth/change-password/",
+            {
+                "current_password": "otra",
+                "new_password": "Montaña-Verde-44",
+                "confirm_password": "Montaña-Verde-44",
+            },
+            format="json",
+        )
+        self.assertEqual(bad.status_code, status.HTTP_400_BAD_REQUEST)
+
+        mismatch = self.client.post(
+            "/api/auth/change-password/",
+            {
+                "current_password": "secret123",
+                "new_password": "Montaña-Verde-44",
+                "confirm_password": "otraClave9",
+            },
+            format="json",
+        )
+        self.assertEqual(mismatch.status_code, status.HTTP_400_BAD_REQUEST)
+
+        ok = self.client.post(
+            "/api/auth/change-password/",
+            {
+                "current_password": "secret123",
+                "new_password": "Montaña-Verde-44",
+                "confirm_password": "Montaña-Verde-44",
+            },
+            format="json",
+        )
+        self.assertEqual(ok.status_code, status.HTTP_200_OK)
+        me = self.client.get("/api/auth/me/")
+        self.assertEqual(me.status_code, status.HTTP_200_OK)
+        self.assertEqual(me.data["username"], "claveuser")
+
     def test_anonymous_cannot_list_ventas(self):
         response = self.client.get("/api/ventas/")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   IconBell,
   IconBolt,
@@ -11,6 +12,7 @@ import {
 } from '../lib/icons.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { displayName, initials, roleLabel } from '../lib/auth.js'
+import ProfileModal from './ProfileModal.jsx'
 
 const NAV = [
   { id: 'inicio', label: 'Inicio', icon: IconHome, permission: 'api.view_venta' },
@@ -23,6 +25,7 @@ const NAV = [
 
 export default function AppShell({ page, search, onSearch, onNavigate, children }) {
   const { user, can, logout } = useAuth()
+  const [profileOpen, setProfileOpen] = useState(false)
   const nav = NAV.filter((item) => can(item.permission))
   return (
     <div className="flex min-h-screen">
@@ -76,21 +79,26 @@ export default function AppShell({ page, search, onSearch, onNavigate, children 
           <button type="button" className="grid h-10 w-10 place-items-center rounded-full bg-white text-slate-500 shadow-sm">
             <IconBell className="h-5 w-5" />
           </button>
-          <div className="flex items-center gap-3 rounded-full bg-white py-1.5 pl-1.5 pr-3 shadow-sm">
+          <button
+            type="button"
+            className="flex items-center gap-3 rounded-full bg-white py-1.5 pl-1.5 pr-3 shadow-sm"
+            onClick={() => setProfileOpen(true)}
+          >
             <div className="grid h-9 w-9 place-items-center rounded-full bg-slate-200 text-sm font-semibold text-slate-700">
               {initials(user)}
             </div>
-            <div className="leading-tight">
+            <div className="text-left leading-tight">
               <p className="text-sm font-semibold">{displayName(user)}</p>
               <p className="text-xs text-slate-500">{roleLabel(user)}</p>
             </div>
-            <button type="button" className="btn btn-ghost btn-xs" onClick={() => logout()}>
-              Salir
-            </button>
-          </div>
+          </button>
+          <button type="button" className="btn btn-ghost btn-xs" onClick={() => logout()}>
+            Salir
+          </button>
         </header>
         <main className="flex-1 px-6 pb-8">{children}</main>
       </div>
+      {profileOpen ? <ProfileModal onClose={() => setProfileOpen(false)} user={user} /> : null}
     </div>
   )
 }
