@@ -89,7 +89,7 @@ export default function ConfiguracionPage() {
       <div>
         <h1 className="text-2xl font-bold">Configuración</h1>
         <p className="text-sm text-slate-500">
-          Crea pasos y asígnalos a cada flujo. Quitar un paso lo saca del flujo y de las ventas que lo usaban.
+          Cada tipo de cliente tiene su flujo. Si cambias los pasos, las ventas en proceso de ese flujo se actualizan.
         </p>
       </div>
 

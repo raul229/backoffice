@@ -144,3 +144,30 @@ class ApiEndpointsTests(APITestCase):
         response = self.client.delete(f"/api/flujo-pasos/{primero.id}/")
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(list(flujo.flujopaso_set.order_by("orden").values_list("orden", "paso__nombre")), [(1, "Dos")])
+
+    def test_add_flujo_paso_syncs_existing_venta(self):
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        producto = Producto.objects.create(nombre="Fibra 80", velocidad=80, precio=55)
+        flujo = Flujo.objects.create(nombre="Flujo sync", tipo_cliente=TipoCliente.PERSONA)
+        paso_uno = Paso.objects.create(nombre="Uno", descripcion="Uno")
+        paso_dos = Paso.objects.create(nombre="Dos", descripcion="Dos")
+        FlujoPaso.objects.create(flujo=flujo, paso=paso_uno, orden=1)
+
+        created = self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+        self.assertEqual(len(created.data["pasos"]), 1)
+
+        self.client.post(
+            "/api/flujo-pasos/",
+            {"flujo": flujo.id, "paso": paso_dos.id, "orden": 2},
+            format="json",
+        )
+        detalle = self.client.get(f"/api/ventas/{created.data['id']}/")
+        self.assertEqual(len(detalle.data["pasos"]), 2)
+        self.assertEqual(
+            [paso["flujo_paso_detalle"]["paso_detalle"]["nombre"] for paso in detalle.data["pasos"]],
+            ["Uno", "Dos"],
+        )

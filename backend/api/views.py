@@ -18,6 +18,7 @@ from .models import (
     Venta,
     VentaPaso,
 )
+from .workflow import sync_ventas_con_flujo
 from .serializers import (
     CHOICE_GROUPS,
     ClienteSerializer,
@@ -86,15 +87,20 @@ class FlujoPasoViewSet(ModelViewSet):
     )
     serializer_class = FlujoPasoSerializer
 
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        sync_ventas_con_flujo(instance.flujo)
+
     @transaction.atomic
     def perform_destroy(self, instance):
-        flujo_id = instance.flujo_id
+        flujo = instance.flujo
         instance.delete()
-        restantes = FlujoPaso.objects.filter(flujo_id=flujo_id)
+        restantes = FlujoPaso.objects.filter(flujo_id=flujo.id)
         restantes.update(orden=F("orden") + 1000)
         for index, item in enumerate(restantes.order_by("orden"), start=1):
             item.orden = index
             item.save(update_fields=["orden"])
+        sync_ventas_con_flujo(flujo)
 
 
 class VentaViewSet(ModelViewSet):
@@ -111,6 +117,13 @@ class VentaViewSet(ModelViewSet):
         .all()
     )
     serializer_class = VentaSerializer
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        sync_ventas_con_flujo(instance.flujo, ventas=Venta.objects.filter(pk=instance.pk))
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
 
 
 class PromocionVentaViewSet(ModelViewSet):
