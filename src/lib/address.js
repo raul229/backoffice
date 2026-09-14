@@ -20,6 +20,14 @@ export function normalizeUpper(value) {
     .toLocaleUpperCase('es-PE')
 }
 
+export function normalizeUpperInput(value) {
+  const raw = String(value ?? '')
+  const keepTrailingSpace = /\s$/.test(raw)
+  const text = normalizeUpper(raw)
+  if (!text) return ''
+  return keepTrailingSpace ? `${text} ` : text
+}
+
 export function parseDireccion(raw) {
   const text = normalizeUpper(raw)
   if (!text) return {}

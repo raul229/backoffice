@@ -1,4 +1,4 @@
-import { normalizeUpper } from '../lib/address.js'
+import { normalizeUpper, normalizeUpperInput } from '../lib/address.js'
 
 function errorMessage(error) {
   if (!error) return ''
@@ -39,11 +39,14 @@ export function TextField({
         maxLength={maxLength}
         name={field.name}
         onBlur={(event) => {
+          if (normalize === 'upper') {
+            field.handleChange(normalizeUpper(event.target.value))
+          }
           field.handleBlur()
           onBlur?.(event)
         }}
         onChange={(event) => {
-          const next = normalize === 'upper' ? normalizeUpper(event.target.value) : event.target.value
+          const next = normalize === 'upper' ? normalizeUpperInput(event.target.value) : event.target.value
           field.handleChange(next)
           onValueChange?.(next)
         }}
@@ -120,9 +123,14 @@ export function TextAreaField({ field, label, rows = 3, className = '', normaliz
       <textarea
         className={`textarea textarea-bordered w-full ${invalid ? 'textarea-error' : ''}`}
         name={field.name}
-        onBlur={field.handleBlur}
+        onBlur={(event) => {
+          if (normalize === 'upper') {
+            field.handleChange(normalizeUpper(event.target.value))
+          }
+          field.handleBlur()
+        }}
         onChange={(event) => {
-          const next = normalize === 'upper' ? normalizeUpper(event.target.value) : event.target.value
+          const next = normalize === 'upper' ? normalizeUpperInput(event.target.value) : event.target.value
           field.handleChange(next)
         }}
         rows={rows}
