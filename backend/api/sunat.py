@@ -96,10 +96,13 @@ def documento_desde_ruc(ruc):
 
 
 def nombres_desde_razon(razon_social):
-    if "," not in razon_social:
+    razon = _clean(razon_social)
+    if not razon:
         return "", ""
-    apellidos, nombres = [part.strip() for part in razon_social.split(",", 1)]
-    return nombres, apellidos
+    if "," in razon:
+        apellidos, nombres = [part.strip() for part in razon.split(",", 1)]
+        return nombres, apellidos
+    return split_nombre_completo(razon)
 
 
 def map_tipo_documento(raw):

@@ -479,6 +479,19 @@ SUNAT_PERSONA_HTML = """
 </div>
 """
 
+SUNAT_CE_HTML = """
+<div class="list-group-item">
+  <div class="row">
+    <div class="col-sm-5">
+      <h4 class="list-group-item-heading">Número de RUC:</h4>
+    </div>
+    <div class="col-sm-7">
+      <h4 class="list-group-item-heading">15123456789 - SMITH JOHNSON MARIA ELENA</h4>
+    </div>
+  </div>
+</div>
+"""
+
 
 class LookupRucTests(APITestCase):
     def setUp(self):
@@ -502,6 +515,13 @@ class LookupRucTests(APITestCase):
         self.assertEqual(persona["numero_documento"], "12345678")
         self.assertEqual(persona["nombres"], "JUAN CARLOS")
         self.assertEqual(persona["apellidos"], "PEREZ LOPEZ")
+
+        ce = parse_sunat_html(SUNAT_CE_HTML)
+        self.assertEqual(ce["tipo_cliente"], "PERSONA")
+        self.assertEqual(ce["tipo_documento"], "CE")
+        self.assertEqual(ce["numero_documento"], "123456789")
+        self.assertEqual(ce["nombres"], "MARIA ELENA")
+        self.assertEqual(ce["apellidos"], "SMITH JOHNSON")
 
     def test_lookup_uses_existing_cliente_and_last_sale(self):
         representante = Persona.objects.create(
