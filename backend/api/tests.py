@@ -722,6 +722,18 @@ class LookupRucTests(APITestCase):
         self.assertEqual(direccion.data["direccion"], "LUIGGI BARSATO")
         self.assertEqual(direccion.data["distrito"], "SAN BORJA")
 
+        updated = self.client.patch(
+            f"/api/direcciones/{direccion.data['id']}/",
+            {"distrito": "san isidro", "numero": "200"},
+            format="json",
+        )
+        self.assertEqual(updated.status_code, status.HTTP_200_OK)
+        self.assertEqual(updated.data["distrito"], "SAN ISIDRO")
+        self.assertEqual(updated.data["numero"], "200")
+
+        deleted = self.client.delete(f"/api/direcciones/{direccion.data['id']}/")
+        self.assertEqual(deleted.status_code, status.HTTP_204_NO_CONTENT)
+
     def test_lookup_direccion_returns_saved_and_parsed(self):
         cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
         Direccion.objects.create(

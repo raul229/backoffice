@@ -34,6 +34,7 @@ export default function ConfiguracionPage() {
   const queryClient = useQueryClient()
   const [modal, setModal] = useState(null)
   const [confirm, setConfirm] = useState(null)
+  const [tab, setTab] = useState('productos')
   const [error, setError] = useState('')
   const [ok, setOk] = useState('')
 
@@ -219,7 +220,7 @@ export default function ConfiguracionPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {can('api.add_producto') ? (
+          {tab === 'productos' && can('api.add_producto') ? (
             <button
               type="button"
               className="btn btn-sm rounded-full border-none bg-blue-600 text-white"
@@ -228,7 +229,7 @@ export default function ConfiguracionPage() {
               Nuevo producto
             </button>
           ) : null}
-          {can('api.add_promocion') ? (
+          {tab === 'promociones' && can('api.add_promocion') ? (
             <button
               type="button"
               className="btn btn-sm rounded-full border-none bg-blue-600 text-white"
@@ -237,21 +238,43 @@ export default function ConfiguracionPage() {
               Nueva promoción
             </button>
           ) : null}
-          <button
-            type="button"
-            className="btn btn-sm rounded-full border-none bg-blue-600 text-white"
-            onClick={() => setModal({ type: 'create-paso' })}
-          >
-            Nuevo paso
-          </button>
-          <button
-            type="button"
-            className="btn btn-sm rounded-full border-none bg-blue-600 text-white"
-            onClick={() => setModal({ type: 'create-flujo' })}
-          >
-            Nuevo flujo
-          </button>
+          {tab === 'pasos' ? (
+            <button
+              type="button"
+              className="btn btn-sm rounded-full border-none bg-blue-600 text-white"
+              onClick={() => setModal({ type: 'create-paso' })}
+            >
+              Nuevo paso
+            </button>
+          ) : null}
+          {tab === 'flujos' ? (
+            <button
+              type="button"
+              className="btn btn-sm rounded-full border-none bg-blue-600 text-white"
+              onClick={() => setModal({ type: 'create-flujo' })}
+            >
+              Nuevo flujo
+            </button>
+          ) : null}
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {[
+          ['productos', 'Productos'],
+          ['promociones', 'Promociones'],
+          ['pasos', 'Pasos'],
+          ['flujos', 'Flujos'],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            className={`btn btn-sm rounded-full ${tab === id ? 'border-none bg-blue-600 text-white' : 'btn-ghost bg-white'}`}
+            onClick={() => setTab(id)}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {error ? (
@@ -265,8 +288,8 @@ export default function ConfiguracionPage() {
         </div>
       ) : null}
 
+      {tab === 'productos' ? (
       <section className="bo-card overflow-x-auto p-5">
-        <h2 className="mb-3 font-semibold">Productos</h2>
         {productosQuery.isPending ? (
           <p className="text-sm text-slate-500">Cargando productos...</p>
         ) : productos.length === 0 ? (
@@ -326,9 +349,10 @@ export default function ConfiguracionPage() {
           </table>
         )}
       </section>
+      ) : null}
 
+      {tab === 'promociones' ? (
       <section className="bo-card overflow-x-auto p-5">
-        <h2 className="mb-3 font-semibold">Promociones</h2>
         {promocionesQuery.isPending ? (
           <p className="text-sm text-slate-500">Cargando promociones...</p>
         ) : promociones.length === 0 ? (
@@ -386,10 +410,13 @@ export default function ConfiguracionPage() {
           </table>
         )}
       </section>
+      ) : null}
 
+      {tab === 'pasos' ? (
       <section className="bo-card overflow-x-auto p-5">
-        <h2 className="mb-3 font-semibold">Catálogo de pasos</h2>
-        {pasos.length === 0 ? (
+        {pasosQuery.isPending ? (
+          <p className="text-sm text-slate-500">Cargando pasos...</p>
+        ) : pasos.length === 0 ? (
           <p className="text-sm text-slate-500">Aún no hay pasos en el catálogo.</p>
         ) : (
           <table className="table">
@@ -444,12 +471,13 @@ export default function ConfiguracionPage() {
           </table>
         )}
       </section>
+      ) : null}
 
-      {flujosQuery.isPending ? <p>Cargando flujos...</p> : null}
-
+      {tab === 'flujos' ? (
       <section className="bo-card overflow-x-auto p-5">
-        <h2 className="mb-3 font-semibold">Flujos</h2>
-        {flujos.length === 0 ? (
+        {flujosQuery.isPending ? (
+          <p className="text-sm text-slate-500">Cargando flujos...</p>
+        ) : flujos.length === 0 ? (
           <p className="text-sm text-slate-500">Aún no hay flujos.</p>
         ) : (
           <table className="table">
@@ -513,6 +541,7 @@ export default function ConfiguracionPage() {
           </table>
         )}
       </section>
+      ) : null}
 
       {confirm ? (
         <ConfirmModal

@@ -9,6 +9,7 @@ import {
   celularCliente,
   documentoCliente,
   flujosPorTipo,
+  formatDireccion,
   formatFecha,
   nombreCliente,
   numeroVenta,
@@ -175,11 +176,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
             ) : null}
             <div className="col-span-2">
               <dt className="text-slate-400">Dirección</dt>
-              <dd>
-                {direccion
-                  ? `${direccion.tipo} ${direccion.direccion} ${direccion.numero}, ${direccion.distrito}`
-                  : 'Sin dirección'}
-              </dd>
+              <dd>{direccion ? formatDireccion(direccion) : 'Sin dirección'}</dd>
             </div>
           </dl>
         </section>

@@ -37,6 +37,7 @@ PERMISSION_CATALOG = [
             ("api.view_direccion", "Ver direcciones"),
             ("api.add_direccion", "Crear direcciones"),
             ("api.change_direccion", "Editar direcciones"),
+            ("api.delete_direccion", "Eliminar direcciones"),
         ],
     },
     {

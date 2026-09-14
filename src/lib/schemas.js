@@ -76,6 +76,18 @@ export const promocionFormSchema = z.object({
   descripcion: z.string(),
 })
 
+export const direccionFormSchema = z.object({
+  cliente: requiredText('Selecciona un cliente'),
+  tipo: requiredText(),
+  direccion: requiredText(),
+  numero: requiredText(),
+  distrito: requiredText(),
+  urbanizacion: z.string(),
+  manzana: z.string(),
+  lote: z.string(),
+  referencia: z.string(),
+})
+
 export const DOCUMENT_LENGTH = { DNI: 8, CE: 9 }
 
 export function documentNumberMessage(tipo) {

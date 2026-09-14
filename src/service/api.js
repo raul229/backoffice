@@ -294,6 +294,19 @@ export function createDireccion(payload) {
   });
 }
 
+export function updateDireccion(id, payload) {
+  return request(`/direcciones/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteDireccion(id) {
+  return request(`/direcciones/${id}/`, {
+    method: "DELETE",
+  });
+}
+
 export function createVenta(payload) {
   return request("/ventas/", {
     method: "POST",

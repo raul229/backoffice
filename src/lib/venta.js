@@ -28,6 +28,11 @@ export function documentoCliente(cliente) {
   return cliente.persona?.numero_documento ?? ''
 }
 
+export function formatDireccion(direccion) {
+  if (!direccion) return 'Sin dirección'
+  return `${direccion.tipo} ${direccion.direccion} ${direccion.numero}, ${direccion.distrito}`
+}
+
 export function numeroVenta(venta) {
   const year = venta.fecha ? new Date(venta.fecha).getFullYear() : new Date().getFullYear()
   return `V-${year}-${String(venta.id).padStart(4, '0')}`
