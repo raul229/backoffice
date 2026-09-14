@@ -151,11 +151,19 @@ class ProductoSerializer(serializers.ModelSerializer):
         model = Producto
         fields = ["id", "nombre", "velocidad", "precio"]
 
+    def validate(self, attrs):
+        uppercase_fields(attrs, ["nombre"])
+        return attrs
+
 
 class PromocionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Promocion
         fields = ["id", "nombre", "descripcion"]
+
+    def validate(self, attrs):
+        uppercase_fields(attrs, ["nombre", "descripcion"])
+        return attrs
 
 
 class PasoSerializer(serializers.ModelSerializer):

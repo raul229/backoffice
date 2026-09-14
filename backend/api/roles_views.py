@@ -43,7 +43,13 @@ PERMISSION_CATALOG = [
         "group": "Catálogo y flujos",
         "items": [
             ("api.view_producto", "Ver productos"),
+            ("api.add_producto", "Crear productos"),
+            ("api.change_producto", "Editar productos"),
+            ("api.delete_producto", "Eliminar productos"),
             ("api.view_promocion", "Ver promociones"),
+            ("api.add_promocion", "Crear promociones"),
+            ("api.change_promocion", "Editar promociones"),
+            ("api.delete_promocion", "Eliminar promociones"),
             ("api.view_paso", "Ver catálogo de pasos"),
             ("api.add_paso", "Crear pasos"),
             ("api.change_paso", "Editar pasos"),

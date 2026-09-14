@@ -7,7 +7,7 @@ export default function CatalogEmpty({ productos, flujos }) {
     <div className="alert alert-warning mb-4">
       <span>
         Falta configurar {productos.length ? '' : 'productos'} {!productos.length && !flujos.length ? 'y' : ''}{' '}
-        {flujos.length ? '' : 'flujos'} en el backend antes de registrar una venta completa.
+        {flujos.length ? '' : 'flujos'} en Configuración antes de registrar una venta completa.
       </span>
     </div>
   )

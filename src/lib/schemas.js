@@ -63,6 +63,19 @@ export const flujoNombreSchema = z.object({
   nombre: requiredText(),
 })
 
+export const productoFormSchema = z.object({
+  nombre: requiredText(),
+  velocidad: requiredText()
+    .regex(/^\d+$/, 'Solo se permiten números')
+    .refine((value) => Number(value) > 0, 'La velocidad debe ser mayor a 0'),
+  precio: requiredText().regex(/^\d+(?:\.\d{1,2})?$/, 'Usa un precio válido, por ejemplo 99.90'),
+})
+
+export const promocionFormSchema = z.object({
+  nombre: requiredText(),
+  descripcion: z.string(),
+})
+
 export const DOCUMENT_LENGTH = { DNI: 8, CE: 9 }
 
 export function documentNumberMessage(tipo) {

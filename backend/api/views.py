@@ -77,12 +77,12 @@ class DireccionViewSet(AuthenticatedModelViewSet):
 
 
 class ProductoViewSet(AuthenticatedModelViewSet):
-    queryset = Producto.objects.all()
+    queryset = Producto.objects.order_by("nombre")
     serializer_class = ProductoSerializer
 
 
 class PromocionViewSet(AuthenticatedModelViewSet):
-    queryset = Promocion.objects.all()
+    queryset = Promocion.objects.order_by("nombre")
     serializer_class = PromocionSerializer
 
 

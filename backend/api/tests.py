@@ -240,6 +240,43 @@ class ApiEndpointsTests(APITestCase):
         todas = self.client.get("/api/ventas/")
         self.assertEqual(len(todas.data), 1)
 
+    def test_create_and_update_producto_and_promocion(self):
+        created = self.client.post(
+            "/api/productos/",
+            {"nombre": "fibra 300", "velocidad": 300, "precio": "89.90"},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(created.data["nombre"], "FIBRA 300")
+
+        updated = self.client.patch(
+            f"/api/productos/{created.data['id']}/",
+            {"precio": "95.00"},
+            format="json",
+        )
+        self.assertEqual(updated.status_code, status.HTTP_200_OK)
+        self.assertEqual(updated.data["precio"], "95.00")
+
+        promo = self.client.post(
+            "/api/promociones/",
+            {"nombre": "instalacion gratis", "descripcion": "sin costo el primer mes"},
+            format="json",
+        )
+        self.assertEqual(promo.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(promo.data["nombre"], "INSTALACION GRATIS")
+        self.assertEqual(promo.data["descripcion"], "SIN COSTO EL PRIMER MES")
+
+        renamed = self.client.patch(
+            f"/api/promociones/{promo.data['id']}/",
+            {"nombre": "promo 2 meses"},
+            format="json",
+        )
+        self.assertEqual(renamed.status_code, status.HTTP_200_OK)
+        self.assertEqual(renamed.data["nombre"], "PROMO 2 MESES")
+
+        deleted = self.client.delete(f"/api/promociones/{promo.data['id']}/")
+        self.assertEqual(deleted.status_code, status.HTTP_204_NO_CONTENT)
+
 
 class AuthAndPermissionsTests(APITestCase):
     def test_login_and_me(self):

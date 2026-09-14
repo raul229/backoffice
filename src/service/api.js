@@ -160,6 +160,46 @@ export function getPromociones() {
   return request("/promociones/");
 }
 
+export function createProducto(payload) {
+  return request("/productos/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateProducto(id, payload) {
+  return request(`/productos/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteProducto(id) {
+  return request(`/productos/${id}/`, {
+    method: "DELETE",
+  });
+}
+
+export function createPromocion(payload) {
+  return request("/promociones/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updatePromocion(id, payload) {
+  return request(`/promociones/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deletePromocion(id) {
+  return request(`/promociones/${id}/`, {
+    method: "DELETE",
+  });
+}
+
 export function getFlujos() {
   return request("/flujos/");
 }

@@ -3,18 +3,26 @@ import { useForm } from '@tanstack/react-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Field from '../components/Field.jsx'
 import { SelectField, TextAreaField, TextField } from '../components/FormFields.jsx'
-import { createFlujoSchema, flujoNombreSchema, pasoFormSchema, withSchema } from '../lib/schemas.js'
+import { createFlujoSchema, flujoNombreSchema, pasoFormSchema, productoFormSchema, promocionFormSchema, withSchema } from '../lib/schemas.js'
 import {
   createFlujo,
   createFlujoPaso,
   createPaso,
+  createProducto,
+  createPromocion,
   deleteFlujo,
   deleteFlujoPaso,
   deletePaso,
+  deleteProducto,
+  deletePromocion,
   getFlujos,
   getPasos,
+  getProductos,
+  getPromociones,
   updateFlujo,
   updatePaso,
+  updateProducto,
+  updatePromocion,
 } from '../service/api.js'
 import { tipoClienteLabel } from '../lib/venta.js'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -31,15 +39,25 @@ export default function ConfiguracionPage() {
 
   const flujosQuery = useQuery({ queryKey: ['flujos'], queryFn: getFlujos })
   const pasosQuery = useQuery({ queryKey: ['pasos'], queryFn: getPasos })
+  const productosQuery = useQuery({ queryKey: ['productos'], queryFn: getProductos })
+  const promocionesQuery = useQuery({ queryKey: ['promociones'], queryFn: getPromociones })
   const flujos = flujosQuery.data ?? []
   const pasos = pasosQuery.data ?? []
+  const productos = productosQuery.data ?? []
+  const promociones = promocionesQuery.data ?? []
   const canChange = can('api.change_flujo') || can('api.change_paso')
+  const canChangeProducto = can('api.change_producto')
+  const canChangePromocion = can('api.change_promocion')
   const canDeleteFlujo = can('api.delete_flujo')
   const canDeletePaso = can('api.delete_paso')
+  const canDeleteProducto = can('api.delete_producto')
+  const canDeletePromocion = can('api.delete_promocion')
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['flujos'] })
     queryClient.invalidateQueries({ queryKey: ['pasos'] })
+    queryClient.invalidateQueries({ queryKey: ['productos'] })
+    queryClient.invalidateQueries({ queryKey: ['promociones'] })
     queryClient.invalidateQueries({ queryKey: ['tabla-ventas'] })
   }
 
@@ -130,8 +148,66 @@ export default function ConfiguracionPage() {
     onError: (err) => setError(err.message),
   })
 
+  const createProductoMutation = useMutation({
+    mutationFn: createProducto,
+    onSuccess: () => {
+      notify('Producto creado.')
+      close()
+    },
+    onError: (err) => setError(err.message),
+  })
+
+  const updateProductoMutation = useMutation({
+    mutationFn: ({ id, payload }) => updateProducto(id, payload),
+    onSuccess: () => {
+      notify('Producto actualizado.')
+      close()
+    },
+    onError: (err) => setError(err.message),
+  })
+
+  const deleteProductoMutation = useMutation({
+    mutationFn: deleteProducto,
+    onSuccess: () => {
+      notify('Producto eliminado.')
+      close()
+      setConfirm(null)
+    },
+    onError: (err) => setError(err.message),
+  })
+
+  const createPromocionMutation = useMutation({
+    mutationFn: createPromocion,
+    onSuccess: () => {
+      notify('Promoción creada.')
+      close()
+    },
+    onError: (err) => setError(err.message),
+  })
+
+  const updatePromocionMutation = useMutation({
+    mutationFn: ({ id, payload }) => updatePromocion(id, payload),
+    onSuccess: () => {
+      notify('Promoción actualizada.')
+      close()
+    },
+    onError: (err) => setError(err.message),
+  })
+
+  const deletePromocionMutation = useMutation({
+    mutationFn: deletePromocion,
+    onSuccess: () => {
+      notify('Promoción eliminada.')
+      close()
+      setConfirm(null)
+    },
+    onError: (err) => setError(err.message),
+  })
+
   const selectedPaso = pasos.find((paso) => paso.id === modal?.id)
   const selectedFlujo = flujos.find((flujo) => flujo.id === modal?.id)
+  const selectedProducto = productos.find((producto) => producto.id === modal?.id)
+  const selectedPromocion = promociones.find((promo) => promo.id === modal?.id)
 
   return (
     <div className="space-y-4">
@@ -139,10 +215,28 @@ export default function ConfiguracionPage() {
         <div>
           <h1 className="text-2xl font-bold">Configuración</h1>
           <p className="text-sm text-slate-500">
-            Los flujos y pasos se consultan y editan en un modal para evitar cambios accidentales.
+            Productos, promociones, flujos y pasos se editan en un modal para evitar cambios accidentales.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {can('api.add_producto') ? (
+            <button
+              type="button"
+              className="btn btn-sm rounded-full border-none bg-blue-600 text-white"
+              onClick={() => setModal({ type: 'create-producto' })}
+            >
+              Nuevo producto
+            </button>
+          ) : null}
+          {can('api.add_promocion') ? (
+            <button
+              type="button"
+              className="btn btn-sm rounded-full border-none bg-blue-600 text-white"
+              onClick={() => setModal({ type: 'create-promocion' })}
+            >
+              Nueva promoción
+            </button>
+          ) : null}
           <button
             type="button"
             className="btn btn-sm rounded-full border-none bg-blue-600 text-white"
@@ -170,6 +264,128 @@ export default function ConfiguracionPage() {
           <span>{ok}</span>
         </div>
       ) : null}
+
+      <section className="bo-card overflow-x-auto p-5">
+        <h2 className="mb-3 font-semibold">Productos</h2>
+        {productosQuery.isPending ? (
+          <p className="text-sm text-slate-500">Cargando productos...</p>
+        ) : productos.length === 0 ? (
+          <p className="text-sm text-slate-500">Aún no hay productos en el catálogo.</p>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr className="text-slate-400">
+                <th>Producto</th>
+                <th>Velocidad</th>
+                <th>Precio</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {productos.map((producto) => (
+                <tr key={producto.id}>
+                  <td className="font-medium">{producto.nombre}</td>
+                  <td>{producto.velocidad} Mbps</td>
+                  <td>S/ {producto.precio}</td>
+                  <td className="text-right">
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-xs"
+                      onClick={() => setModal({ type: 'producto', id: producto.id, editing: false })}
+                    >
+                      Ver
+                    </button>
+                    {canChangeProducto ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-xs"
+                        onClick={() => setModal({ type: 'producto', id: producto.id, editing: true })}
+                      >
+                        Editar
+                      </button>
+                    ) : null}
+                    {canDeleteProducto ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-xs text-rose-600"
+                        onClick={() =>
+                          setConfirm({
+                            title: 'Eliminar producto',
+                            message: `¿Eliminar el producto “${producto.nombre}”? Si una venta lo usa, no se podrá borrar.`,
+                            run: () => deleteProductoMutation.mutate(producto.id),
+                          })
+                        }
+                      >
+                        Eliminar
+                      </button>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section className="bo-card overflow-x-auto p-5">
+        <h2 className="mb-3 font-semibold">Promociones</h2>
+        {promocionesQuery.isPending ? (
+          <p className="text-sm text-slate-500">Cargando promociones...</p>
+        ) : promociones.length === 0 ? (
+          <p className="text-sm text-slate-500">Aún no hay promociones en el catálogo.</p>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr className="text-slate-400">
+                <th>Promoción</th>
+                <th>Descripción</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {promociones.map((promo) => (
+                <tr key={promo.id}>
+                  <td className="font-medium">{promo.nombre}</td>
+                  <td className="max-w-md truncate text-sm text-slate-500">{promo.descripcion}</td>
+                  <td className="text-right">
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-xs"
+                      onClick={() => setModal({ type: 'promocion', id: promo.id, editing: false })}
+                    >
+                      Ver
+                    </button>
+                    {canChangePromocion ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-xs"
+                        onClick={() => setModal({ type: 'promocion', id: promo.id, editing: true })}
+                      >
+                        Editar
+                      </button>
+                    ) : null}
+                    {canDeletePromocion ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-xs text-rose-600"
+                        onClick={() =>
+                          setConfirm({
+                            title: 'Eliminar promoción',
+                            message: `¿Eliminar la promoción “${promo.nombre}”? Esta acción no se puede deshacer.`,
+                            run: () => deletePromocionMutation.mutate(promo.id),
+                          })
+                        }
+                      >
+                        Eliminar
+                      </button>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
 
       <section className="bo-card overflow-x-auto p-5">
         <h2 className="mb-3 font-semibold">Catálogo de pasos</h2>
@@ -303,9 +519,64 @@ export default function ConfiguracionPage() {
           open
           title={confirm.title}
           message={confirm.message}
-          pending={deletePasoMutation.isPending || deleteFlujoMutation.isPending}
+          pending={
+            deletePasoMutation.isPending ||
+            deleteFlujoMutation.isPending ||
+            deleteProductoMutation.isPending ||
+            deletePromocionMutation.isPending
+          }
           onCancel={() => setConfirm(null)}
           onConfirm={() => confirm.run()}
+        />
+      ) : null}
+
+      {modal?.type === 'create-producto' ? (
+        <ProductoFormModal
+          onClose={close}
+          onSave={(form) => createProductoMutation.mutate(form)}
+          pending={createProductoMutation.isPending}
+        />
+      ) : null}
+
+      {modal?.type === 'producto' && selectedProducto ? (
+        <ProductoFormModal
+          editing={modal.editing}
+          onClose={close}
+          onDelete={() =>
+            setConfirm({
+              title: 'Eliminar producto',
+              message: `¿Eliminar el producto “${selectedProducto.nombre}”? Si una venta lo usa, no se podrá borrar.`,
+              run: () => deleteProductoMutation.mutate(selectedProducto.id),
+            })
+          }
+          onSave={(form) => updateProductoMutation.mutate({ id: selectedProducto.id, payload: form })}
+          pending={updateProductoMutation.isPending}
+          producto={selectedProducto}
+        />
+      ) : null}
+
+      {modal?.type === 'create-promocion' ? (
+        <PromocionFormModal
+          onClose={close}
+          onSave={(form) => createPromocionMutation.mutate(form)}
+          pending={createPromocionMutation.isPending}
+        />
+      ) : null}
+
+      {modal?.type === 'promocion' && selectedPromocion ? (
+        <PromocionFormModal
+          editing={modal.editing}
+          onClose={close}
+          onDelete={() =>
+            setConfirm({
+              title: 'Eliminar promoción',
+              message: `¿Eliminar la promoción “${selectedPromocion.nombre}”? Esta acción no se puede deshacer.`,
+              run: () => deletePromocionMutation.mutate(selectedPromocion.id),
+            })
+          }
+          onSave={(form) => updatePromocionMutation.mutate({ id: selectedPromocion.id, payload: form })}
+          pending={updatePromocionMutation.isPending}
+          promocion={selectedPromocion}
         />
       ) : null}
 
@@ -379,6 +650,175 @@ export default function ConfiguracionPage() {
         />
       ) : null}
     </div>
+  )
+}
+
+function ProductoFormModal({ producto, editing = true, onClose, onSave, onDelete, pending }) {
+  const isCreate = !producto
+  const form = useForm({
+    defaultValues: {
+      nombre: producto?.nombre ?? '',
+      velocidad: producto ? String(producto.velocidad) : '',
+      precio: producto ? String(producto.precio) : '',
+    },
+    validators: withSchema(productoFormSchema),
+    onSubmit: ({ value }) =>
+      onSave({
+        nombre: value.nombre.trim(),
+        velocidad: Number(value.velocidad),
+        precio: value.precio.trim(),
+      }),
+  })
+
+  useEffect(() => {
+    form.reset({
+      nombre: producto?.nombre ?? '',
+      velocidad: producto ? String(producto.velocidad) : '',
+      precio: producto ? String(producto.precio) : '',
+    })
+  }, [form, producto])
+
+  return (
+    <Modal
+      open
+      title={isCreate ? 'Nuevo producto' : editing ? 'Editar producto' : `Producto: ${producto.nombre}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Cerrar
+          </button>
+          {editing && onDelete ? (
+            <button type="button" className="btn btn-ghost text-rose-600" onClick={onDelete}>
+              Eliminar
+            </button>
+          ) : null}
+          {editing ? (
+            <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
+              {([canSubmit, isSubmitting]) => (
+                <button
+                  type="button"
+                  className="btn border-none bg-blue-600 text-white"
+                  disabled={!canSubmit || pending || isSubmitting}
+                  onClick={() => form.handleSubmit()}
+                >
+                  {isCreate ? 'Crear' : 'Guardar'}
+                </button>
+              )}
+            </form.Subscribe>
+          ) : null}
+        </>
+      }
+    >
+      <div className="grid gap-3">
+        {editing ? (
+          <Field form={form} name="nombre">
+            {(field) => <TextField field={field} label="Nombre" normalize="upper" />}
+          </Field>
+        ) : (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">Nombre</span>
+            <p className="font-medium">{producto.nombre}</p>
+          </label>
+        )}
+        {editing ? (
+          <Field form={form} name="velocidad">
+            {(field) => <TextField field={field} inputMode="numeric" label="Velocidad (Mbps)" />}
+          </Field>
+        ) : (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">Velocidad</span>
+            <p>{producto.velocidad} Mbps</p>
+          </label>
+        )}
+        {editing ? (
+          <Field form={form} name="precio">
+            {(field) => <TextField field={field} inputMode="decimal" label="Precio (S/)" />}
+          </Field>
+        ) : (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">Precio</span>
+            <p>S/ {producto.precio}</p>
+          </label>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+function PromocionFormModal({ promocion, editing = true, onClose, onSave, onDelete, pending }) {
+  const isCreate = !promocion
+  const form = useForm({
+    defaultValues: {
+      nombre: promocion?.nombre ?? '',
+      descripcion: promocion?.descripcion ?? '',
+    },
+    validators: withSchema(promocionFormSchema),
+    onSubmit: ({ value }) => onSave({ nombre: value.nombre.trim(), descripcion: value.descripcion.trim() }),
+  })
+
+  useEffect(() => {
+    form.reset({
+      nombre: promocion?.nombre ?? '',
+      descripcion: promocion?.descripcion ?? '',
+    })
+  }, [form, promocion])
+
+  return (
+    <Modal
+      open
+      title={isCreate ? 'Nueva promoción' : editing ? 'Editar promoción' : `Promoción: ${promocion.nombre}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Cerrar
+          </button>
+          {editing && onDelete ? (
+            <button type="button" className="btn btn-ghost text-rose-600" onClick={onDelete}>
+              Eliminar
+            </button>
+          ) : null}
+          {editing ? (
+            <form.Subscribe selector={(state) => [state.values.nombre, state.isSubmitting]}>
+              {([nombre, isSubmitting]) => (
+                <button
+                  type="button"
+                  className="btn border-none bg-blue-600 text-white"
+                  disabled={!nombre.trim() || pending || isSubmitting}
+                  onClick={() => form.handleSubmit()}
+                >
+                  {isCreate ? 'Crear' : 'Guardar'}
+                </button>
+              )}
+            </form.Subscribe>
+          ) : null}
+        </>
+      }
+    >
+      <div className="grid gap-3">
+        {editing ? (
+          <Field form={form} name="nombre">
+            {(field) => <TextField field={field} label="Nombre" normalize="upper" />}
+          </Field>
+        ) : (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">Nombre</span>
+            <p className="font-medium">{promocion.nombre}</p>
+          </label>
+        )}
+        {editing ? (
+          <Field form={form} name="descripcion">
+            {(field) => <TextAreaField field={field} label="Descripción" normalize="upper" />}
+          </Field>
+        ) : (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">Descripción</span>
+            <p>{promocion.descripcion || '—'}</p>
+          </label>
+        )}
+      </div>
+    </Modal>
   )
 }
 

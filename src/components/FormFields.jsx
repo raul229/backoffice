@@ -112,7 +112,7 @@ export function CheckboxField({ field, label, disabled = false, className = '' }
   )
 }
 
-export function TextAreaField({ field, label, rows = 3, className = '' }) {
+export function TextAreaField({ field, label, rows = 3, className = '', normalize }) {
   const invalid = field.state.meta.isTouched && !field.state.meta.isValid
   return (
     <label className={`text-sm ${className}`}>
@@ -121,7 +121,10 @@ export function TextAreaField({ field, label, rows = 3, className = '' }) {
         className={`textarea textarea-bordered w-full ${invalid ? 'textarea-error' : ''}`}
         name={field.name}
         onBlur={field.handleBlur}
-        onChange={(event) => field.handleChange(event.target.value)}
+        onChange={(event) => {
+          const next = normalize === 'upper' ? normalizeUpper(event.target.value) : event.target.value
+          field.handleChange(next)
+        }}
         rows={rows}
         value={field.state.value ?? ''}
       />
