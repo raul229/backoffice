@@ -30,7 +30,15 @@ export function documentoCliente(cliente) {
 
 export function formatDireccion(direccion) {
   if (!direccion) return 'Sin dirección'
-  return `${direccion.tipo} ${direccion.direccion} ${direccion.numero}, ${direccion.distrito}`
+  const extras = [
+    direccion.urbanizacion && `URB. ${direccion.urbanizacion}`,
+    direccion.manzana && `MZ. ${direccion.manzana}`,
+    direccion.lote && `LT. ${direccion.lote}`,
+    direccion.interior && `INT. ${direccion.interior}`,
+    direccion.referencia,
+  ].filter(Boolean)
+  const base = `${direccion.tipo} ${direccion.direccion} ${direccion.numero}, ${direccion.distrito}`
+  return extras.length ? `${base} · ${extras.join(' · ')}` : base
 }
 
 export function numeroVenta(venta) {

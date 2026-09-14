@@ -89,6 +89,72 @@ class ApiEndpointsTests(APITestCase):
         self.assertEqual(len(response.data["pasos"]), 2)
         self.assertEqual(response.data["promociones"], [promocion.id])
 
+    def test_venta_keeps_its_own_direccion(self):
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        producto = Producto.objects.create(nombre="Fibra 100", velocidad=100, precio=70)
+        flujo = Flujo.objects.create(nombre="Instalacion", tipo_cliente=TipoCliente.PERSONA)
+        paso = Paso.objects.create(nombre="Validacion", descripcion="Validar")
+        FlujoPaso.objects.create(flujo=flujo, paso=paso, orden=1)
+        primera = Direccion.objects.create(
+            cliente=cliente,
+            tipo="JIRON",
+            direccion="PUNO",
+            numero="654",
+            distrito="HUANCAYO",
+        )
+        segunda = Direccion.objects.create(
+            cliente=cliente,
+            tipo="CALLE",
+            direccion="LUIGGI BARSATO",
+            numero="167",
+            distrito="SAN BORJA",
+        )
+
+        venta_uno = self.client.post(
+            "/api/ventas/",
+            {
+                "cliente": cliente.id,
+                "direccion": primera.id,
+                "producto": producto.id,
+                "flujo": flujo.id,
+            },
+            format="json",
+        )
+        venta_dos = self.client.post(
+            "/api/ventas/",
+            {
+                "cliente": cliente.id,
+                "direccion": segunda.id,
+                "producto": producto.id,
+                "flujo": flujo.id,
+            },
+            format="json",
+        )
+        self.assertEqual(venta_uno.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(venta_dos.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(venta_uno.data["direccion_detalle"]["distrito"], "HUANCAYO")
+        self.assertEqual(venta_dos.data["direccion_detalle"]["distrito"], "SAN BORJA")
+
+        otro = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        ajena = Direccion.objects.create(
+            cliente=otro,
+            tipo="CALLE",
+            direccion="OTRA",
+            numero="1",
+            distrito="LIMA",
+        )
+        rejected = self.client.post(
+            "/api/ventas/",
+            {
+                "cliente": cliente.id,
+                "direccion": ajena.id,
+                "producto": producto.id,
+                "flujo": flujo.id,
+            },
+            format="json",
+        )
+        self.assertEqual(rejected.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_create_empresa_creates_cliente_juridico(self):
         persona = self.client.post(
             "/api/personas/",
@@ -733,6 +799,31 @@ class LookupRucTests(APITestCase):
 
         deleted = self.client.delete(f"/api/direcciones/{direccion.data['id']}/")
         self.assertEqual(deleted.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_duplicate_direccion_for_cliente_is_reused(self):
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        payload = {
+            "cliente": cliente.id,
+            "tipo": "CALLE",
+            "direccion": "luiggi barsato",
+            "numero": "167",
+            "distrito": "san borja",
+        }
+        first = self.client.post("/api/direcciones/", payload, format="json")
+        second = self.client.post("/api/direcciones/", payload, format="json")
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(second.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(first.data["id"], second.data["id"])
+        self.assertEqual(Direccion.objects.filter(cliente=cliente).count(), 1)
+
+        other = self.client.post(
+            "/api/direcciones/",
+            {**payload, "manzana": "A", "lote": "12", "interior": "2"},
+            format="json",
+        )
+        self.assertEqual(other.status_code, status.HTTP_201_CREATED)
+        self.assertNotEqual(other.data["id"], first.data["id"])
+        self.assertEqual(Direccion.objects.filter(cliente=cliente).count(), 2)
 
     def test_lookup_direccion_returns_saved_and_parsed(self):
         cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)

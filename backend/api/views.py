@@ -148,6 +148,7 @@ class VentaViewSet(AuthenticatedModelViewSet):
             "producto",
             "flujo",
             "creado_por",
+            "direccion",
         )
         .prefetch_related("promociones", "ventapaso_set__flujo_paso__paso")
         .all()

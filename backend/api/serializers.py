@@ -1,4 +1,4 @@
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from rest_framework import serializers
 
 from .normalize import uppercase_fields
@@ -46,15 +46,36 @@ class DireccionSerializer(serializers.ModelSerializer):
             "urbanizacion",
             "manzana",
             "lote",
+            "interior",
             "referencia",
         ]
+        validators = []
 
     def validate(self, attrs):
         uppercase_fields(
             attrs,
-            ["direccion", "numero", "distrito", "urbanizacion", "manzana", "lote", "referencia"],
+            ["direccion", "numero", "distrito", "urbanizacion", "manzana", "lote", "interior", "referencia"],
         )
         return attrs
+
+    def create(self, validated_data):
+        lookup = {
+            "cliente": validated_data["cliente"],
+            "tipo": validated_data.get("tipo") or "",
+            "direccion": validated_data.get("direccion") or "",
+            "numero": validated_data.get("numero") or "",
+            "distrito": validated_data.get("distrito") or "",
+            "urbanizacion": validated_data.get("urbanizacion") or "",
+            "manzana": validated_data.get("manzana") or "",
+            "lote": validated_data.get("lote") or "",
+            "interior": validated_data.get("interior") or "",
+            "referencia": validated_data.get("referencia") or "",
+        }
+        try:
+            direccion, _created = Direccion.objects.get_or_create(**lookup)
+        except IntegrityError:
+            direccion = Direccion.objects.get(**lookup)
+        return direccion
 
 
 class PersonaSerializer(serializers.ModelSerializer):
@@ -211,6 +232,7 @@ class VentaPasoSerializer(serializers.ModelSerializer):
 
 class VentaSerializer(serializers.ModelSerializer):
     cliente_detalle = ClienteSerializer(source="cliente", read_only=True)
+    direccion_detalle = DireccionSerializer(source="direccion", read_only=True)
     producto_detalle = ProductoSerializer(source="producto", read_only=True)
     flujo_detalle = FlujoSerializer(source="flujo", read_only=True)
     promociones = serializers.PrimaryKeyRelatedField(
@@ -228,6 +250,8 @@ class VentaSerializer(serializers.ModelSerializer):
             "id",
             "cliente",
             "cliente_detalle",
+            "direccion",
+            "direccion_detalle",
             "fecha",
             "producto",
             "producto_detalle",
@@ -244,12 +268,17 @@ class VentaSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         cliente = attrs.get("cliente") or getattr(self.instance, "cliente", None)
         flujo = attrs.get("flujo") or getattr(self.instance, "flujo", None)
+        direccion = attrs.get("direccion") or getattr(self.instance, "direccion", None)
         if cliente and flujo and flujo.tipo_cliente != cliente.tipo:
             raise serializers.ValidationError(
                 {
                     "flujo": "El flujo no corresponde al tipo de cliente. "
                     "Usa un flujo de persona natural (RUC 10) o de empresa (RUC 20)."
                 }
+            )
+        if direccion and cliente and direccion.cliente_id != cliente.id:
+            raise serializers.ValidationError(
+                {"direccion": "La dirección no pertenece a este cliente."}
             )
         return attrs
 

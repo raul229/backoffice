@@ -65,7 +65,27 @@ class Direccion(models.Model):
     urbanizacion = models.CharField(max_length=100, blank=True)
     manzana = models.CharField(max_length=10, blank=True)
     lote = models.CharField(max_length=10, blank=True)
+    interior = models.CharField(max_length=20, blank=True)
     referencia = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "cliente",
+                    "tipo",
+                    "direccion",
+                    "numero",
+                    "distrito",
+                    "urbanizacion",
+                    "manzana",
+                    "lote",
+                    "interior",
+                    
+                ],
+                name="unique_direccion_cliente",
+            )
+        ]
     
 class Promocion(models.Model):
     nombre = models.CharField(max_length=100)
@@ -148,6 +168,13 @@ class EstadoVenta(models.TextChoices):
 
 class Venta(models.Model):
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT)
+    direccion = models.ForeignKey(
+        Direccion,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="ventas",
+    )
     fecha = models.DateTimeField(auto_now_add=True)
     producto = models.ForeignKey(Producto, on_delete=models.PROTECT)
     flujo=models.ForeignKey(Flujo, on_delete=models.PROTECT)

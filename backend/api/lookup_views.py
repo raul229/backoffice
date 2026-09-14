@@ -31,6 +31,11 @@ def _direccion_form(direccion):
         "direccion": direccion.direccion,
         "numero": direccion.numero,
         "distrito": direccion.distrito,
+        "urbanizacion": direccion.urbanizacion,
+        "manzana": direccion.manzana,
+        "lote": direccion.lote,
+        "interior": direccion.interior,
+        "referencia": direccion.referencia,
     }
 
 
@@ -158,7 +163,17 @@ def lookup_direccion(request):
     seen = set()
     items = []
     for row in rows.order_by("-id")[:30]:
-        key = (row.tipo, row.direccion, row.numero, row.distrito)
+        key = (
+            row.tipo,
+            row.direccion,
+            row.numero,
+            row.distrito,
+            row.urbanizacion,
+            row.manzana,
+            row.lote,
+            row.interior,
+            row.referencia,
+        )
         if key in seen:
             continue
         seen.add(key)
@@ -168,6 +183,11 @@ def lookup_direccion(request):
                 "direccion": normalize_upper(row.direccion),
                 "numero": normalize_upper(row.numero),
                 "distrito": normalize_upper(row.distrito),
+                "urbanizacion": normalize_upper(row.urbanizacion),
+                "manzana": normalize_upper(row.manzana),
+                "lote": normalize_upper(row.lote),
+                "interior": normalize_upper(row.interior),
+                "referencia": normalize_upper(row.referencia),
             }
         )
         if len(items) >= 8:

@@ -80,7 +80,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   }
 
   const cliente = venta.cliente_detalle
-  const direccion = cliente?.direcciones?.[0]
+  const direccion = venta.direccion_detalle
   const representante = cliente?.empresa?.representante_legal_detalle
   const pasos = [...(venta.pasos ?? [])].sort(
     (a, b) => (a.flujo_paso_detalle?.orden ?? 0) - (b.flujo_paso_detalle?.orden ?? 0),

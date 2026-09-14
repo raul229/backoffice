@@ -3,7 +3,7 @@ import { useForm } from '@tanstack/react-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import CatalogEmpty from '../components/CatalogEmpty.jsx'
 import Field from '../components/Field.jsx'
-import { SelectField, TextField } from '../components/FormFields.jsx'
+import { SelectField, TextAreaField, TextField } from '../components/FormFields.jsx'
 import Modal from '../components/Modal.jsx'
 import {
   createDireccion,
@@ -19,7 +19,7 @@ import {
 } from '../service/api.js'
 import { parseDireccion } from '../lib/address.js'
 import { DOCUMENT_LENGTH, digitCode, nuevaVentaClienteSchema, nuevaVentaSchema, requiredText, validateDocumentNumber } from '../lib/schemas.js'
-import { flujosPorTipo } from '../lib/venta.js'
+import { flujosPorTipo, formatDireccion } from '../lib/venta.js'
 
 const defaultValues = {
   tipo_cliente: 'PERSONA',
@@ -37,6 +37,11 @@ const defaultValues = {
   direccion: '',
   numero: '',
   distrito: '',
+  urbanizacion: '',
+  manzana: '',
+  lote: '',
+  interior: '',
+  referencia: '',
   producto: '',
   flujo: '',
   promociones: [],
@@ -63,6 +68,11 @@ function direccionPayload(value, clienteId) {
     direccion: value.direccion,
     numero: value.numero,
     distrito: value.distrito,
+    urbanizacion: value.urbanizacion,
+    manzana: value.manzana,
+    lote: value.lote,
+    interior: value.interior,
+    referencia: value.referencia,
   }
 }
 
@@ -91,6 +101,11 @@ const LOOKUP_FIELDS = [
   'direccion',
   'numero',
   'distrito',
+  'urbanizacion',
+  'manzana',
+  'lote',
+  'interior',
+  'referencia',
   'producto',
   'flujo',
   'promociones',
@@ -106,8 +121,8 @@ function cambiarTipoCliente(form, tipo, { lastRucLookup, setLookupStatus, setRep
 }
 
 function applyDireccion(form, data) {
-  for (const name of ['tipo_direccion', 'direccion', 'numero', 'distrito']) {
-    if (data[name]) form.setFieldValue(name, data[name])
+  for (const name of ['tipo_direccion', 'direccion', 'numero', 'distrito', 'urbanizacion', 'manzana', 'lote', 'interior', 'referencia']) {
+    if (data[name] !== undefined) form.setFieldValue(name, data[name] ?? '')
   }
 }
 
@@ -155,9 +170,10 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
           clienteId = persona.cliente
         }
       }
-      await createDireccion(direccionPayload(value, clienteId))
+      const direccion = await createDireccion(direccionPayload(value, clienteId))
       return createVenta({
         cliente: clienteId,
+        direccion: direccion.id,
         producto: Number(value.producto),
         flujo: Number(value.flujo),
         promociones: value.promociones.map(Number),
@@ -518,7 +534,7 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                     {direccionSugerencias.length > 0 ? (
                       <ul className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
                         {direccionSugerencias.map((item) => (
-                          <li key={`${item.tipo_direccion}-${item.direccion}-${item.numero}-${item.distrito}`}>
+                          <li key={`${item.tipo_direccion}-${item.direccion}-${item.numero}-${item.distrito}-${item.manzana}-${item.lote}-${item.interior}`}>
                             <button
                               type="button"
                               className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
@@ -528,7 +544,7 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                                 setDireccionSugerencias([])
                               }}
                             >
-                              {item.tipo_direccion} {item.direccion} {item.numero}, {item.distrito}
+                              {formatDireccion({ ...item, tipo: item.tipo_direccion })}
                             </button>
                           </li>
                         ))}
@@ -542,6 +558,21 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
               </Field>
               <Field form={form} name="distrito" validators={requiredText()}>
                 {(field) => <TextField field={field} label="Distrito" normalize="upper" />}
+              </Field>
+              <Field form={form} name="urbanizacion">
+                {(field) => <TextField field={field} label="Urbanización" normalize="upper" />}
+              </Field>
+              <Field form={form} name="manzana">
+                {(field) => <TextField field={field} label="Manzana" normalize="upper" />}
+              </Field>
+              <Field form={form} name="lote">
+                {(field) => <TextField field={field} label="Lote" normalize="upper" />}
+              </Field>
+              <Field form={form} name="interior">
+                {(field) => <TextField field={field} label="Interior" normalize="upper" />}
+              </Field>
+              <Field form={form} name="referencia">
+                {(field) => <TextAreaField className="sm:col-span-2" field={field} label="Referencia" normalize="upper" rows={2} />}
               </Field>
             </div>
             )}

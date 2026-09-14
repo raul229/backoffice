@@ -85,6 +85,7 @@ export const direccionFormSchema = z.object({
   urbanizacion: z.string(),
   manzana: z.string(),
   lote: z.string(),
+  interior: z.string(),
   referencia: z.string(),
 })
 
@@ -159,6 +160,11 @@ const nuevaVentaBase = {
   direccion: requiredText(),
   numero: requiredText(),
   distrito: requiredText(),
+  urbanizacion: z.string(),
+  manzana: z.string(),
+  lote: z.string(),
+  interior: z.string(),
+  referencia: z.string(),
 }
 
 export const nuevaVentaSchema = z

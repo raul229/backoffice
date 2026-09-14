@@ -508,6 +508,7 @@ function emptyDireccion(clienteId = '') {
     urbanizacion: '',
     manzana: '',
     lote: '',
+    interior: '',
     referencia: '',
   }
 }
@@ -522,6 +523,7 @@ function direccionValues(direccion) {
     urbanizacion: direccion.urbanizacion ?? '',
     manzana: direccion.manzana ?? '',
     lote: direccion.lote ?? '',
+    interior: direccion.interior ?? '',
     referencia: direccion.referencia ?? '',
   }
 }
@@ -552,6 +554,7 @@ function DireccionFormModal({
         urbanizacion: value.urbanizacion.trim(),
         manzana: value.manzana.trim(),
         lote: value.lote.trim(),
+        interior: value.interior.trim(),
         referencia: value.referencia.trim(),
       }),
   })
@@ -679,6 +682,16 @@ function DireccionFormModal({
           <label className="text-sm">
             <span className="mb-1 block text-slate-500">Lote</span>
             <p>{direccion.lote}</p>
+          </label>
+        ) : null}
+        {editing ? (
+          <Field form={form} name="interior">
+            {(field) => <TextField field={field} label="Interior" normalize="upper" />}
+          </Field>
+        ) : direccion.interior ? (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">Interior</span>
+            <p>{direccion.interior}</p>
           </label>
         ) : null}
         {editing ? (
