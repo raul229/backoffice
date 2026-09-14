@@ -1,8 +1,9 @@
 const API_URL = import.meta.env.VITE_API_URL ?? "/api";
+let csrfFromApi = "";
 
 function csrfToken() {
   const match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
-  return match ? decodeURIComponent(match[1]) : "";
+  return match ? decodeURIComponent(match[1]) : csrfFromApi;
 }
 
 async function request(path, options = {}) {
@@ -62,8 +63,10 @@ async function request(path, options = {}) {
   return response.json();
 }
 
-export function getCsrf() {
-  return request("/auth/csrf/");
+export async function getCsrf() {
+  const response = await request("/auth/csrf/");
+  csrfFromApi = response.csrfToken ?? "";
+  return response;
 }
 
 export function login(username, password) {

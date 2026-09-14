@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: backoffice-api
+    runtime: python
+    plan: free
+    buildCommand: ./build.sh
+    startCommand: uv run gunicorn --chdir backend backend.wsgi:application --bind 0.0.0.0:$PORT
+    healthCheckPath: /api/auth/csrf/
+    envVars:
+      - key: DEBUG
+        value: "False"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: CSRF_TRUSTED_ORIGINS
+        sync: false

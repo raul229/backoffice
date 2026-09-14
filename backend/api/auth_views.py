@@ -1,6 +1,7 @@
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.middleware.csrf import get_token
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -27,7 +28,7 @@ def serialize_user(user):
 @permission_classes([AllowAny])
 @ensure_csrf_cookie
 def csrf(request):
-    return Response({"detail": "ok"})
+    return Response({"csrfToken": get_token(request)})
 
 
 @api_view(["POST"])
