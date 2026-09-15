@@ -1,0 +1,9 @@
+{
+  "routes": [
+    {
+      "src": "^/api/(.*)$",
+      "dest": "${API_ORIGIN}/api/$1",
+      "env": ["API_ORIGIN"]
+    }
+  ]
+}

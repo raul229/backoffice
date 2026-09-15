@@ -16,7 +16,8 @@ export function AuthProvider({ children }) {
         const me = await getMe()
         if (!cancelled) setUser(me)
       } catch {
-        if (!cancelled) setUser(null)
+        // Not signed in yet. Do not clear user: login may have completed
+        // while this first /auth/me request was still in flight.
       } finally {
         if (!cancelled) setReady(true)
       }

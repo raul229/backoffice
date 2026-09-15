@@ -1,4 +1,3 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "/api";
 let csrfFromApi = "";
 
 function csrfToken() {
@@ -16,7 +15,7 @@ async function request(path, options = {}) {
     headers["X-CSRFToken"] = token;
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(`/api${path}`, {
     credentials: "include",
     ...options,
     headers,
