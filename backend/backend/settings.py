@@ -54,9 +54,9 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'backend.middleware.DevCorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    'backend.middleware.DevCorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -161,8 +161,8 @@ LOCAL_ORIGINS = [
     "http://localhost:5175",
     "http://127.0.0.1:5175",
 ]
-CORS_ALLOWED_ORIGINS = LOCAL_ORIGINS + env_list("CORS_ALLOWED_ORIGINS")
-CSRF_TRUSTED_ORIGINS = LOCAL_ORIGINS + env_list("CSRF_TRUSTED_ORIGINS")
+CORS_ALLOWED_ORIGINS = list(dict.fromkeys(LOCAL_ORIGINS + env_list("CORS_ALLOWED_ORIGINS")))
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(LOCAL_ORIGINS + env_list("CSRF_TRUSTED_ORIGINS")))
 
 # Render terminates HTTPS at its proxy. These settings keep session authentication
 # secure when the React frontend and Django API use different HTTPS origins.

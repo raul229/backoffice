@@ -16,6 +16,11 @@ class DevCorsMiddleware:
         if origin in settings.CORS_ALLOWED_ORIGINS:
             response["Access-Control-Allow-Origin"] = origin
             response["Access-Control-Allow-Credentials"] = "true"
+        requested_headers = request.headers.get("Access-Control-Request-Headers")
         response["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-        response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-CSRFToken"
+        response["Access-Control-Allow-Headers"] = (
+            requested_headers or "Content-Type, Authorization, X-CSRFToken"
+        )
+        response["Access-Control-Max-Age"] = "86400"
+        response["Vary"] = "Origin"
         return response
