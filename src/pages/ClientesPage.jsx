@@ -116,7 +116,7 @@ export default function ClientesPage({ search }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Clientes</h1>
+          <h1 className="text-xl font-bold sm:text-2xl">Clientes</h1>
           <p className="text-sm text-slate-500">Clientes persona natural y jurídica, y sus direcciones.</p>
         </div>
         {tab === 'direcciones' && canAddDireccion ? (
@@ -158,8 +158,8 @@ export default function ClientesPage({ search }) {
           <span>{loadError.message}</span>
         </div>
       ) : tab === 'clientes' ? (
-          <section className="bo-card overflow-x-auto p-5">
-            <table className="table">
+          <section className="bo-card bo-table-wrap p-4 sm:p-5">
+            <table className="table table-sm sm:table-md">
               <thead>
                 <tr className="text-slate-400">
                   <th>Cliente</th>
@@ -211,13 +211,13 @@ export default function ClientesPage({ search }) {
             </table>
           </section>
           ) : (
-          <section className="bo-card overflow-x-auto p-5">
+          <section className="bo-card bo-table-wrap p-4 sm:p-5">
             {isPending ? (
               <p className="text-sm text-slate-500">Cargando direcciones...</p>
             ) : direcciones.length === 0 ? (
               <p className="text-sm text-slate-500">Aún no hay direcciones registradas.</p>
             ) : (
-              <table className="table">
+              <table className="table table-sm sm:table-md">
                 <thead>
                   <tr className="text-slate-400">
                     <th>Cliente</th>
@@ -396,7 +396,7 @@ function ClienteModal({
         </>
       }
     >
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+      <dl className="grid grid-cols-1 gap-x-4 gap-y-3 text-sm sm:grid-cols-2">
         <div>
           <dt className="text-slate-400">Tipo</dt>
           <dd>{tipoClienteLabel(cliente.tipo)}</dd>
@@ -462,7 +462,7 @@ function ClienteModal({
         <ul className="mt-2 space-y-2">
           {direcciones.map((direccion) => (
             <li key={direccion.id} className="flex items-start justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm">
-              <span>{formatDireccion(direccion)}</span>
+              <span className="min-w-0 break-words">{formatDireccion(direccion)}</span>
               <span className="shrink-0">
                 <button
                   type="button"

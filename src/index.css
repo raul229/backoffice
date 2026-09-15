@@ -7,11 +7,21 @@ html,
 body,
 #root {
   min-height: 100%;
+  min-height: 100dvh;
 }
 
 body {
   background: #e8eef8;
   color: #1e293b;
+}
+
+.bo-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.bo-table-wrap > table {
+  min-width: 36rem;
 }
 
 .bo-sidebar {

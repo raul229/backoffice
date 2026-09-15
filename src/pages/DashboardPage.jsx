@@ -46,13 +46,13 @@ export default function DashboardPage({
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-blue-600">¡Hola, {user?.first_name || displayName(user)}!</h1>
+          <h1 className="text-xl font-bold text-blue-600 sm:text-2xl">¡Hola, {user?.first_name || displayName(user)}!</h1>
           <p className="text-sm text-slate-500">
             Aquí tienes el resumen de tus ventas y el estado actual del proceso.
           </p>
         </div>
         {can('api.add_venta') ? (
-          <button type="button" className="btn rounded-full border-none bg-blue-600 text-white hover:bg-blue-700" onClick={() => onNavigate({ page: 'venta-nueva' })}>
+          <button type="button" className="btn w-full rounded-full border-none bg-blue-600 text-white hover:bg-blue-700 sm:w-auto" onClick={() => onNavigate({ page: 'venta-nueva' })}>
             Nueva venta
           </button>
         ) : null}
@@ -96,8 +96,8 @@ export default function DashboardPage({
       </section>
 
       <div className="grid items-start gap-4 xl:grid-cols-[1fr_280px]">
-        <section className="bo-card p-5">
-          <div className="mb-3 flex items-center justify-between">
+        <section className="bo-card p-4 sm:p-5">
+          <div className="mb-3 flex items-center justify-between gap-2">
             <h2 className="font-semibold">Ventas recientes</h2>
             <button
               type="button"
@@ -116,7 +116,7 @@ export default function DashboardPage({
           />
         </section>
 
-        <aside className="bo-card p-5">
+        <aside className="bo-card p-4 sm:p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Filtros</h2>
             <button
@@ -168,7 +168,7 @@ export default function DashboardPage({
             </select>
           </label>
 
-          <div className="mb-4 grid grid-cols-2 gap-2 text-sm">
+          <div className="mb-4 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
             <label>
               <span className="mb-1 block text-slate-500">Desde</span>
               <input

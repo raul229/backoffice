@@ -214,7 +214,7 @@ export default function ConfiguracionPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Configuración</h1>
+          <h1 className="text-xl font-bold sm:text-2xl">Configuración</h1>
           <p className="text-sm text-slate-500">
             Productos, promociones, flujos y pasos se editan en un modal para evitar cambios accidentales.
           </p>
@@ -289,13 +289,13 @@ export default function ConfiguracionPage() {
       ) : null}
 
       {tab === 'productos' ? (
-      <section className="bo-card overflow-x-auto p-5">
+      <section className="bo-card bo-table-wrap p-4 sm:p-5">
         {productosQuery.isPending ? (
           <p className="text-sm text-slate-500">Cargando productos...</p>
         ) : productos.length === 0 ? (
           <p className="text-sm text-slate-500">Aún no hay productos en el catálogo.</p>
         ) : (
-          <table className="table">
+          <table className="table table-sm sm:table-md">
             <thead>
               <tr className="text-slate-400">
                 <th>Producto</th>
@@ -352,13 +352,13 @@ export default function ConfiguracionPage() {
       ) : null}
 
       {tab === 'promociones' ? (
-      <section className="bo-card overflow-x-auto p-5">
+      <section className="bo-card bo-table-wrap p-4 sm:p-5">
         {promocionesQuery.isPending ? (
           <p className="text-sm text-slate-500">Cargando promociones...</p>
         ) : promociones.length === 0 ? (
           <p className="text-sm text-slate-500">Aún no hay promociones en el catálogo.</p>
         ) : (
-          <table className="table">
+          <table className="table table-sm sm:table-md">
             <thead>
               <tr className="text-slate-400">
                 <th>Promoción</th>
@@ -413,13 +413,13 @@ export default function ConfiguracionPage() {
       ) : null}
 
       {tab === 'pasos' ? (
-      <section className="bo-card overflow-x-auto p-5">
+      <section className="bo-card bo-table-wrap p-4 sm:p-5">
         {pasosQuery.isPending ? (
           <p className="text-sm text-slate-500">Cargando pasos...</p>
         ) : pasos.length === 0 ? (
           <p className="text-sm text-slate-500">Aún no hay pasos en el catálogo.</p>
         ) : (
-          <table className="table">
+          <table className="table table-sm sm:table-md">
             <thead>
               <tr className="text-slate-400">
                 <th>Paso</th>
@@ -474,13 +474,13 @@ export default function ConfiguracionPage() {
       ) : null}
 
       {tab === 'flujos' ? (
-      <section className="bo-card overflow-x-auto p-5">
+      <section className="bo-card bo-table-wrap p-4 sm:p-5">
         {flujosQuery.isPending ? (
           <p className="text-sm text-slate-500">Cargando flujos...</p>
         ) : flujos.length === 0 ? (
           <p className="text-sm text-slate-500">Aún no hay flujos.</p>
         ) : (
-          <table className="table">
+          <table className="table table-sm sm:table-md">
             <thead>
               <tr className="text-slate-400">
                 <th>Flujo</th>

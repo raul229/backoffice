@@ -133,12 +133,12 @@ export default function RolesPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Roles y usuarios</h1>
+          <h1 className="text-xl font-bold sm:text-2xl">Roles y usuarios</h1>
           <p className="text-sm text-slate-500">
             Abre un registro para verlo o editarlo. Los cambios solo se guardan desde el modal.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <button
             type="button"
             className="btn btn-sm rounded-full border-none bg-blue-600 text-white"
@@ -167,9 +167,9 @@ export default function RolesPage() {
         </div>
       ) : null}
 
-      <section className="bo-card overflow-x-auto p-5">
+      <section className="bo-card bo-table-wrap p-4 sm:p-5">
         <h2 className="mb-3 font-semibold">Roles</h2>
-        <table className="table">
+        <table className="table table-sm sm:table-md">
           <thead>
             <tr className="text-slate-400">
               <th>Rol</th>
@@ -217,9 +217,9 @@ export default function RolesPage() {
         </table>
       </section>
 
-      <section className="bo-card overflow-x-auto p-5">
+      <section className="bo-card bo-table-wrap p-4 sm:p-5">
         <h2 className="mb-3 font-semibold">Usuarios</h2>
-        <table className="table">
+        <table className="table table-sm sm:table-md">
           <thead>
             <tr className="text-slate-400">
               <th>Usuario</th>

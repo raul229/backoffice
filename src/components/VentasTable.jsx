@@ -64,8 +64,8 @@ export default function VentasTable({
   })
 
   return (
-    <div className="overflow-x-auto">
-      <table className="table">
+    <div className="bo-table-wrap">
+      <table className="table table-sm sm:table-md">
         <thead>
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id} className="text-slate-400">

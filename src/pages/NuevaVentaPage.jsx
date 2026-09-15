@@ -261,9 +261,9 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Nueva venta</h1>
+          <h1 className="text-xl font-bold sm:text-2xl">Nueva venta</h1>
           <p className="text-sm text-slate-500">
             El flujo de pasos cambia según si el cliente es persona natural (RUC 10) o empresa (RUC 20).
           </p>
@@ -275,8 +275,8 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
 
       <CatalogEmpty flujos={flujosQuery.data ?? []} productos={productos} />
 
-      <section className="bo-card p-6">
-        <ul className="steps mb-6 w-full">
+      <section className="bo-card p-4 sm:p-6">
+        <ul className="steps steps-vertical mb-6 w-full sm:steps-horizontal">
           <li className={`step ${step >= 0 ? 'step-primary' : ''}`}>Cliente</li>
           <li className={`step ${step >= 1 ? 'step-primary' : ''}`}>Producto y flujo</li>
         </ul>
@@ -578,7 +578,7 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
             )}
           </form.Subscribe>
 
-          <div className="mt-6 flex justify-end gap-2">
+          <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             {step === 1 ? (
               <button type="button" className="btn btn-ghost rounded-full" onClick={() => setStep(0)}>
                 Atrás

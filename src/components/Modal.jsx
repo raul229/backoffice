@@ -21,15 +21,21 @@ export default function Modal({ open, title, onClose, children, footer, wide = f
 
   return (
     <dialog className={`modal modal-open ${stacked ? 'z-[1100]' : ''}`} aria-label={title}>
-      <div className={`modal-box max-h-[85vh] overflow-y-auto ${wide ? 'max-w-4xl' : 'max-w-xl'}`}>
+      <div
+        className={`modal-box w-[calc(100%-1.5rem)] max-h-[min(90dvh,40rem)] overflow-y-auto p-4 sm:p-6 ${
+          wide ? 'sm:max-w-4xl' : 'sm:max-w-xl'
+        }`}
+      >
         <div className="mb-3 flex items-start justify-between gap-3">
-          <h3 className="text-lg font-bold">{title}</h3>
-          <button type="button" className="btn btn-circle btn-ghost btn-sm" onClick={onClose}>
+          <h3 className="text-base font-bold sm:text-lg">{title}</h3>
+          <button type="button" className="btn btn-circle btn-ghost btn-sm shrink-0" onClick={onClose}>
             ✕
           </button>
         </div>
         <div>{children}</div>
-        {footer ? <div className="modal-action flex-wrap">{footer}</div> : null}
+        {footer ? (
+          <div className="modal-action mt-4 flex-col-reverse gap-2 sm:flex-row sm:flex-wrap">{footer}</div>
+        ) : null}
       </div>
       <form method="dialog" className="modal-backdrop">
         <button type="button" onClick={onClose}>

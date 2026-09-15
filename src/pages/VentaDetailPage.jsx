@@ -146,9 +146,9 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
       ) : null}
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <section className="bo-card p-5">
+        <section className="bo-card p-4 sm:p-5">
           <h2 className="mb-4 font-semibold">Información general</h2>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+          <dl className="grid grid-cols-1 gap-x-4 gap-y-3 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-slate-400">Cliente</dt>
               <dd className="font-medium">{nombreCliente(cliente)}</dd>
@@ -181,9 +181,9 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
           </dl>
         </section>
 
-        <section className="bo-card p-5">
+        <section className="bo-card p-4 sm:p-5">
           <h2 className="mb-4 font-semibold">Producto</h2>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+          <dl className="grid grid-cols-1 gap-x-4 gap-y-3 text-sm sm:grid-cols-2">
             <div>
               <dt className="mb-1 text-slate-400">Estado</dt>
               <dd>
@@ -254,7 +254,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
         </section>
       </div>
 
-      <section className="bo-card p-5">
+      <section className="bo-card p-4 sm:p-5">
         <h2 className="mb-4 font-semibold">Historial de la venta</h2>
         <ol className="relative ml-3 border-l border-slate-200">
           {pasos.map((paso) => {
@@ -270,7 +270,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
                   </div>
                   {showPasoSelects ? (
                   <select
-                    className="select select-bordered select-sm w-44"
+                    className="select select-bordered select-sm w-full sm:w-44"
                     disabled={saving}
                     onChange={(event) => pasoMutation.mutate({ id: paso.id, estado: event.target.value })}
                     value={paso.estado}

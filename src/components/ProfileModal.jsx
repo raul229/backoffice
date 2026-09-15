@@ -35,7 +35,7 @@ export default function ProfileModal({ user, onClose }) {
 
   return (
     <Modal open title="Perfil" onClose={onClose}>
-      <dl className="mb-5 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+      <dl className="mb-5 grid grid-cols-1 gap-x-4 gap-y-3 text-sm sm:grid-cols-2">
         <div>
           <dt className="text-slate-400">Usuario</dt>
           <dd className="font-medium">{user.username}</dd>
@@ -103,7 +103,7 @@ export default function ProfileModal({ user, onClose }) {
           )}
         </Field>
         <p className="mb-4 text-xs text-slate-400">Mínimo 8 caracteres. La sesión se mantiene al guardar.</p>
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             Cerrar
           </button>

@@ -24,9 +24,9 @@ export default function LoginPage() {
   })
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#e8eef8] p-6">
+    <div className="flex min-h-dvh items-center justify-center bg-[#e8eef8] p-4 sm:p-6">
       <form
-        className="bo-card w-full max-w-md p-8"
+        className="bo-card w-full max-w-md p-6 sm:p-8"
         onSubmit={(event) => {
           event.preventDefault()
           event.stopPropagation()
