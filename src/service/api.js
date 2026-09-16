@@ -122,6 +122,10 @@ export function getUsers() {
   return request("/auth/users/");
 }
 
+export function getAsesores() {
+  return request("/asesores/");
+}
+
 export function createUser(payload) {
   return request("/auth/users/", {
     method: "POST",

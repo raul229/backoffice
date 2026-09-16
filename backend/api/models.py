@@ -203,6 +203,7 @@ class Venta(models.Model):
         permissions = [
             ("view_all_ventas", "Puede ver todas las ventas"),
             ("change_venta_codigos", "Puede editar códigos de seguimiento de una venta"),
+            ("reasignar_venta", "Puede reasignar ventas a otro asesor"),
         ]
     
 class VentaPaso(models.Model):

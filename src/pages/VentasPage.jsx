@@ -17,7 +17,13 @@ export default function VentasPage({ ventas, isPending, onOpen, onDelete, onNavi
         ) : null}
       </div>
       <section className="bo-card p-4 sm:p-5">
-        <VentasTable isPending={isPending} onDelete={onDelete} onOpen={onOpen} ventas={ventas} />
+        <VentasTable
+          isPending={isPending}
+          onDelete={onDelete}
+          onOpen={onOpen}
+          showAsesor={can('api.view_all_ventas')}
+          ventas={ventas}
+        />
       </section>
     </div>
   )

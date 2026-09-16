@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import {
   createSortedRowModel,
   rowSortingFeature,
@@ -6,8 +7,8 @@ import {
   useTable,
 } from '@tanstack/react-table'
 import StatusBadge from './StatusBadge.jsx'
+import { displayName } from '../lib/auth.js'
 import {
-  codigosResumen,
   formatFecha,
   nombreCliente,
   numeroVenta,
@@ -20,7 +21,7 @@ const features = tableFeatures({
   sortFns,
 })
 
-const columns = [
+const baseColumns = [
   {
     id: 'numero',
     accessorFn: numeroVenta,
@@ -32,6 +33,16 @@ const columns = [
     accessorFn: (row) => nombreCliente(row.cliente_detalle),
     header: 'Cliente',
   },
+]
+
+const asesorColumn = {
+  id: 'asesor',
+  accessorFn: (row) => displayName(row.creado_por_detalle),
+  header: 'Asesor',
+  cell: (info) => info.getValue() || '—',
+}
+
+const restColumns = [
   {
     id: 'tipo',
     accessorFn: (row) => tipoClienteLabel(row.cliente_detalle?.tipo),
@@ -55,10 +66,15 @@ export default function VentasTable({
   isPending,
   onOpen,
   onDelete,
+  showAsesor = false,
   emptyLabel = 'Aún no hay ventas registradas.',
 }) {
+  const columns = useMemo(
+    () => [...baseColumns, ...(showAsesor ? [asesorColumn] : []), ...restColumns],
+    [showAsesor],
+  )
   const table = useTable({
-    key: 'ventas-table',
+    key: showAsesor ? 'ventas-table-asesor' : 'ventas-table',
     features,
     columns,
     data: ventas,

@@ -1,3 +1,4 @@
+from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from rest_framework import serializers
 
@@ -34,6 +35,17 @@ VENTA_CODIGO_FIELDS = (
     "numero_fijo",
     "numero_orden",
 )
+
+
+def user_brief(user):
+    if not user:
+        return None
+    return {
+        "id": user.id,
+        "username": user.username,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+    }
 
 
 class ChoiceSerializer(serializers.Serializer):
@@ -251,15 +263,7 @@ class VentaComentarioSerializer(serializers.ModelSerializer):
         read_only_fields = ["fecha", "creado_por"]
 
     def get_creado_por_detalle(self, obj):
-        user = obj.creado_por
-        if not user:
-            return None
-        return {
-            "id": user.id,
-            "username": user.username,
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-        }
+        return user_brief(obj.creado_por)
 
     def validate_texto(self, value):
         texto = (value or "").strip()
@@ -294,7 +298,12 @@ class VentaSerializer(serializers.ModelSerializer):
     )
     pasos = serializers.SerializerMethodField()
     comentarios = serializers.SerializerMethodField()
-    creado_por = serializers.PrimaryKeyRelatedField(read_only=True)
+    creado_por = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+    )
+    creado_por_detalle = serializers.SerializerMethodField()
 
     class Meta:
         model = Venta
@@ -323,8 +332,9 @@ class VentaSerializer(serializers.ModelSerializer):
             "pasos",
             "comentarios",
             "creado_por",
+            "creado_por_detalle",
         ]
-        read_only_fields = ["fecha", "creado_por"]
+        read_only_fields = ["fecha"]
 
     def validate(self, attrs):
         uppercase_fields(attrs, list(VENTA_CODIGO_FIELDS))
@@ -350,6 +360,24 @@ class VentaSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"direccion": "La dirección no pertenece a este cliente."}
             )
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if "creado_por" in attrs and self.instance is not None:
+            if user is None or not (
+                user.is_superuser or user.has_perm("api.reasignar_venta")
+            ):
+                raise serializers.ValidationError(
+                    {"creado_por": "No tienes permiso para reasignar ventas."}
+                )
+            nuevo = attrs.get("creado_por")
+            if nuevo is None:
+                raise serializers.ValidationError(
+                    {"creado_por": "Debes elegir un asesor."}
+                )
+            if not nuevo.has_perm("api.add_venta"):
+                raise serializers.ValidationError(
+                    {"creado_por": "El usuario no puede recibir ventas. Debe poder registrarlas."}
+                )
         return attrs
 
     def _sync_pasos(self, venta):
@@ -368,6 +396,9 @@ class VentaSerializer(serializers.ModelSerializer):
     def get_comentarios(self, obj):
         comentarios = obj.comentarios.select_related("creado_por").order_by("fecha")
         return VentaComentarioSerializer(comentarios, many=True).data
+
+    def get_creado_por_detalle(self, obj):
+        return user_brief(obj.creado_por)
 
     @transaction.atomic
     def create(self, validated_data):

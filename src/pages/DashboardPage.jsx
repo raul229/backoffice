@@ -112,6 +112,7 @@ export default function DashboardPage({
             isPending={isPending}
             onDelete={onDelete}
             onOpen={onOpen}
+            showAsesor={can('api.view_all_ventas')}
             ventas={recientes}
           />
         </section>
@@ -135,7 +136,7 @@ export default function DashboardPage({
             <input
               className="input input-bordered w-full"
               onChange={(event) => onFilters({ ...filters, search: event.target.value })}
-              placeholder="Venta, cliente, PSI, SIRO, orden..."
+              placeholder="Venta, cliente, asesor, PSI, SIRO, orden..."
               value={filters.search}
             />
           </label>

@@ -18,6 +18,7 @@ from .views import (
     VentaComentarioViewSet,
     VentaPasoViewSet,
     VentaViewSet,
+    asesores,
     choices,
 )
 
@@ -39,6 +40,7 @@ router.register("venta-comentarios", VentaComentarioViewSet)
 urlpatterns = [
     path("", include(router.urls)),
     path("choices/", choices, name="api-choices"),
+    path("asesores/", asesores, name="api-asesores"),
     path("lookup/ruc/", lookup_ruc, name="api-lookup-ruc"),
     path("lookup/direccion/", lookup_direccion, name="api-lookup-direccion"),
     path("auth/csrf/", csrf, name="api-csrf"),

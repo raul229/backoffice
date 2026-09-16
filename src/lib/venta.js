@@ -80,8 +80,11 @@ export function estadoUi(venta) {
   if (pasos.some((paso) => paso.estado === 'OBSERVADO' || paso.estado === 'SUBSANANDO')) {
     return 'observacion'
   }
-  if (venta.estado === 'INSTALADO') return 'aprobada'
   if (venta.estado === 'ANULADO') return 'anulada'
+  if (venta.estado === 'INSTALADO') return 'aprobada'
+  if (pasos.length > 0 && pasos.every((paso) => paso.estado === 'APROBADO')) {
+    return 'aprobada'
+  }
   const enProceso = pasos.find((paso) => paso.estado === 'EN_PROCESO')
   const nombrePaso = enProceso?.flujo_paso_detalle?.paso_detalle?.nombre?.toLowerCase() ?? ''
   if (nombrePaso.includes('evaluacion') || nombrePaso.includes('valid')) return 'validacion'
@@ -90,7 +93,7 @@ export function estadoUi(venta) {
 
 export const ESTADO_UI = {
   validacion: { label: 'En validación', className: 'bg-amber-100 text-amber-700' },
-  aprobada: { label: 'Aprobada', className: 'bg-emerald-100 text-emerald-700' },
+  aprobada: { label: 'Instalado', className: 'bg-emerald-100 text-emerald-700' },
   observacion: { label: 'Observación', className: 'bg-orange-100 text-orange-700' },
   seguimiento: { label: 'En seguimiento', className: 'bg-violet-100 text-violet-700' },
   anulada: { label: 'Anulada', className: 'bg-rose-100 text-rose-700' },
@@ -171,6 +174,8 @@ export function matchesSearch(venta, query) {
     documentoCliente(cliente),
     venta.producto_detalle?.nombre,
     venta.estado,
+    venta.creado_por_detalle?.username,
+    `${venta.creado_por_detalle?.first_name ?? ''} ${venta.creado_por_detalle?.last_name ?? ''}`.trim(),
     ...VENTA_CODIGOS.map((item) => venta[item.key]),
   ]
     .filter(Boolean)
@@ -185,6 +190,8 @@ export function filterVentas(ventas, filters) {
     if (filters.estado && filters.estado !== 'TODOS') {
       if (filters.estado === 'OBSERVACION') {
         if (estadoUi(venta) !== 'observacion') return false
+      } else if (filters.estado === 'INSTALADO') {
+        if (estadoUi(venta) !== 'aprobada') return false
       } else if (venta.estado !== filters.estado) {
         return false
       }

@@ -224,6 +224,39 @@ class ApiEndpointsTests(APITestCase):
         self.assertEqual(len(updated.data["pasos"]), 2)
         self.assertEqual(updated.data["flujo"], flujo_b.id)
 
+    def test_aprobar_todos_los_pasos_marca_venta_instalada(self):
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        producto = Producto.objects.create(nombre="Fibra 100", velocidad=100, precio=70)
+        flujo = Flujo.objects.create(nombre="Instalacion", tipo_cliente=TipoCliente.PERSONA)
+        paso_uno = Paso.objects.create(nombre="Validacion", descripcion="Validar")
+        paso_dos = Paso.objects.create(nombre="Instalacion", descripcion="Instalar")
+        FlujoPaso.objects.create(flujo=flujo, paso=paso_uno, orden=1)
+        FlujoPaso.objects.create(flujo=flujo, paso=paso_dos, orden=2)
+
+        created = self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(created.data["estado"], "EN_PROCESO")
+        pasos = created.data["pasos"]
+
+        self.client.patch(f"/api/venta-pasos/{pasos[0]['id']}/", {"estado": "APROBADO"}, format="json")
+        self.client.patch(f"/api/venta-pasos/{pasos[1]['id']}/", {"estado": "EN_PROCESO"}, format="json")
+        venta_abierta = self.client.get(f"/api/ventas/{created.data['id']}/")
+        self.assertEqual(venta_abierta.data["estado"], "EN_PROCESO")
+
+        self.client.patch(f"/api/venta-pasos/{pasos[1]['id']}/", {"estado": "APROBADO"}, format="json")
+        detalle = self.client.get(f"/api/ventas/{created.data['id']}/")
+        self.assertEqual(detalle.status_code, status.HTTP_200_OK)
+        self.assertEqual(detalle.data["estado"], "INSTALADO")
+        self.assertTrue(all(paso["estado"] == "APROBADO" for paso in detalle.data["pasos"]))
+
+        self.client.patch(f"/api/venta-pasos/{pasos[1]['id']}/", {"estado": "PENDIENTE"}, format="json")
+        reabierta = self.client.get(f"/api/ventas/{created.data['id']}/")
+        self.assertEqual(reabierta.data["estado"], "EN_PROCESO")
+
     def test_delete_flujo_paso_used_by_venta(self):
         cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
         producto = Producto.objects.create(nombre="Fibra 50", velocidad=50, precio=40)
@@ -522,6 +555,85 @@ class AuthAndPermissionsTests(APITestCase):
             format="json",
         )
         self.assertEqual(forbidden.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_supervisor_sees_owner_and_can_reassign_venta(self):
+        ana = User.objects.create_user("ana_reasignar", password="secret", first_name="Ana")
+        ana.groups.add(Group.objects.get(name="Asesor"))
+        luis = User.objects.create_user("luis_reasignar", password="secret", first_name="Luis")
+        luis.groups.add(Group.objects.get(name="Asesor"))
+        supervisor = User.objects.create_user("super_reasignar", password="secret")
+        supervisor.groups.add(Group.objects.get(name="Supervisor"))
+        marta = User.objects.create_user("marta_reasignar", password="secret")
+        marta.groups.add(Group.objects.get(name="Operaciones"))
+
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        producto = Producto.objects.create(nombre="Fibra 50", velocidad=50, precio=40)
+        flujo = Flujo.objects.create(nombre="Flujo reasignar", tipo_cliente=TipoCliente.PERSONA)
+        paso = Paso.objects.create(nombre="Uno", descripcion="Uno")
+        FlujoPaso.objects.create(flujo=flujo, paso=paso, orden=1)
+
+        self.client.force_authenticate(ana)
+        created = self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        venta_id = created.data["id"]
+        self.assertEqual(created.data["creado_por"], ana.id)
+        self.assertEqual(created.data["creado_por_detalle"]["username"], "ana_reasignar")
+
+        forbidden_list = self.client.get("/api/asesores/")
+        self.assertEqual(forbidden_list.status_code, status.HTTP_403_FORBIDDEN)
+
+        stolen = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"creado_por": luis.id},
+            format="json",
+        )
+        self.assertEqual(stolen.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.force_authenticate(supervisor)
+        listed = self.client.get("/api/ventas/")
+        self.assertEqual(listed.status_code, status.HTTP_200_OK)
+        sale = next(item for item in listed.data if item["id"] == venta_id)
+        self.assertEqual(sale["creado_por_detalle"]["first_name"], "Ana")
+
+        asesores = self.client.get("/api/asesores/")
+        self.assertEqual(asesores.status_code, status.HTTP_200_OK)
+        usernames = {item["username"] for item in asesores.data}
+        self.assertIn("ana_reasignar", usernames)
+        self.assertIn("luis_reasignar", usernames)
+        self.assertNotIn("marta_reasignar", usernames)
+
+        reassigned = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"creado_por": luis.id},
+            format="json",
+        )
+        self.assertEqual(reassigned.status_code, status.HTTP_200_OK)
+        self.assertEqual(reassigned.data["creado_por"], luis.id)
+        self.assertEqual(reassigned.data["creado_por_detalle"]["username"], "luis_reasignar")
+
+        rejected = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"creado_por": marta.id},
+            format="json",
+        )
+        self.assertEqual(rejected.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.client.force_authenticate(marta)
+        marta_list = self.client.get("/api/ventas/")
+        self.assertEqual(marta_list.status_code, status.HTTP_200_OK)
+        self.assertTrue(any(item["id"] == venta_id for item in marta_list.data))
+
+        marta_reasign = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"creado_por": ana.id},
+            format="json",
+        )
+        self.assertEqual(marta_reasign.status_code, status.HTTP_200_OK)
+        self.assertEqual(marta_reasign.data["creado_por"], ana.id)
 
     def test_asesor_and_operaciones_can_comment_on_historial(self):
         grupo = Group.objects.get(name="Asesor")

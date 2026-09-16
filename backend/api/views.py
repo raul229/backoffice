@@ -1,5 +1,6 @@
+from django.contrib.auth.models import Permission, User
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Q
 from django.db.models.deletion import ProtectedError
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import ValidationError
@@ -22,7 +23,7 @@ from .models import (
     VentaComentario,
     VentaPaso,
 )
-from .workflow import sync_ventas_con_flujo
+from .workflow import sync_estado_venta_con_pasos, sync_ventas_con_flujo
 from .serializers import (
     CHOICE_GROUPS,
     ClienteSerializer,
@@ -40,16 +41,26 @@ from .serializers import (
     VentaPasoSerializer,
     VentaSerializer,
     serialize_choices,
+    user_brief,
 )
 
 
 class VentaModelPermissions(DjangoModelPermissions):
     def has_permission(self, request, view):
-        if request.method in ("PUT", "PATCH") and (
-            request.user.is_superuser or request.user.has_perm("api.change_venta_codigos")
-        ):
+        if request.method in ("PUT", "PATCH"):
             keys = {str(key) for key in request.data.keys()}
-            if keys and keys <= set(VENTA_CODIGO_FIELDS):
+            if (
+                keys
+                and keys <= set(VENTA_CODIGO_FIELDS)
+                and (
+                    request.user.is_superuser
+                    or request.user.has_perm("api.change_venta_codigos")
+                )
+            ):
+                return True
+            if keys == {"creado_por"} and (
+                request.user.is_superuser or request.user.has_perm("api.reasignar_venta")
+            ):
                 return True
         return super().has_permission(request, view)
 
@@ -215,6 +226,10 @@ class VentaPasoViewSet(AuthenticatedModelViewSet):
             return queryset
         return queryset.filter(venta__creado_por=user)
 
+    def perform_update(self, serializer):
+        paso = serializer.save()
+        sync_estado_venta_con_pasos(paso.venta)
+
 
 class VentaComentarioViewSet(AuthenticatedModelViewSet):
     http_method_names = ["get", "post", "head", "options"]
@@ -238,3 +253,22 @@ def choices(request):
     return Response(
         {name: serialize_choices(choices) for name, choices in CHOICE_GROUPS.items()}
     )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def asesores(request):
+    user = request.user
+    if not (user.is_superuser or user.has_perm("api.reasignar_venta")):
+        return Response(
+            {"detail": "No tienes permiso para listar asesores."},
+            status=403,
+        )
+    perm = Permission.objects.get(content_type__app_label="api", codename="add_venta")
+    queryset = (
+        User.objects.filter(is_active=True)
+        .filter(Q(is_superuser=True) | Q(user_permissions=perm) | Q(groups__permissions=perm))
+        .distinct()
+        .order_by("first_name", "last_name", "username")
+    )
+    return Response([user_brief(item) for item in queryset])

@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
-import { getVenta, getFlujos, updateVenta, updateVentaPaso, deleteVenta, createVentaComentario } from '../service/api.js'
+import { getVenta, getFlujos, getAsesores, updateVenta, updateVentaPaso, deleteVenta, createVentaComentario } from '../service/api.js'
 import { displayName } from '../lib/auth.js'
 import {
   celularCliente,
@@ -58,7 +58,7 @@ function pasoColor(estado) {
 }
 
 export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
-  const { can, user } = useAuth()
+  const { can } = useAuth()
   const [editing, setEditing] = useState(false)
   const [confirm, setConfirm] = useState(null)
   const [comentario, setComentario] = useState('')
@@ -68,6 +68,12 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
     queryFn: () => getVenta(ventaId),
   })
   const flujosQuery = useQuery({ queryKey: ['flujos'], queryFn: getFlujos })
+  const canReasignar = can('api.reasignar_venta')
+  const asesoresQuery = useQuery({
+    queryKey: ['asesores'],
+    queryFn: getAsesores,
+    enabled: canReasignar,
+  })
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['venta', ventaId] })
@@ -208,6 +214,38 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
             <div>
               <dt className="text-slate-400">Cliente</dt>
               <dd className="font-medium">{nombreCliente(cliente)}</dd>
+            </div>
+            <div>
+              <dt className="mb-1 text-slate-400">Asesor</dt>
+              <dd>
+                {canReasignar ? (
+                  <select
+                    className="select select-bordered w-full"
+                    disabled={saving || asesoresQuery.isPending}
+                    onChange={(event) => {
+                      const next = Number(event.target.value)
+                      if (!next || next === venta.creado_por) return
+                      ventaMutation.mutate({ creado_por: next })
+                    }}
+                    value={venta.creado_por ?? ''}
+                  >
+                    {(asesoresQuery.data ?? [])
+                      .concat(
+                        venta.creado_por_detalle &&
+                          !(asesoresQuery.data ?? []).some((item) => item.id === venta.creado_por)
+                          ? [venta.creado_por_detalle]
+                          : [],
+                      )
+                      .map((asesor) => (
+                        <option key={asesor.id} value={asesor.id}>
+                          {displayName(asesor)}
+                        </option>
+                      ))}
+                  </select>
+                ) : (
+                  displayName(venta.creado_por_detalle)
+                )}
+              </dd>
             </div>
             <div>
               <dt className="text-slate-400">Tipo</dt>
