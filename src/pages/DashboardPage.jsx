@@ -135,7 +135,7 @@ export default function DashboardPage({
             <input
               className="input input-bordered w-full"
               onChange={(event) => onFilters({ ...filters, search: event.target.value })}
-              placeholder="N° de venta, cliente, DNI, RUC..."
+              placeholder="Venta, cliente, PSI, SIRO, orden..."
               value={filters.search}
             />
           </label>

@@ -3,7 +3,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from unittest.mock import patch
 
-from .models import Cliente, Direccion, Empresa, Flujo, FlujoPaso, Paso, Persona, Producto, Promocion, TipoCliente
+from .models import Cliente, Direccion, Empresa, Flujo, FlujoPaso, Paso, Persona, Producto, Promocion, TipoCliente, Venta
 
 
 class ApiEndpointsTests(APITestCase):
@@ -431,6 +431,97 @@ class AuthAndPermissionsTests(APITestCase):
     def test_anonymous_cannot_list_ventas(self):
         response = self.client.get("/api/ventas/")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_asesor_cannot_patch_codigos_nor_estado(self):
+        grupo = Group.objects.get(name="Asesor")
+        ana = User.objects.create_user("ana_codigos", password="secret")
+        ana.groups.add(grupo)
+
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        producto = Producto.objects.create(nombre="Fibra 50", velocidad=50, precio=40)
+        flujo = Flujo.objects.create(nombre="Flujo codigos", tipo_cliente=TipoCliente.PERSONA)
+        paso = Paso.objects.create(nombre="Uno", descripcion="Uno")
+        FlujoPaso.objects.create(flujo=flujo, paso=paso, orden=1)
+
+        self.client.force_authenticate(ana)
+        created = self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        venta_id = created.data["id"]
+
+        forbidden_codigos = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"psi": "psi-11", "siro": "siro-22"},
+            format="json",
+        )
+        self.assertEqual(forbidden_codigos.status_code, status.HTTP_403_FORBIDDEN)
+
+        forbidden_estado = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"estado": "ANULADO"},
+            format="json",
+        )
+        self.assertEqual(forbidden_estado.status_code, status.HTTP_403_FORBIDDEN)
+
+        detalle = self.client.get(f"/api/ventas/{venta_id}/")
+        self.assertEqual(detalle.status_code, status.HTTP_200_OK)
+        self.assertEqual(detalle.data["psi"], "")
+
+    def test_operaciones_can_patch_codigos_but_not_estado(self):
+        admin = User.objects.create_superuser("admin_codigos", "admin_codigos@test.com", "pass")
+        marta = User.objects.create_user("marta_codigos", password="secret")
+        marta.groups.add(Group.objects.get(name="Operaciones"))
+
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        producto = Producto.objects.create(nombre="Fibra 50", velocidad=50, precio=40)
+        flujo = Flujo.objects.create(nombre="Flujo codigos", tipo_cliente=TipoCliente.PERSONA)
+        paso = Paso.objects.create(nombre="Uno", descripcion="Uno")
+        FlujoPaso.objects.create(flujo=flujo, paso=paso, orden=1)
+
+        self.client.force_authenticate(admin)
+        created = self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        venta_id = created.data["id"]
+        Venta.objects.filter(id=venta_id).update(creado_por=marta)
+
+        self.client.force_authenticate(marta)
+        patched = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {
+                "psi": "psi-11",
+                "siro": "siro-22",
+                "numero_oportunidad": "opp-33",
+                "numero_orden": "ord-44",
+                "oit": "oit-55",
+                "cotizacion": "cot-66",
+                "contrato": "ct-77",
+                "numero_fijo": "01444555",
+            },
+            format="json",
+        )
+        self.assertEqual(patched.status_code, status.HTTP_200_OK)
+        self.assertEqual(patched.data["psi"], "PSI-11")
+        self.assertEqual(patched.data["siro"], "SIRO-22")
+        self.assertEqual(patched.data["numero_oportunidad"], "OPP-33")
+        self.assertEqual(patched.data["numero_orden"], "ORD-44")
+        self.assertEqual(patched.data["oit"], "OIT-55")
+        self.assertEqual(patched.data["cotizacion"], "COT-66")
+        self.assertEqual(patched.data["contrato"], "CT-77")
+        self.assertEqual(patched.data["numero_fijo"], "01444555")
+
+        forbidden = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"estado": "ANULADO"},
+            format="json",
+        )
+        self.assertEqual(forbidden.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_asesor_cannot_delete_flujo_paso(self):
         group = Group.objects.get(name="Asesor")

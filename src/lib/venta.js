@@ -18,6 +18,23 @@ export function productosPorTipo(productos, tipo) {
   return (productos ?? []).filter((producto) => producto.tipo_cliente === tipo)
 }
 
+export const VENTA_CODIGOS = [
+  { key: 'psi', label: 'PSI', primary: true },
+  { key: 'siro', label: 'SIRO', primary: true },
+  { key: 'numero_oportunidad', label: 'N° oportunidad', primary: true },
+  { key: 'numero_orden', label: 'N° orden', primary: true },
+  { key: 'oit', label: 'OIT' },
+  { key: 'cotizacion', label: 'Cotización' },
+  { key: 'contrato', label: 'Contrato' },
+  { key: 'numero_fijo', label: 'N° fijo', hint: 'Teléfono fijo reservado, si el producto lo requiere' },
+]
+
+export function codigosResumen(venta) {
+  return VENTA_CODIGOS.filter((item) => venta?.[item.key])
+    .map((item) => `${item.label} ${venta[item.key]}`)
+    .join(' · ')
+}
+
 export function celularCliente(cliente) {
   if (!cliente) return ''
   if (cliente.tipo === 'EMPRESA') {
@@ -154,6 +171,7 @@ export function matchesSearch(venta, query) {
     documentoCliente(cliente),
     venta.producto_detalle?.nombre,
     venta.estado,
+    ...VENTA_CODIGOS.map((item) => venta[item.key]),
   ]
     .filter(Boolean)
     .join(' ')

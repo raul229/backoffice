@@ -113,7 +113,7 @@ export default function AppShell({ page, search, onSearch, onNavigate, children 
             <input
               className="w-full min-w-0 bg-transparent text-sm outline-none"
               onChange={(event) => onSearch(event.target.value)}
-              placeholder="Buscar por cliente, N° de venta, DNI, RUC..."
+              placeholder="Cliente, venta, PSI, SIRO, orden..."
               value={search}
             />
           </label>

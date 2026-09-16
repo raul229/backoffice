@@ -183,6 +183,14 @@ class Venta(models.Model):
     flujo=models.ForeignKey(Flujo, on_delete=models.PROTECT)
     promociones = models.ManyToManyField(Promocion, through=PromocionVenta)
     estado = models.CharField(max_length=20, choices=EstadoVenta.choices, default=EstadoVenta.EN_PROCESO)
+    psi = models.CharField(max_length=50, blank=True)
+    siro = models.CharField(max_length=50, blank=True)
+    numero_oportunidad = models.CharField(max_length=50, blank=True)
+    oit = models.CharField(max_length=50, blank=True)
+    cotizacion = models.CharField(max_length=50, blank=True)
+    contrato = models.CharField(max_length=50, blank=True)
+    numero_fijo = models.CharField(max_length=20, blank=True)
+    numero_orden = models.CharField(max_length=50, blank=True)
     creado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -194,6 +202,7 @@ class Venta(models.Model):
     class Meta:
         permissions = [
             ("view_all_ventas", "Puede ver todas las ventas"),
+            ("change_venta_codigos", "Puede editar códigos de seguimiento de una venta"),
         ]
     
 class VentaPaso(models.Model):

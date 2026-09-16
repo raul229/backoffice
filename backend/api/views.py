@@ -34,10 +34,22 @@ from .serializers import (
     ProductoSerializer,
     PromocionSerializer,
     PromocionVentaSerializer,
+    VENTA_CODIGO_FIELDS,
     VentaPasoSerializer,
     VentaSerializer,
     serialize_choices,
 )
+
+
+class VentaModelPermissions(DjangoModelPermissions):
+    def has_permission(self, request, view):
+        if request.method in ("PUT", "PATCH") and (
+            request.user.is_superuser or request.user.has_perm("api.change_venta_codigos")
+        ):
+            keys = {str(key) for key in request.data.keys()}
+            if keys and keys <= set(VENTA_CODIGO_FIELDS):
+                return True
+        return super().has_permission(request, view)
 
 
 class AuthenticatedModelViewSet(ModelViewSet):
@@ -139,6 +151,7 @@ class FlujoPasoViewSet(AuthenticatedModelViewSet):
 
 
 class VentaViewSet(AuthenticatedModelViewSet):
+    permission_classes = [IsAuthenticated, VentaModelPermissions]
     queryset = (
         Venta.objects.select_related(
             "cliente",

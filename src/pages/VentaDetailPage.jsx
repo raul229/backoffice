@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
@@ -14,10 +14,39 @@ import {
   nombreCliente,
   numeroVenta,
   tipoClienteLabel,
+  VENTA_CODIGOS,
 } from '../lib/venta.js'
 
 const PASO_ESTADOS = ['PENDIENTE', 'EN_PROCESO', 'OBSERVADO', 'SUBSANANDO', 'APROBADO', 'RECHAZADO']
 const VENTA_ESTADOS = ['EN_PROCESO', 'INSTALADO', 'ANULADO']
+
+function CodigoField({ label, hint, value, disabled, onSave }) {
+  const [draft, setDraft] = useState(value ?? '')
+  useEffect(() => {
+    setDraft(value ?? '')
+  }, [value])
+
+  return (
+    <label className="text-sm">
+      <span className="mb-1 block text-slate-400">{label}</span>
+      <input
+        className="input input-bordered input-sm w-full uppercase"
+        disabled={disabled}
+        onBlur={(event) => {
+          const next = event.target.value.trim()
+          if (next !== (value ?? '')) onSave(next)
+        }}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur()
+        }}
+        spellCheck={false}
+        value={draft}
+      />
+      {hint ? <span className="mt-1 block text-xs text-slate-400">{hint}</span> : null}
+    </label>
+  )
+}
 
 function pasoColor(estado) {
   if (estado === 'APROBADO') return 'bg-emerald-500'
@@ -89,6 +118,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   const canChangeVenta = can('api.change_venta')
   const canChangePaso = can('api.change_ventapaso')
   const canDeleteVenta = can('api.delete_venta')
+  const canEditCodigos = can('api.change_venta_codigos')
   const saving = pasoMutation.isPending || ventaMutation.isPending || deleteMutation.isPending
   const showVentaSelects = editing && canChangeVenta
   const showPasoSelects = editing && canChangePaso
@@ -132,6 +162,11 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <StatusBadge venta={venta} />
         <p className="text-sm text-slate-500">Registrada {formatFecha(venta.fecha)}</p>
+        {VENTA_CODIGOS.filter((item) => item.primary && venta[item.key]).map((item) => (
+          <span key={item.key} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+            {item.label} {venta[item.key]}
+          </span>
+        ))}
       </div>
 
       {ventaMutation.isError ? (
@@ -253,6 +288,28 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
           </dl>
         </section>
       </div>
+
+      {canEditCodigos ? (
+      <section className="bo-card p-4 sm:p-5">
+        <h2 className="mb-1 font-semibold">Códigos de seguimiento</h2>
+        <p className="mb-4 text-sm text-slate-500">
+          Se cargan según avanza la venta. No todas aplican: PSI, SIRO y n° de oportunidad son los más usados; el n° de
+          orden sirve para seguir la instalación.
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {VENTA_CODIGOS.map((item) => (
+            <CodigoField
+              key={item.key}
+              disabled={saving}
+              hint={item.hint}
+              label={item.label}
+              onSave={(value) => ventaMutation.mutate({ [item.key]: value })}
+              value={venta[item.key]}
+            />
+          ))}
+        </div>
+      </section>
+      ) : null}
 
       <section className="bo-card p-4 sm:p-5">
         <h2 className="mb-4 font-semibold">Historial de la venta</h2>

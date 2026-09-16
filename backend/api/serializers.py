@@ -23,6 +23,17 @@ from .models import (
     VentaPaso,
 )
 
+VENTA_CODIGO_FIELDS = (
+    "psi",
+    "siro",
+    "numero_oportunidad",
+    "oit",
+    "cotizacion",
+    "contrato",
+    "numero_fijo",
+    "numero_orden",
+)
+
 
 class ChoiceSerializer(serializers.Serializer):
     value = serializers.CharField()
@@ -260,12 +271,21 @@ class VentaSerializer(serializers.ModelSerializer):
             "promociones",
             "promociones_detalle",
             "estado",
+            "psi",
+            "siro",
+            "numero_oportunidad",
+            "oit",
+            "cotizacion",
+            "contrato",
+            "numero_fijo",
+            "numero_orden",
             "pasos",
             "creado_por",
         ]
         read_only_fields = ["fecha", "creado_por"]
 
     def validate(self, attrs):
+        uppercase_fields(attrs, list(VENTA_CODIGO_FIELDS))
         cliente = attrs.get("cliente") or getattr(self.instance, "cliente", None)
         flujo = attrs.get("flujo") or getattr(self.instance, "flujo", None)
         producto = attrs.get("producto") or getattr(self.instance, "producto", None)

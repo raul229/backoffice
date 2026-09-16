@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-table'
 import StatusBadge from './StatusBadge.jsx'
 import {
+  codigosResumen,
   formatFecha,
   nombreCliente,
   numeroVenta,
