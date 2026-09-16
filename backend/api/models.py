@@ -100,6 +100,9 @@ class Producto(models.Model):
     nombre = models.CharField(max_length=100)
     velocidad = models.PositiveBigIntegerField()
     precio = models.DecimalField(max_digits=10, decimal_places=2)
+    tipo_cliente = models.CharField(
+        max_length=20, choices=TipoCliente.choices, default=TipoCliente.PERSONA
+    )
     
     def __str__(self):
         return self.nombre + " - " + str(self.velocidad) + " Mbps - S/." + str(self.precio)

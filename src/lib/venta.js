@@ -14,6 +14,10 @@ export function flujosPorTipo(flujos, tipo) {
   return (flujos ?? []).filter((flujo) => flujo.tipo_cliente === tipo)
 }
 
+export function productosPorTipo(productos, tipo) {
+  return (productos ?? []).filter((producto) => producto.tipo_cliente === tipo)
+}
+
 export function celularCliente(cliente) {
   if (!cliente) return ''
   if (cliente.tipo === 'EMPRESA') {

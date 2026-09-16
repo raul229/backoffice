@@ -19,7 +19,7 @@ import {
 } from '../service/api.js'
 import { parseDireccion } from '../lib/address.js'
 import { DOCUMENT_LENGTH, digitCode, nuevaVentaClienteSchema, nuevaVentaSchema, requiredText, validateDocumentNumber } from '../lib/schemas.js'
-import { flujosPorTipo, formatDireccion } from '../lib/venta.js'
+import { flujosPorTipo, formatDireccion, productosPorTipo } from '../lib/venta.js'
 
 const defaultValues = {
   tipo_cliente: 'PERSONA',
@@ -273,7 +273,14 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
         </button>
       </div>
 
-      <CatalogEmpty flujos={flujosQuery.data ?? []} productos={productos} />
+      <form.Subscribe selector={(state) => state.values.tipo_cliente}>
+        {(tipo) => (
+          <CatalogEmpty
+            flujos={flujosPorTipo(flujosQuery.data, tipo)}
+            productos={productosPorTipo(productos, tipo)}
+          />
+        )}
+      </form.Subscribe>
 
       <section className="bo-card p-4 sm:p-6">
         <ul className="steps steps-vertical mb-6 w-full sm:steps-horizontal">
@@ -297,6 +304,7 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
           <form.Subscribe selector={(state) => state.values}>
             {(values) => {
               const flujos = flujosPorTipo(flujosQuery.data, values.tipo_cliente)
+              const productosTipo = productosPorTipo(productos, values.tipo_cliente)
               const flujoSeleccionado = flujos.find((flujo) => String(flujo.id) === String(values.flujo))
               const pasosFlujo = [...(flujoSeleccionado?.pasos_detalle ?? [])].sort(
                 (a, b) => a.orden - b.orden,
@@ -419,8 +427,8 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                           <SelectField
                             className="md:col-span-2"
                             field={field}
-                            label="Producto"
-                            options={productos.map((producto) => ({
+                            label={`Producto ${values.tipo_cliente === 'EMPRESA' ? '(empresa)' : '(persona natural)'}`}
+                            options={productosTipo.map((producto) => ({
                               value: String(producto.id),
                               label: `${producto.nombre} · ${producto.velocidad} Mbps · S/ ${producto.precio}`,
                             }))}
@@ -428,6 +436,11 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                           />
                         )}
                       </Field>
+                      {productosTipo.length === 0 ? (
+                        <p className="text-xs text-orange-600 md:col-span-2">
+                          No hay un producto configurado para este tipo de cliente.
+                        </p>
+                      ) : null}
                       <Field form={form} name="flujo" validators={requiredText('Selecciona un flujo')}>
                         {(field) => (
                           <SelectField
@@ -597,8 +610,19 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                   )
                   if (!parsed.success || results.some((errors) => errors?.length)) return
                   const flujos = flujosPorTipo(flujosQuery.data, tipo)
+                  const productosTipo = productosPorTipo(productos, tipo)
                   if (!form.getFieldValue('flujo') && flujos.length === 1) {
                     form.setFieldValue('flujo', String(flujos[0].id))
+                  }
+                  const productoActual = form.getFieldValue('producto')
+                  if (
+                    productoActual &&
+                    !productosTipo.some((producto) => String(producto.id) === String(productoActual))
+                  ) {
+                    form.setFieldValue('producto', '')
+                  }
+                  if (!form.getFieldValue('producto') && productosTipo.length === 1) {
+                    form.setFieldValue('producto', String(productosTipo[0].id))
                   }
                   setStep(1)
                 }}

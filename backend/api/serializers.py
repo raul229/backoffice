@@ -170,7 +170,7 @@ class ClienteSerializer(serializers.ModelSerializer):
 class ProductoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Producto
-        fields = ["id", "nombre", "velocidad", "precio"]
+        fields = ["id", "nombre", "velocidad", "precio", "tipo_cliente"]
 
     def validate(self, attrs):
         uppercase_fields(attrs, ["nombre"])
@@ -268,12 +268,20 @@ class VentaSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         cliente = attrs.get("cliente") or getattr(self.instance, "cliente", None)
         flujo = attrs.get("flujo") or getattr(self.instance, "flujo", None)
+        producto = attrs.get("producto") or getattr(self.instance, "producto", None)
         direccion = attrs.get("direccion") or getattr(self.instance, "direccion", None)
         if cliente and flujo and flujo.tipo_cliente != cliente.tipo:
             raise serializers.ValidationError(
                 {
                     "flujo": "El flujo no corresponde al tipo de cliente. "
                     "Usa un flujo de persona natural (RUC 10) o de empresa (RUC 20)."
+                }
+            )
+        if cliente and producto and producto.tipo_cliente != cliente.tipo:
+            raise serializers.ValidationError(
+                {
+                    "producto": "El producto no corresponde al tipo de cliente. "
+                    "Usa un producto de persona natural o de empresa."
                 }
             )
         if direccion and cliente and direccion.cliente_id != cliente.id:

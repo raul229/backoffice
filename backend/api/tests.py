@@ -314,6 +314,20 @@ class ApiEndpointsTests(APITestCase):
         )
         self.assertEqual(created.status_code, status.HTTP_201_CREATED)
         self.assertEqual(created.data["nombre"], "FIBRA 300")
+        self.assertEqual(created.data["tipo_cliente"], TipoCliente.PERSONA)
+
+        empresa = self.client.post(
+            "/api/productos/",
+            {
+                "nombre": "fibra empresa",
+                "velocidad": 600,
+                "precio": "129.90",
+                "tipo_cliente": TipoCliente.EMPRESA,
+            },
+            format="json",
+        )
+        self.assertEqual(empresa.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(empresa.data["tipo_cliente"], TipoCliente.EMPRESA)
 
         updated = self.client.patch(
             f"/api/productos/{created.data['id']}/",
@@ -342,6 +356,20 @@ class ApiEndpointsTests(APITestCase):
 
         deleted = self.client.delete(f"/api/promociones/{promo.data['id']}/")
         self.assertEqual(deleted.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_venta_rejects_producto_of_other_client_type(self):
+        cliente = Cliente.objects.create(tipo=TipoCliente.EMPRESA)
+        producto = Producto.objects.create(
+            nombre="Fibra casa", velocidad=100, precio=70, tipo_cliente=TipoCliente.PERSONA
+        )
+        flujo = Flujo.objects.create(nombre="Empresa", tipo_cliente=TipoCliente.EMPRESA)
+        response = self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("producto", response.data)
 
 
 class AuthAndPermissionsTests(APITestCase):
@@ -612,7 +640,9 @@ class LookupRucTests(APITestCase):
             numero="167",
             distrito="San Borja",
         )
-        producto = Producto.objects.create(nombre="Fibra", velocidad=200, precio=79)
+        producto = Producto.objects.create(
+            nombre="Fibra", velocidad=200, precio=79, tipo_cliente=TipoCliente.EMPRESA
+        )
         flujo = Flujo.objects.create(nombre="Empresa", tipo_cliente=TipoCliente.EMPRESA)
         promo = Promocion.objects.create(nombre="Promo", descripcion="x")
         venta = self.client.post(

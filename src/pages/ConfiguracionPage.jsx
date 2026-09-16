@@ -299,6 +299,7 @@ export default function ConfiguracionPage() {
             <thead>
               <tr className="text-slate-400">
                 <th>Producto</th>
+                <th>Tipo</th>
                 <th>Velocidad</th>
                 <th>Precio</th>
                 <th></th>
@@ -308,6 +309,7 @@ export default function ConfiguracionPage() {
               {productos.map((producto) => (
                 <tr key={producto.id}>
                   <td className="font-medium">{producto.nombre}</td>
+                  <td>{tipoClienteLabel(producto.tipo_cliente)}</td>
                   <td>{producto.velocidad} Mbps</td>
                   <td>S/ {producto.precio}</td>
                   <td className="text-right">
@@ -689,6 +691,7 @@ function ProductoFormModal({ producto, editing = true, onClose, onSave, onDelete
       nombre: producto?.nombre ?? '',
       velocidad: producto ? String(producto.velocidad) : '',
       precio: producto ? String(producto.precio) : '',
+      tipo_cliente: producto?.tipo_cliente ?? 'PERSONA',
     },
     validators: withSchema(productoFormSchema),
     onSubmit: ({ value }) =>
@@ -696,6 +699,7 @@ function ProductoFormModal({ producto, editing = true, onClose, onSave, onDelete
         nombre: value.nombre.trim(),
         velocidad: Number(value.velocidad),
         precio: value.precio.trim(),
+        tipo_cliente: value.tipo_cliente,
       }),
   })
 
@@ -704,6 +708,7 @@ function ProductoFormModal({ producto, editing = true, onClose, onSave, onDelete
       nombre: producto?.nombre ?? '',
       velocidad: producto ? String(producto.velocidad) : '',
       precio: producto ? String(producto.precio) : '',
+      tipo_cliente: producto?.tipo_cliente ?? 'PERSONA',
     })
   }, [form, producto])
 
@@ -748,6 +753,26 @@ function ProductoFormModal({ producto, editing = true, onClose, onSave, onDelete
           <label className="text-sm">
             <span className="mb-1 block text-slate-500">Nombre</span>
             <p className="font-medium">{producto.nombre}</p>
+          </label>
+        )}
+        {editing ? (
+          <Field form={form} name="tipo_cliente">
+            {(field) => (
+              <SelectField
+                field={field}
+                includeEmpty={false}
+                label="Tipo de cliente"
+                options={[
+                  { value: 'PERSONA', label: 'Persona Natural' },
+                  { value: 'EMPRESA', label: 'Persona Jurídica' },
+                ]}
+              />
+            )}
+          </Field>
+        ) : (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">Tipo de cliente</span>
+            <p>{tipoClienteLabel(producto.tipo_cliente)}</p>
           </label>
         )}
         {editing ? (

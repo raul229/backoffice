@@ -69,6 +69,7 @@ export const productoFormSchema = z.object({
     .regex(/^\d+$/, 'Solo se permiten números')
     .refine((value) => Number(value) > 0, 'La velocidad debe ser mayor a 0'),
   precio: requiredText().regex(/^\d+(?:\.\d{1,2})?$/, 'Usa un precio válido, por ejemplo 99.90'),
+  tipo_cliente: z.enum(['PERSONA', 'EMPRESA']),
 })
 
 export const promocionFormSchema = z.object({
