@@ -58,7 +58,7 @@ function pasoColor(estado) {
 }
 
 export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
-  const { can } = useAuth()
+  const { user, can } = useAuth()
   const [editing, setEditing] = useState(false)
   const [confirm, setConfirm] = useState(null)
   const [comentario, setComentario] = useState('')
