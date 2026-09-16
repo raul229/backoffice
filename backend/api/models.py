@@ -209,5 +209,21 @@ class VentaPaso(models.Model):
     venta=models.ForeignKey(Venta, on_delete=models.CASCADE)
     flujo_paso=models.ForeignKey(FlujoPaso, on_delete=models.CASCADE)
     estado=models.CharField(max_length=20, choices=EstadoPaso.choices, default=EstadoPaso.PENDIENTE)
+
+
+class VentaComentario(models.Model):
+    venta = models.ForeignKey(Venta, on_delete=models.CASCADE, related_name="comentarios")
+    texto = models.TextField()
+    fecha = models.DateTimeField(auto_now_add=True)
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="comentarios_venta",
+    )
+
+    class Meta:
+        ordering = ["fecha"]
     
 

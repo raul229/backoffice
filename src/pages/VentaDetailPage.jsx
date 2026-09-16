@@ -4,7 +4,8 @@ import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
-import { getVenta, getFlujos, updateVenta, updateVentaPaso, deleteVenta } from '../service/api.js'
+import { getVenta, getFlujos, updateVenta, updateVentaPaso, deleteVenta, createVentaComentario } from '../service/api.js'
+import { displayName } from '../lib/auth.js'
 import {
   celularCliente,
   documentoCliente,
@@ -57,9 +58,10 @@ function pasoColor(estado) {
 }
 
 export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
-  const { can } = useAuth()
+  const { can, user } = useAuth()
   const [editing, setEditing] = useState(false)
   const [confirm, setConfirm] = useState(null)
+  const [comentario, setComentario] = useState('')
   const queryClient = useQueryClient()
   const { isPending, isError, error, data: venta } = useQuery({
     queryKey: ['venta', ventaId],
@@ -80,6 +82,14 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   const ventaMutation = useMutation({
     mutationFn: (payload) => updateVenta(ventaId, payload),
     onSuccess: invalidate,
+  })
+
+  const comentarioMutation = useMutation({
+    mutationFn: (texto) => createVentaComentario({ venta: ventaId, texto }),
+    onSuccess: () => {
+      setComentario('')
+      invalidate()
+    },
   })
 
   const deleteMutation = useMutation({
@@ -119,7 +129,13 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   const canChangePaso = can('api.change_ventapaso')
   const canDeleteVenta = can('api.delete_venta')
   const canEditCodigos = can('api.change_venta_codigos')
-  const saving = pasoMutation.isPending || ventaMutation.isPending || deleteMutation.isPending
+  const canAddComentario = can('api.add_ventacomentario')
+  const comentarios = venta.comentarios ?? []
+  const saving =
+    pasoMutation.isPending ||
+    ventaMutation.isPending ||
+    deleteMutation.isPending ||
+    comentarioMutation.isPending
   const showVentaSelects = editing && canChangeVenta
   const showPasoSelects = editing && canChangePaso
 
@@ -172,6 +188,11 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
       {ventaMutation.isError ? (
         <div className="alert alert-error">
           <span>{ventaMutation.error.message}</span>
+        </div>
+      ) : null}
+      {comentarioMutation.isError ? (
+        <div className="alert alert-error">
+          <span>{comentarioMutation.error.message}</span>
         </div>
       ) : null}
       {deleteMutation.isError ? (
@@ -311,6 +332,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
       </section>
       ) : null}
 
+      <div className="grid items-start gap-4 lg:grid-cols-2">
       <section className="bo-card p-4 sm:p-5">
         <h2 className="mb-4 font-semibold">Historial de la venta</h2>
         <ol className="relative ml-3 border-l border-slate-200">
@@ -318,16 +340,16 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
             const nombre = paso.flujo_paso_detalle?.paso_detalle?.nombre ?? `Paso ${paso.id}`
             const descripcion = paso.flujo_paso_detalle?.paso_detalle?.descripcion
             return (
-              <li key={paso.id} className="mb-6 ml-6">
+              <li key={paso.id} className="mb-6 ml-6 last:mb-0">
                 <span className={`absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full ${pasoColor(paso.estado)}`} />
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
                     <p className="font-medium">{nombre}</p>
                     {descripcion ? <p className="text-sm text-slate-500">{descripcion}</p> : null}
                   </div>
                   {showPasoSelects ? (
                   <select
-                    className="select select-bordered select-sm w-full sm:w-44"
+                    className="select select-bordered select-sm w-36 shrink-0 sm:w-40"
                     disabled={saving}
                     onChange={(event) => pasoMutation.mutate({ id: paso.id, estado: event.target.value })}
                     value={paso.estado}
@@ -339,7 +361,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
                     ))}
                   </select>
                   ) : (
-                    <span className="text-xs text-slate-500">{paso.estado}</span>
+                    <span className="shrink-0 pt-0.5 text-xs text-slate-500">{paso.estado}</span>
                   )}
                 </div>
               </li>
@@ -347,6 +369,60 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
           })}
         </ol>
       </section>
+
+      <section className="bo-card flex min-h-0 flex-col p-4 sm:p-5">
+        <h2 className="mb-1 font-semibold">Comentarios</h2>
+        <p className="mb-4 text-sm text-slate-500">Notas para el ejecutivo y el equipo, fuera del flujo.</p>
+        <div className="mb-4 max-h-72 space-y-3 overflow-y-auto">
+          {comentarios.length === 0 ? (
+            <p className="text-sm text-slate-500">Aún no hay comentarios.</p>
+          ) : (
+            comentarios.map((item) => (
+              <article key={item.id} className="rounded-lg bg-slate-50 p-3">
+                <p className="text-xs text-slate-500">
+                  {displayName(item.creado_por_detalle) || 'Usuario'}
+                  {item.creado_por === user?.id ? ' (tú)' : ''}
+                  {' · '}
+                  {formatFecha(item.fecha)}
+                </p>
+                <p className="mt-1 whitespace-pre-wrap text-sm">{item.texto}</p>
+              </article>
+            ))
+          )}
+        </div>
+        {canAddComentario ? (
+          <form
+            className="mt-auto space-y-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              const texto = comentario.trim()
+              if (!texto || saving) return
+              comentarioMutation.mutate(texto)
+            }}
+          >
+            <label className="block text-sm">
+              <span className="mb-1 block text-slate-400">Comentario</span>
+              <textarea
+                className="textarea textarea-bordered w-full text-sm"
+                disabled={saving}
+                maxLength={2000}
+                onChange={(event) => setComentario(event.target.value)}
+                placeholder="Ej. Observado por las firmas. El cliente no contesta al agendamiento."
+                rows={3}
+                value={comentario}
+              />
+            </label>
+            <button
+              type="submit"
+              className="btn border-none bg-blue-600 text-white"
+              disabled={saving || !comentario.trim()}
+            >
+              Agregar comentario
+            </button>
+          </form>
+        ) : null}
+      </section>
+      </div>
     </Modal>
     {confirm?.type === 'delete' ? (
       <ConfirmModal

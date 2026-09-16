@@ -19,6 +19,7 @@ from .models import (
     Promocion,
     PromocionVenta,
     Venta,
+    VentaComentario,
     VentaPaso,
 )
 from .workflow import sync_ventas_con_flujo
@@ -35,6 +36,7 @@ from .serializers import (
     PromocionSerializer,
     PromocionVentaSerializer,
     VENTA_CODIGO_FIELDS,
+    VentaComentarioSerializer,
     VentaPasoSerializer,
     VentaSerializer,
     serialize_choices,
@@ -163,7 +165,11 @@ class VentaViewSet(AuthenticatedModelViewSet):
             "creado_por",
             "direccion",
         )
-        .prefetch_related("promociones", "ventapaso_set__flujo_paso__paso")
+        .prefetch_related(
+            "promociones",
+            "ventapaso_set__flujo_paso__paso",
+            "comentarios__creado_por",
+        )
         .all()
     )
     serializer_class = VentaSerializer
@@ -208,6 +214,22 @@ class VentaPasoViewSet(AuthenticatedModelViewSet):
         if user.is_superuser or user.has_perm("api.view_all_ventas"):
             return queryset
         return queryset.filter(venta__creado_por=user)
+
+
+class VentaComentarioViewSet(AuthenticatedModelViewSet):
+    http_method_names = ["get", "post", "head", "options"]
+    queryset = VentaComentario.objects.select_related("venta", "creado_por").order_by("fecha")
+    serializer_class = VentaComentarioSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = self.request.user
+        if user.is_superuser or user.has_perm("api.view_all_ventas"):
+            return queryset
+        return queryset.filter(venta__creado_por=user)
+
+    def perform_create(self, serializer):
+        serializer.save(creado_por=self.request.user)
 
 
 @api_view(["GET"])

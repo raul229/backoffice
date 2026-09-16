@@ -523,6 +523,75 @@ class AuthAndPermissionsTests(APITestCase):
         )
         self.assertEqual(forbidden.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_asesor_and_operaciones_can_comment_on_historial(self):
+        grupo = Group.objects.get(name="Asesor")
+        ana = User.objects.create_user("ana_nota", password="secret", first_name="Ana")
+        ana.groups.add(grupo)
+        marta = User.objects.create_user("marta_nota", password="secret", first_name="Marta")
+        marta.groups.add(Group.objects.get(name="Operaciones"))
+
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        producto = Producto.objects.create(nombre="Fibra 50", velocidad=50, precio=40)
+        flujo = Flujo.objects.create(nombre="Flujo notas", tipo_cliente=TipoCliente.PERSONA)
+        paso = Paso.objects.create(nombre="Uno", descripcion="Uno")
+        FlujoPaso.objects.create(flujo=flujo, paso=paso, orden=1)
+
+        self.client.force_authenticate(ana)
+        created = self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(created.data["comentarios"], [])
+        venta_id = created.data["id"]
+
+        empty = self.client.post(
+            "/api/venta-comentarios/",
+            {"venta": venta_id, "texto": "   "},
+            format="json",
+        )
+        self.assertEqual(empty.status_code, status.HTTP_400_BAD_REQUEST)
+
+        ana_nota = self.client.post(
+            "/api/venta-comentarios/",
+            {"venta": venta_id, "texto": "El cliente no contesta al agendamiento."},
+            format="json",
+        )
+        self.assertEqual(ana_nota.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(ana_nota.data["texto"], "El cliente no contesta al agendamiento.")
+        self.assertEqual(ana_nota.data["creado_por"], ana.id)
+
+        Venta.objects.filter(id=venta_id).update(creado_por=marta)
+        self.client.force_authenticate(marta)
+        marta_nota = self.client.post(
+            "/api/venta-comentarios/",
+            {"venta": venta_id, "texto": "Observado por las firmas."},
+            format="json",
+        )
+        self.assertEqual(marta_nota.status_code, status.HTTP_201_CREATED)
+
+        detalle = self.client.get(f"/api/ventas/{venta_id}/")
+        self.assertEqual(detalle.status_code, status.HTTP_200_OK)
+        textos = [item["texto"] for item in detalle.data["comentarios"]]
+        self.assertEqual(
+            textos,
+            [
+                "El cliente no contesta al agendamiento.",
+                "Observado por las firmas.",
+            ],
+        )
+
+        luis = User.objects.create_user("luis_nota", password="secret")
+        luis.groups.add(grupo)
+        self.client.force_authenticate(luis)
+        forbidden = self.client.post(
+            "/api/venta-comentarios/",
+            {"venta": venta_id, "texto": "No debería poder."},
+            format="json",
+        )
+        self.assertEqual(forbidden.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_asesor_cannot_delete_flujo_paso(self):
         group = Group.objects.get(name="Asesor")
         user = User.objects.create_user("ana", password="secret")

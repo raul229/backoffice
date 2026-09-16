@@ -341,3 +341,10 @@ export function updateVentaPaso(id, payload) {
     body: JSON.stringify(payload),
   });
 }
+
+export function createVentaComentario(payload) {
+  return request("/venta-comentarios/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}

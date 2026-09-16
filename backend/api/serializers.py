@@ -20,6 +20,7 @@ from .models import (
     TipoDireccion,
     TipoDocumento,
     Venta,
+    VentaComentario,
     VentaPaso,
 )
 
@@ -241,6 +242,45 @@ class VentaPasoSerializer(serializers.ModelSerializer):
         fields = ["id", "venta", "flujo_paso", "flujo_paso_detalle", "estado"]
 
 
+class VentaComentarioSerializer(serializers.ModelSerializer):
+    creado_por_detalle = serializers.SerializerMethodField()
+
+    class Meta:
+        model = VentaComentario
+        fields = ["id", "venta", "texto", "fecha", "creado_por", "creado_por_detalle"]
+        read_only_fields = ["fecha", "creado_por"]
+
+    def get_creado_por_detalle(self, obj):
+        user = obj.creado_por
+        if not user:
+            return None
+        return {
+            "id": user.id,
+            "username": user.username,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+        }
+
+    def validate_texto(self, value):
+        texto = (value or "").strip()
+        if not texto:
+            raise serializers.ValidationError("Escribe un comentario.")
+        if len(texto) > 2000:
+            raise serializers.ValidationError("El comentario es demasiado largo.")
+        return texto
+
+    def validate_venta(self, venta):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user is None or not user.is_authenticated:
+            raise serializers.ValidationError("No puedes comentar esta venta.")
+        if user.is_superuser or user.has_perm("api.view_all_ventas"):
+            return venta
+        if venta.creado_por_id != user.id:
+            raise serializers.ValidationError("No puedes comentar esta venta.")
+        return venta
+
+
 class VentaSerializer(serializers.ModelSerializer):
     cliente_detalle = ClienteSerializer(source="cliente", read_only=True)
     direccion_detalle = DireccionSerializer(source="direccion", read_only=True)
@@ -253,6 +293,7 @@ class VentaSerializer(serializers.ModelSerializer):
         source="promociones", many=True, read_only=True
     )
     pasos = serializers.SerializerMethodField()
+    comentarios = serializers.SerializerMethodField()
     creado_por = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
@@ -280,6 +321,7 @@ class VentaSerializer(serializers.ModelSerializer):
             "numero_fijo",
             "numero_orden",
             "pasos",
+            "comentarios",
             "creado_por",
         ]
         read_only_fields = ["fecha", "creado_por"]
@@ -322,6 +364,10 @@ class VentaSerializer(serializers.ModelSerializer):
             "flujo_paso__orden"
         )
         return VentaPasoSerializer(venta_pasos, many=True).data
+
+    def get_comentarios(self, obj):
+        comentarios = obj.comentarios.select_related("creado_por").order_by("fecha")
+        return VentaComentarioSerializer(comentarios, many=True).data
 
     @transaction.atomic
     def create(self, validated_data):

@@ -15,6 +15,7 @@ from .views import (
     ProductoViewSet,
     PromocionVentaViewSet,
     PromocionViewSet,
+    VentaComentarioViewSet,
     VentaPasoViewSet,
     VentaViewSet,
     choices,
@@ -33,6 +34,7 @@ router.register("flujo-pasos", FlujoPasoViewSet)
 router.register("ventas", VentaViewSet)
 router.register("promocion-ventas", PromocionVentaViewSet)
 router.register("venta-pasos", VentaPasoViewSet)
+router.register("venta-comentarios", VentaComentarioViewSet)
 
 urlpatterns = [
     path("", include(router.urls)),

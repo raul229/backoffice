@@ -20,6 +20,8 @@ PERMISSION_CATALOG = [
             ("api.delete_venta", "Eliminar ventas"),
             ("api.view_ventapaso", "Ver historial de pasos"),
             ("api.change_ventapaso", "Cambiar estado de un paso"),
+            ("api.view_ventacomentario", "Ver comentarios del historial"),
+            ("api.add_ventacomentario", "Comentar en el historial de una venta"),
         ],
     },
     {
