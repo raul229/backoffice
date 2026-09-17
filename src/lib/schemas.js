@@ -84,9 +84,10 @@ export const direccionFormSchema = z.object({
   numero: requiredText(),
   distrito: requiredText(),
   urbanizacion: z.string(),
-  manzana: z.string(),
-  lote: z.string(),
   interior: z.string(),
+  tienda: z.string(),
+  piso: z.string(),
+  galeria: z.string(),
   referencia: z.string(),
 })
 
@@ -152,6 +153,7 @@ const nuevaVentaBase = {
   nombres: requiredText(),
   apellidos: requiredText(),
   celular: digitCode(9, 'El celular debe tener 9 dígitos'),
+  correo: requiredText('El correo de facturación es obligatorio').email('Usa un correo válido'),
   distrito_nacimiento: z.string(),
   padre: z.string(),
   madre: z.string(),
@@ -162,9 +164,10 @@ const nuevaVentaBase = {
   numero: requiredText(),
   distrito: requiredText(),
   urbanizacion: z.string(),
-  manzana: z.string(),
-  lote: z.string(),
   interior: z.string(),
+  tienda: z.string(),
+  piso: z.string(),
+  galeria: z.string(),
   referencia: z.string(),
 }
 

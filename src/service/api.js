@@ -286,6 +286,13 @@ export function createPersona(payload) {
   });
 }
 
+export function updateCliente(id, payload) {
+  return request(`/clientes/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function createEmpresa(payload) {
   return request("/empresas/", {
     method: "POST",

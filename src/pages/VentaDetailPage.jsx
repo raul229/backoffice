@@ -8,6 +8,7 @@ import { getVenta, getFlujos, getAsesores, updateVenta, updateVentaPaso, deleteV
 import { displayName } from '../lib/auth.js'
 import {
   celularCliente,
+  correoCliente,
   documentoCliente,
   flujosPorTipo,
   formatDireccion,
@@ -20,6 +21,20 @@ import {
 
 const PASO_ESTADOS = ['PENDIENTE', 'EN_PROCESO', 'OBSERVADO', 'SUBSANANDO', 'APROBADO', 'RECHAZADO']
 const VENTA_ESTADOS = ['EN_PROCESO', 'INSTALADO', 'ANULADO']
+
+function hasValue(value) {
+  return value != null && String(value).trim() !== ''
+}
+
+function InfoItem({ label, value, className = '' }) {
+  if (!hasValue(value)) return null
+  return (
+    <div className={className}>
+      <dt className="text-slate-400">{label}</dt>
+      <dd className="font-medium">{value}</dd>
+    </div>
+  )
+}
 
 function CodigoField({ label, hint, value, disabled, onSave }) {
   const [draft, setDraft] = useState(value ?? '')
@@ -125,8 +140,10 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   }
 
   const cliente = venta.cliente_detalle
+  const persona = cliente?.persona
+  const empresa = cliente?.empresa
   const direccion = venta.direccion_detalle
-  const representante = cliente?.empresa?.representante_legal_detalle
+  const representante = empresa?.representante_legal_detalle
   const pasos = [...(venta.pasos ?? [])].sort(
     (a, b) => (a.flujo_paso_detalle?.orden ?? 0) - (b.flujo_paso_detalle?.orden ?? 0),
   )
@@ -211,10 +228,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
         <section className="bo-card p-4 sm:p-5">
           <h2 className="mb-4 font-semibold">Información general</h2>
           <dl className="grid grid-cols-1 gap-x-4 gap-y-3 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-slate-400">Cliente</dt>
-              <dd className="font-medium">{nombreCliente(cliente)}</dd>
-            </div>
+            <InfoItem label="Cliente" value={nombreCliente(cliente)} />
             <div>
               <dt className="mb-1 text-slate-400">Asesor</dt>
               <dd>
@@ -247,31 +261,32 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
                 )}
               </dd>
             </div>
-            <div>
-              <dt className="text-slate-400">Tipo</dt>
-              <dd>{tipoClienteLabel(cliente?.tipo)}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-400">Documento</dt>
-              <dd>{documentoCliente(cliente) || '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-400">Celular</dt>
-              <dd>{celularCliente(cliente) || '—'}</dd>
-            </div>
-            {representante ? (
-              <div className="col-span-2">
-                <dt className="text-slate-400">Representante legal</dt>
-                <dd>
-                  {representante.nombres} {representante.apellidos} · {representante.tipo_documento}{' '}
-                  {representante.numero_documento}
-                </dd>
-              </div>
+            {/*<InfoItem label="Tipo" value={tipoClienteLabel(cliente?.tipo)} />*/}
+            <InfoItem
+              label="Documento"
+              value={
+                cliente?.tipo === 'PERSONA' && persona?.tipo_documento
+                  ? `${persona.tipo_documento} ${documentoCliente(cliente)}`
+                  : documentoCliente(cliente)
+              }
+            />
+            <InfoItem label="Celular" value={celularCliente(cliente)} />
+            <InfoItem label="Correo de facturación" value={correoCliente(cliente)} />
+            {cliente?.tipo === 'PERSONA' ? (
+              <>
+                <InfoItem label="Distrito de nacimiento" value={persona?.distrito_nacimiento} />
+                <InfoItem label="Padre" value={persona?.padre} />
+                <InfoItem label="Madre" value={persona?.madre} />
+              </>
             ) : null}
-            <div className="col-span-2">
-              <dt className="text-slate-400">Dirección</dt>
-              <dd>{direccion ? formatDireccion(direccion) : 'Sin dirección'}</dd>
-            </div>
+            {representante ? (
+              <InfoItem
+                className="col-span-2"
+                label="Representante legal"
+                value={`${representante.nombres} ${representante.apellidos} · ${representante.tipo_documento} ${representante.numero_documento}`}
+              />
+            ) : null}
+            <InfoItem className="col-span-2" label="Dirección" value={direccion ? formatDireccion(direccion) : ''} />
           </dl>
         </section>
 

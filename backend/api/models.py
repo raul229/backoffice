@@ -8,6 +8,7 @@ class TipoCliente(models.TextChoices):
 
 class Cliente(models.Model):
     tipo = models.CharField(max_length=20, choices=TipoCliente.choices)
+    correo = models.EmailField(max_length=254, default="")
     
     @property
     def nombre(self):
@@ -63,9 +64,10 @@ class Direccion(models.Model):
     numero = models.CharField(max_length=10)
     distrito = models.CharField(max_length=100)
     urbanizacion = models.CharField(max_length=100, blank=True)
-    manzana = models.CharField(max_length=10, blank=True)
-    lote = models.CharField(max_length=10, blank=True)
     interior = models.CharField(max_length=20, blank=True)
+    tienda = models.CharField(max_length=30, blank=True)
+    piso = models.CharField(max_length=20, blank=True)
+    galeria = models.CharField(max_length=100, blank=True)
     referencia = models.CharField(max_length=200, blank=True)
 
     class Meta:
@@ -78,10 +80,10 @@ class Direccion(models.Model):
                     "numero",
                     "distrito",
                     "urbanizacion",
-                    "manzana",
-                    "lote",
                     "interior",
-                    
+                    "tienda",
+                    "piso",
+                    "galeria",
                 ],
                 name="unique_direccion_cliente",
             )

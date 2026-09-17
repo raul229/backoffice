@@ -14,6 +14,7 @@ import {
 import { direccionFormSchema, withSchema } from '../lib/schemas.js'
 import {
   celularCliente,
+  correoCliente,
   documentoCliente,
   formatDireccion,
   nombreCliente,
@@ -91,7 +92,7 @@ export default function ClientesPage({ search }) {
   const query = search.trim().toLowerCase()
   const filtered = (clientes ?? []).filter((cliente) => {
     if (!query) return true
-    return `${nombreCliente(cliente)} ${documentoCliente(cliente)} ${cliente.tipo}`
+    return `${nombreCliente(cliente)} ${documentoCliente(cliente)} ${correoCliente(cliente)} ${cliente.tipo}`
       .toLowerCase()
       .includes(query)
   })
@@ -165,6 +166,7 @@ export default function ClientesPage({ search }) {
                   <th>Cliente</th>
                   <th>Tipo</th>
                   <th>Documento</th>
+                  <th>Correo</th>
                   <th>Contacto</th>
                   <th></th>
                 </tr>
@@ -172,11 +174,11 @@ export default function ClientesPage({ search }) {
               <tbody>
                 {isPending ? (
                   <tr>
-                    <td colSpan={5}>Cargando clientes...</td>
+                    <td colSpan={6}>Cargando clientes...</td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={5}>No hay clientes para mostrar.</td>
+                    <td colSpan={6}>No hay clientes para mostrar.</td>
                   </tr>
                 ) : (
                   filtered.map((cliente) => (
@@ -184,6 +186,7 @@ export default function ClientesPage({ search }) {
                       <td className="font-medium">{nombreCliente(cliente)}</td>
                       <td>{tipoClienteLabel(cliente.tipo)}</td>
                       <td>{documentoCliente(cliente) || '—'}</td>
+                      <td>{correoCliente(cliente) || '—'}</td>
                       <td>{celularCliente(cliente) || '—'}</td>
                       <td className="text-right">
                         <button
@@ -401,28 +404,59 @@ function ClienteModal({
           <dt className="text-slate-400">Tipo</dt>
           <dd>{tipoClienteLabel(cliente.tipo)}</dd>
         </div>
-        <div>
-          <dt className="text-slate-400">Documento</dt>
-          <dd>{documentoCliente(cliente) || '—'}</dd>
-        </div>
+        {documentoCliente(cliente) ? (
+          <div>
+            <dt className="text-slate-400">Documento</dt>
+            <dd>
+              {persona?.tipo_documento ? `${persona.tipo_documento} ` : ''}
+              {documentoCliente(cliente)}
+            </dd>
+          </div>
+        ) : null}
+        {correoCliente(cliente) ? (
+          <div>
+            <dt className="text-slate-400">Correo de facturación</dt>
+            <dd>{correoCliente(cliente)}</dd>
+          </div>
+        ) : null}
         {persona ? (
           <>
-            <div>
-              <dt className="text-slate-400">Nombres</dt>
-              <dd>{persona.nombres}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-400">Apellidos</dt>
-              <dd>{persona.apellidos}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-400">Celular</dt>
-              <dd>{persona.celular || '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-400">Distrito de nacimiento</dt>
-              <dd>{persona.distrito_nacimiento || '—'}</dd>
-            </div>
+            {persona.nombres ? (
+              <div>
+                <dt className="text-slate-400">Nombres</dt>
+                <dd>{persona.nombres}</dd>
+              </div>
+            ) : null}
+            {persona.apellidos ? (
+              <div>
+                <dt className="text-slate-400">Apellidos</dt>
+                <dd>{persona.apellidos}</dd>
+              </div>
+            ) : null}
+            {persona.celular ? (
+              <div>
+                <dt className="text-slate-400">Celular</dt>
+                <dd>{persona.celular}</dd>
+              </div>
+            ) : null}
+            {cliente.tipo === 'PERSONA' && persona.distrito_nacimiento ? (
+              <div>
+                <dt className="text-slate-400">Distrito de nacimiento</dt>
+                <dd>{persona.distrito_nacimiento}</dd>
+              </div>
+            ) : null}
+            {cliente.tipo === 'PERSONA' && persona.padre ? (
+              <div>
+                <dt className="text-slate-400">Padre</dt>
+                <dd>{persona.padre}</dd>
+              </div>
+            ) : null}
+            {cliente.tipo === 'PERSONA' && persona.madre ? (
+              <div>
+                <dt className="text-slate-400">Madre</dt>
+                <dd>{persona.madre}</dd>
+              </div>
+            ) : null}
           </>
         ) : null}
         {empresa ? (
@@ -506,9 +540,10 @@ function emptyDireccion(clienteId = '') {
     numero: '',
     distrito: '',
     urbanizacion: '',
-    manzana: '',
-    lote: '',
     interior: '',
+    tienda: '',
+    piso: '',
+    galeria: '',
     referencia: '',
   }
 }
@@ -521,9 +556,10 @@ function direccionValues(direccion) {
     numero: direccion.numero ?? '',
     distrito: direccion.distrito ?? '',
     urbanizacion: direccion.urbanizacion ?? '',
-    manzana: direccion.manzana ?? '',
-    lote: direccion.lote ?? '',
     interior: direccion.interior ?? '',
+    tienda: direccion.tienda ?? '',
+    piso: direccion.piso ?? '',
+    galeria: direccion.galeria ?? '',
     referencia: direccion.referencia ?? '',
   }
 }
@@ -552,9 +588,10 @@ function DireccionFormModal({
         numero: value.numero.trim(),
         distrito: value.distrito.trim(),
         urbanizacion: value.urbanizacion.trim(),
-        manzana: value.manzana.trim(),
-        lote: value.lote.trim(),
         interior: value.interior.trim(),
+        tienda: value.tienda.trim(),
+        piso: value.piso.trim(),
+        galeria: value.galeria.trim(),
         referencia: value.referencia.trim(),
       }),
   })
@@ -645,43 +682,13 @@ function DireccionFormModal({
           </label>
         )}
         {editing ? (
-          <Field form={form} name="distrito">
-            {(field) => <TextField field={field} label="Distrito" normalize="upper" />}
+          <Field form={form} name="piso">
+            {(field) => <TextField field={field} label="Piso" normalize="upper" />}
           </Field>
-        ) : (
+        ) : direccion.piso ? (
           <label className="text-sm">
-            <span className="mb-1 block text-slate-500">Distrito</span>
-            <p>{direccion.distrito}</p>
-          </label>
-        )}
-        {editing ? (
-          <Field form={form} name="urbanizacion">
-            {(field) => <TextField field={field} label="Urbanización" normalize="upper" />}
-          </Field>
-        ) : direccion.urbanizacion ? (
-          <label className="text-sm">
-            <span className="mb-1 block text-slate-500">Urbanización</span>
-            <p>{direccion.urbanizacion}</p>
-          </label>
-        ) : null}
-        {editing ? (
-          <Field form={form} name="manzana">
-            {(field) => <TextField field={field} label="Manzana" normalize="upper" />}
-          </Field>
-        ) : direccion.manzana ? (
-          <label className="text-sm">
-            <span className="mb-1 block text-slate-500">Manzana</span>
-            <p>{direccion.manzana}</p>
-          </label>
-        ) : null}
-        {editing ? (
-          <Field form={form} name="lote">
-            {(field) => <TextField field={field} label="Lote" normalize="upper" />}
-          </Field>
-        ) : direccion.lote ? (
-          <label className="text-sm">
-            <span className="mb-1 block text-slate-500">Lote</span>
-            <p>{direccion.lote}</p>
+            <span className="mb-1 block text-slate-500">Piso</span>
+            <p>{direccion.piso}</p>
           </label>
         ) : null}
         {editing ? (
@@ -694,6 +701,46 @@ function DireccionFormModal({
             <p>{direccion.interior}</p>
           </label>
         ) : null}
+        {editing ? (
+          <Field form={form} name="tienda">
+            {(field) => <TextField field={field} label="Tienda" normalize="upper" />}
+          </Field>
+        ) : direccion.tienda ? (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">Tienda</span>
+            <p>{direccion.tienda}</p>
+          </label>
+        ) : null}
+        {editing ? (
+          <Field form={form} name="galeria">
+            {(field) => <TextField field={field} label="Galería o centro comercial" normalize="upper" />}
+          </Field>
+        ) : direccion.galeria ? (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">Galería o centro comercial</span>
+            <p>{direccion.galeria}</p>
+          </label>
+        ) : null}
+        {editing ? (
+          <Field form={form} name="urbanizacion">
+            {(field) => <TextField field={field} label="Urbanización" normalize="upper" />}
+          </Field>
+        ) : direccion.urbanizacion ? (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">Urbanización</span>
+            <p>{direccion.urbanizacion}</p>
+          </label>
+        ) : null}
+        {editing ? (
+          <Field form={form} name="distrito">
+            {(field) => <TextField field={field} label="Distrito" normalize="upper" />}
+          </Field>
+        ) : (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">Distrito</span>
+            <p>{direccion.distrito}</p>
+          </label>
+        )}
         {editing ? (
           <Field form={form} name="referencia">
             {(field) => (

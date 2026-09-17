@@ -16,6 +16,7 @@ import {
   getPromociones,
   lookupDireccion,
   lookupRuc,
+  updateCliente,
 } from '../service/api.js'
 import { parseDireccion } from '../lib/address.js'
 import { DOCUMENT_LENGTH, digitCode, nuevaVentaClienteSchema, nuevaVentaSchema, requiredText, validateDocumentNumber } from '../lib/schemas.js'
@@ -28,6 +29,7 @@ const defaultValues = {
   nombres: '',
   apellidos: '',
   celular: '',
+  correo: '',
   distrito_nacimiento: '',
   padre: '',
   madre: '',
@@ -38,9 +40,10 @@ const defaultValues = {
   numero: '',
   distrito: '',
   urbanizacion: '',
-  manzana: '',
-  lote: '',
   interior: '',
+  tienda: '',
+  piso: '',
+  galeria: '',
   referencia: '',
   producto: '',
   flujo: '',
@@ -58,6 +61,7 @@ function personaPayload(value) {
     padre: value.padre,
     madre: value.madre,
     celular: value.celular,
+    correo: value.correo.trim().toLowerCase(),
   }
 }
 
@@ -69,15 +73,16 @@ function direccionPayload(value, clienteId) {
     numero: value.numero,
     distrito: value.distrito,
     urbanizacion: value.urbanizacion,
-    manzana: value.manzana,
-    lote: value.lote,
     interior: value.interior,
+    tienda: value.tienda,
+    piso: value.piso,
+    galeria: value.galeria,
     referencia: value.referencia,
   }
 }
 
 function step0Fields(tipoCliente) {
-  const fields = ['ruc', 'numero_documento', 'nombres', 'apellidos', 'celular', 'direccion', 'numero', 'distrito']
+  const fields = ['ruc', 'numero_documento', 'nombres', 'apellidos', 'celular', 'correo', 'direccion', 'numero', 'distrito']
   if (tipoCliente === 'EMPRESA') {
     fields.splice(1, 0, 'razon_social')
   } else {
@@ -94,6 +99,7 @@ const LOOKUP_FIELDS = [
   'nombres',
   'apellidos',
   'celular',
+  'correo',
   'distrito_nacimiento',
   'padre',
   'madre',
@@ -102,9 +108,10 @@ const LOOKUP_FIELDS = [
   'numero',
   'distrito',
   'urbanizacion',
-  'manzana',
-  'lote',
   'interior',
+  'tienda',
+  'piso',
+  'galeria',
   'referencia',
   'producto',
   'flujo',
@@ -121,7 +128,7 @@ function cambiarTipoCliente(form, tipo, { lastRucLookup, setLookupStatus, setRep
 }
 
 function applyDireccion(form, data) {
-  for (const name of ['tipo_direccion', 'direccion', 'numero', 'distrito', 'urbanizacion', 'manzana', 'lote', 'interior', 'referencia']) {
+  for (const name of ['tipo_direccion', 'direccion', 'numero', 'distrito', 'urbanizacion', 'interior', 'tienda', 'piso', 'galeria', 'referencia']) {
     if (data[name] !== undefined) form.setFieldValue(name, data[name] ?? '')
   }
 }
@@ -163,12 +170,15 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
             ruc: value.ruc,
             razon_social: value.razon_social,
             representante_legal: representante.id,
+            correo: value.correo.trim().toLowerCase(),
           })
           clienteId = empresa.cliente
         } else {
           const persona = await createPersona(personaPayload(value))
           clienteId = persona.cliente
         }
+      } else {
+        await updateCliente(clienteId, { correo: value.correo.trim().toLowerCase() })
       }
       const direccion = await createDireccion(direccionPayload(value, clienteId))
       return createVenta({
@@ -507,6 +517,20 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                   <TextField field={field} inputMode="numeric" label="Celular" maxLength={9} />
                 )}
               </Field>
+              <Field
+                form={form}
+                name="correo"
+                validators={requiredText('El correo de facturación es obligatorio').email('Usa un correo válido')}
+              >
+                {(field) => (
+                  <TextField
+                    autoComplete="email"
+                    field={field}
+                    label="Correo de facturación"
+                    type="email"
+                  />
+                )}
+              </Field>
               {tipoCliente === 'PERSONA' ? (
                 <>
                   <Field form={form} name="distrito_nacimiento" validators={requiredText()}>
@@ -547,7 +571,7 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                     {direccionSugerencias.length > 0 ? (
                       <ul className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
                         {direccionSugerencias.map((item) => (
-                          <li key={`${item.tipo_direccion}-${item.direccion}-${item.numero}-${item.distrito}-${item.manzana}-${item.lote}-${item.interior}`}>
+                          <li key={`${item.tipo_direccion}-${item.direccion}-${item.numero}-${item.distrito}-${item.tienda}-${item.piso}-${item.galeria}-${item.interior}`}>
                             <button
                               type="button"
                               className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
@@ -572,17 +596,22 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
               <Field form={form} name="distrito" validators={requiredText()}>
                 {(field) => <TextField field={field} label="Distrito" normalize="upper" />}
               </Field>
-              <Field form={form} name="urbanizacion">
-                {(field) => <TextField field={field} label="Urbanización" normalize="upper" />}
-              </Field>
-              <Field form={form} name="manzana">
-                {(field) => <TextField field={field} label="Manzana" normalize="upper" />}
-              </Field>
-              <Field form={form} name="lote">
-                {(field) => <TextField field={field} label="Lote" normalize="upper" />}
+              <Field form={form} name="piso">
+                {(field) => <TextField field={field} label="Piso" normalize="upper" />}
               </Field>
               <Field form={form} name="interior">
                 {(field) => <TextField field={field} label="Interior" normalize="upper" />}
+              </Field>
+              <Field form={form} name="tienda">
+                {(field) => <TextField field={field} label="Tienda" normalize="upper" />}
+              </Field>
+              <Field form={form} name="galeria">
+                {(field) => (
+                  <TextField field={field} label="Galería o centro comercial" normalize="upper" />
+                )}
+              </Field>
+              <Field form={form} name="urbanizacion">
+                {(field) => <TextField field={field} label="Urbanización" normalize="upper" />}
               </Field>
               <Field form={form} name="referencia">
                 {(field) => <TextAreaField className="sm:col-span-2" field={field} label="Referencia" normalize="upper" rows={2} />}

@@ -32,9 +32,10 @@ def _direccion_form(direccion):
         "numero": direccion.numero,
         "distrito": direccion.distrito,
         "urbanizacion": direccion.urbanizacion,
-        "manzana": direccion.manzana,
-        "lote": direccion.lote,
         "interior": direccion.interior,
+        "tienda": direccion.tienda,
+        "piso": direccion.piso,
+        "galeria": direccion.galeria,
         "referencia": direccion.referencia,
     }
 
@@ -119,6 +120,7 @@ def lookup_ruc(request):
             cliente.tipo,
             cliente.id,
             razon_social=empresa.razon_social if empresa else "",
+            correo=cliente.correo,
             **_persona_form(persona),
             **_direccion_form(direccion),
             **_venta_form(venta),
@@ -169,9 +171,10 @@ def lookup_direccion(request):
             row.numero,
             row.distrito,
             row.urbanizacion,
-            row.manzana,
-            row.lote,
             row.interior,
+            row.tienda,
+            row.piso,
+            row.galeria,
             row.referencia,
         )
         if key in seen:
@@ -184,9 +187,10 @@ def lookup_direccion(request):
                 "numero": normalize_upper(row.numero),
                 "distrito": normalize_upper(row.distrito),
                 "urbanizacion": normalize_upper(row.urbanizacion),
-                "manzana": normalize_upper(row.manzana),
-                "lote": normalize_upper(row.lote),
                 "interior": normalize_upper(row.interior),
+                "tienda": normalize_upper(row.tienda),
+                "piso": normalize_upper(row.piso),
+                "galeria": normalize_upper(row.galeria),
                 "referencia": normalize_upper(row.referencia),
             }
         )
