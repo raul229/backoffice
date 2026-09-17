@@ -39,7 +39,7 @@ export default function LoginPage() {
           </span>
           <div>
             <h1 className="text-xl font-bold">Back Office</h1>
-            <p className="text-sm text-slate-500">Ingresa con tu usuario de Django</p>
+            <p className="text-sm text-slate-500">Forma sencilla se seguir tus ventas</p>
           </div>
         </div>
 
@@ -81,9 +81,6 @@ export default function LoginPage() {
             </button>
           )}
         </form.Subscribe>
-        <p className="mt-4 text-xs text-slate-500">
-          Roles: admin/admin123 · asesor/asesor123 · supervisor/supervisor123 · operaciones/operaciones123
-        </p>
       </form>
     </div>
   )
