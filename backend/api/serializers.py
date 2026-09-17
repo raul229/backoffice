@@ -57,6 +57,22 @@ def serialize_choices(choices):
     return [{"value": value, "label": label} for value, label in choices]
 
 
+def normalize_correo(value):
+    return (value or "").strip().lower()
+
+
+def cliente_con_correo(validated_data, tipo):
+    correo = normalize_correo(validated_data.pop("correo"))
+    cliente = validated_data.get("cliente")
+    if cliente is None:
+        validated_data["cliente"] = Cliente.objects.create(tipo=tipo, correo=correo)
+        return validated_data
+    if cliente.correo != correo:
+        cliente.correo = correo
+        cliente.save(update_fields=["correo"])
+    return validated_data
+
+
 class DireccionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Direccion
@@ -68,9 +84,10 @@ class DireccionSerializer(serializers.ModelSerializer):
             "numero",
             "distrito",
             "urbanizacion",
-            "manzana",
-            "lote",
             "interior",
+            "tienda",
+            "piso",
+            "galeria",
             "referencia",
         ]
         validators = []
@@ -78,7 +95,17 @@ class DireccionSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         uppercase_fields(
             attrs,
-            ["direccion", "numero", "distrito", "urbanizacion", "manzana", "lote", "interior", "referencia"],
+            [
+                "direccion",
+                "numero",
+                "distrito",
+                "urbanizacion",
+                "interior",
+                "tienda",
+                "piso",
+                "galeria",
+                "referencia",
+            ],
         )
         return attrs
 
@@ -90,9 +117,10 @@ class DireccionSerializer(serializers.ModelSerializer):
             "numero": validated_data.get("numero") or "",
             "distrito": validated_data.get("distrito") or "",
             "urbanizacion": validated_data.get("urbanizacion") or "",
-            "manzana": validated_data.get("manzana") or "",
-            "lote": validated_data.get("lote") or "",
             "interior": validated_data.get("interior") or "",
+            "tienda": validated_data.get("tienda") or "",
+            "piso": validated_data.get("piso") or "",
+            "galeria": validated_data.get("galeria") or "",
             "referencia": validated_data.get("referencia") or "",
         }
         try:
@@ -106,12 +134,14 @@ class PersonaSerializer(serializers.ModelSerializer):
     cliente = serializers.PrimaryKeyRelatedField(
         queryset=Cliente.objects.all(), required=False
     )
+    correo = serializers.EmailField(write_only=True)
 
     class Meta:
         model = Persona
         fields = [
             "id",
             "cliente",
+            "correo",
             "tipo_documento",
             "numero_documento",
             "nombres",
@@ -124,6 +154,8 @@ class PersonaSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         uppercase_fields(attrs, ["nombres", "apellidos", "distrito_nacimiento", "padre", "madre"])
+        if "correo" in attrs:
+            attrs["correo"] = normalize_correo(attrs["correo"])
         tipo = attrs.get("tipo_documento") or getattr(self.instance, "tipo_documento", None)
         numero = attrs.get("numero_documento") or getattr(self.instance, "numero_documento", "")
         expected = 8 if tipo == TipoDocumento.DNI else 9 if tipo == TipoDocumento.CE else None
@@ -140,10 +172,7 @@ class PersonaSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        cliente = validated_data.get("cliente")
-        if cliente is None:
-            cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
-            validated_data["cliente"] = cliente
+        cliente_con_correo(validated_data, TipoCliente.PERSONA)
         return super().create(validated_data)
 
 
@@ -154,12 +183,14 @@ class EmpresaSerializer(serializers.ModelSerializer):
     representante_legal_detalle = PersonaSerializer(
         source="representante_legal", read_only=True
     )
+    correo = serializers.EmailField(write_only=True)
 
     class Meta:
         model = Empresa
         fields = [
             "id",
             "cliente",
+            "correo",
             "ruc",
             "razon_social",
             "representante_legal",
@@ -168,13 +199,12 @@ class EmpresaSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         uppercase_fields(attrs, ["razon_social"])
+        if "correo" in attrs:
+            attrs["correo"] = normalize_correo(attrs["correo"])
         return attrs
 
     def create(self, validated_data):
-        cliente = validated_data.get("cliente")
-        if cliente is None:
-            cliente = Cliente.objects.create(tipo=TipoCliente.EMPRESA)
-            validated_data["cliente"] = cliente
+        cliente_con_correo(validated_data, TipoCliente.EMPRESA)
         return super().create(validated_data)
 
 
@@ -185,7 +215,16 @@ class ClienteSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Cliente
-        fields = ["id", "tipo", "persona", "empresa", "direcciones"]
+        fields = ["id", "tipo", "correo", "persona", "empresa", "direcciones"]
+        extra_kwargs = {
+            "tipo": {"read_only": True},
+        }
+
+    def validate_correo(self, value):
+        correo = normalize_correo(value)
+        if not correo:
+            raise serializers.ValidationError("El correo de facturación es obligatorio.")
+        return correo
 
     def get_direcciones(self, obj):
         return DireccionSerializer(obj.direccion_set.all(), many=True).data

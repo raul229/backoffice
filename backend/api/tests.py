@@ -29,6 +29,7 @@ class ApiEndpointsTests(APITestCase):
                 "padre": "Carlos",
                 "madre": "Maria",
                 "celular": "987654321",
+                "correo": "Ana.Perez@Example.COM",
             },
             format="json",
         )
@@ -36,6 +37,21 @@ class ApiEndpointsTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         cliente = Cliente.objects.get(id=response.data["cliente"])
         self.assertEqual(cliente.tipo, TipoCliente.PERSONA)
+        self.assertEqual(cliente.correo, "ana.perez@example.com")
+
+        missing = self.client.post(
+            "/api/personas/",
+            {
+                "tipo_documento": "DNI",
+                "numero_documento": "12345679",
+                "nombres": "Ana",
+                "apellidos": "Perez",
+                "celular": "987654321",
+            },
+            format="json",
+        )
+        self.assertEqual(missing.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("correo", missing.data)
 
     def test_create_persona_carnet_extranjeria_requires_nine_digits(self):
         response = self.client.post(
@@ -46,6 +62,7 @@ class ApiEndpointsTests(APITestCase):
                 "nombres": "Luis",
                 "apellidos": "Diaz",
                 "celular": "987654321",
+                "correo": "ana.perez@example.com",
             },
             format="json",
         )
@@ -59,6 +76,7 @@ class ApiEndpointsTests(APITestCase):
                 "nombres": "Luis",
                 "apellidos": "Diaz",
                 "celular": "987654321",
+                "correo": "ana.perez@example.com",
             },
             format="json",
         )
@@ -167,6 +185,7 @@ class ApiEndpointsTests(APITestCase):
                 "padre": "Pedro",
                 "madre": "Ana",
                 "celular": "999888777",
+                "correo": "luis.rojas@example.com",
             },
             format="json",
         )
@@ -176,6 +195,7 @@ class ApiEndpointsTests(APITestCase):
                 "ruc": "20123456789",
                 "razon_social": "Empresa SAC",
                 "representante_legal": persona.data["id"],
+                "correo": "facturacion@empresa.com",
             },
             format="json",
         )
@@ -183,6 +203,7 @@ class ApiEndpointsTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         cliente = Cliente.objects.get(id=response.data["cliente"])
         self.assertEqual(cliente.tipo, TipoCliente.EMPRESA)
+        self.assertEqual(cliente.correo, "facturacion@empresa.com")
 
     def test_venta_rejects_flujo_of_other_client_type(self):
         cliente = Cliente.objects.create(tipo=TipoCliente.EMPRESA)
@@ -1068,6 +1089,7 @@ class LookupRucTests(APITestCase):
                 "padre": "carlos",
                 "madre": "maria",
                 "celular": "987654321",
+                "correo": "ana.perez@example.com",
             },
             format="json",
         )
@@ -1120,7 +1142,7 @@ class LookupRucTests(APITestCase):
 
         other = self.client.post(
             "/api/direcciones/",
-            {**payload, "manzana": "A", "lote": "12", "interior": "2"},
+            {**payload, "tienda": "A-12", "piso": "2", "galeria": "centro lima", "interior": "2"},
             format="json",
         )
         self.assertEqual(other.status_code, status.HTTP_201_CREATED)

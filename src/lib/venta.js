@@ -43,6 +43,10 @@ export function celularCliente(cliente) {
   return cliente.persona?.celular ?? ''
 }
 
+export function correoCliente(cliente) {
+  return cliente?.correo ?? ''
+}
+
 export function documentoCliente(cliente) {
   if (!cliente) return ''
   if (cliente.tipo === 'EMPRESA') return cliente.empresa?.ruc ?? ''
@@ -52,10 +56,11 @@ export function documentoCliente(cliente) {
 export function formatDireccion(direccion) {
   if (!direccion) return 'Sin dirección'
   const extras = [
-    direccion.urbanizacion && `URB. ${direccion.urbanizacion}`,
-    direccion.manzana && `MZ. ${direccion.manzana}`,
-    direccion.lote && `LT. ${direccion.lote}`,
+    direccion.piso && `PISO ${direccion.piso}`,
     direccion.interior && `INT. ${direccion.interior}`,
+    direccion.tienda && `TIENDA ${direccion.tienda}`,
+    direccion.galeria && `GAL. ${direccion.galeria}`,
+    direccion.urbanizacion && `URB. ${direccion.urbanizacion}`,
     direccion.referencia,
   ].filter(Boolean)
   const base = `${direccion.tipo} ${direccion.direccion} ${direccion.numero}, ${direccion.distrito}`
@@ -172,6 +177,7 @@ export function matchesSearch(venta, query) {
     String(venta.id),
     nombreCliente(cliente),
     documentoCliente(cliente),
+    correoCliente(cliente),
     venta.producto_detalle?.nombre,
     venta.estado,
     venta.creado_por_detalle?.username,
