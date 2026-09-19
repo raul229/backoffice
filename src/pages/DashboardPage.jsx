@@ -117,14 +117,21 @@ export default function DashboardPage({
           />
         </section>
 
-        <aside className="bo-card p-4 sm:p-5">
+        <aside
+          className="bo-card p-4 sm:p-5"
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape') return
+            event.preventDefault()
+            onFilters({ search: '', estado: 'TODOS', tipo: 'TODOS', desde: '', hasta: '' })
+          }}
+        >
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Filtros</h2>
             <button
               type="button"
               className="text-xs text-blue-600"
               onClick={() =>
-                onFilters({ search: filters.search, estado: 'TODOS', tipo: 'TODOS', desde: '', hasta: '' })
+                onFilters({ search: '', estado: 'TODOS', tipo: 'TODOS', desde: '', hasta: '' })
               }
             >
               Limpiar filtros
@@ -136,6 +143,11 @@ export default function DashboardPage({
             <input
               className="input input-bordered w-full"
               onChange={(event) => onFilters({ ...filters, search: event.target.value })}
+              onKeyDown={(event) => {
+                if (event.key !== 'Escape') return
+                event.preventDefault()
+                onFilters({ ...filters, search: '' })
+              }}
               placeholder="Venta, cliente, asesor, PSI, SIRO, orden..."
               value={filters.search}
             />
