@@ -53,6 +53,42 @@ class ApiEndpointsTests(APITestCase):
         self.assertEqual(missing.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("correo", missing.data)
 
+    def test_update_persona_parents_and_birth(self):
+        created = self.client.post(
+            "/api/personas/",
+            {
+                "tipo_documento": "DNI",
+                "numero_documento": "12345670",
+                "nombres": "Ana",
+                "apellidos": "Perez",
+                "celular": "987654321",
+                "correo": "ana.perez@example.com",
+            },
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(created.data["padre"], "")
+        self.assertEqual(created.data["madre"], "")
+        self.assertEqual(created.data["distrito_nacimiento"], "")
+
+        response = self.client.patch(
+            f"/api/personas/{created.data['id']}/",
+            {
+                "padre": "carlos perez",
+                "madre": "maria lopez",
+                "distrito_nacimiento": "lince",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["padre"], "CARLOS PEREZ")
+        self.assertEqual(response.data["madre"], "MARIA LOPEZ")
+        self.assertEqual(response.data["distrito_nacimiento"], "LINCE")
+        self.assertEqual(response.data["nombres"], "ANA")
+        cliente = self.client.get(f"/api/clientes/{created.data['cliente']}/")
+        self.assertEqual(cliente.data["correo"], "ana.perez@example.com")
+        self.assertEqual(cliente.data["persona"]["padre"], "CARLOS PEREZ")
+
     def test_create_persona_carnet_extranjeria_requires_nine_digits(self):
         response = self.client.post(
             "/api/personas/",

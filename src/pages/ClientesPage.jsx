@@ -10,8 +10,10 @@ import {
   getChoices,
   getClientes,
   updateDireccion,
+  updateEmpresa,
+  updatePersona,
 } from '../service/api.js'
-import { direccionFormSchema, withSchema } from '../lib/schemas.js'
+import { direccionFormSchema, empresaEditSchema, personaEditSchema, validateDocumentNumber, withSchema } from '../lib/schemas.js'
 import {
   celularCliente,
   correoCliente,
@@ -41,11 +43,15 @@ export default function ClientesPage({ search }) {
   const canAddDireccion = can('api.add_direccion')
   const canChangeDireccion = can('api.change_direccion')
   const canDeleteDireccion = can('api.delete_direccion')
+  const canChangePersona = can('api.change_persona')
+  const canChangeEmpresa = can('api.change_empresa')
   const tiposDireccion = choicesQuery.data?.tipos_direccion ?? [{ value: 'CALLE', label: 'Calle' }]
+  const tiposDocumento = choicesQuery.data?.tipos_documento ?? [{ value: 'DNI', label: 'DNI' }]
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['clientes'] })
     queryClient.invalidateQueries({ queryKey: ['tabla-ventas'] })
+    queryClient.invalidateQueries({ queryKey: ['venta'] })
   }
 
   const deleteClienteMutation = useMutation({
@@ -89,6 +95,21 @@ export default function ClientesPage({ search }) {
     onError: (err) => setError(err.message),
   })
 
+  const updateClienteDatosMutation = useMutation({
+    mutationFn: ({ cliente, payload }) => {
+      if (cliente.tipo === 'EMPRESA') {
+        return updateEmpresa(cliente.empresa.id, payload)
+      }
+      return updatePersona(cliente.persona.id, payload)
+    },
+    onSuccess: () => {
+      invalidate()
+      setSelected((current) => (current ? { ...current, editing: false } : current))
+      setError('')
+    },
+    onError: (err) => setError(err.message),
+  })
+
   const query = search.trim().toLowerCase()
   const filtered = (clientes ?? []).filter((cliente) => {
     if (!query) return true
@@ -110,7 +131,7 @@ export default function ClientesPage({ search }) {
       .includes(query)
   })
 
-  const selectedCliente = (clientes ?? []).find((cliente) => cliente.id === selected?.id) ?? selected
+  const selectedCliente = (clientes ?? []).find((cliente) => cliente.id === selected?.id)
   const editingDireccion = allDirecciones.find((item) => item.id === direccionModal?.id)
 
   return (
@@ -186,16 +207,25 @@ export default function ClientesPage({ search }) {
                       <td className="font-medium">{nombreCliente(cliente)}</td>
                       <td>{tipoClienteLabel(cliente.tipo)}</td>
                       <td>{documentoCliente(cliente) || '—'}</td>
-                      <td>{correoCliente(cliente) || '—'}</td>
+                      <td className="max-w-[14rem] break-all">{correoCliente(cliente) || '—'}</td>
                       <td>{celularCliente(cliente) || '—'}</td>
                       <td className="text-right">
                         <button
                           type="button"
                           className="btn btn-ghost btn-xs"
-                          onClick={() => setSelected(cliente)}
+                          onClick={() => setSelected({ id: cliente.id })}
                         >
                           Ver
                         </button>
+                        {canEditCliente(cliente, canChangePersona, canChangeEmpresa) ? (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-xs"
+                            onClick={() => setSelected({ id: cliente.id, editing: true })}
+                          >
+                            Editar
+                          </button>
+                        ) : null}
                         {canDeleteCliente ? (
                           <button
                             type="button"
@@ -284,8 +314,10 @@ export default function ClientesPage({ search }) {
           canChangeDireccion={canChangeDireccion}
           canDeleteCliente={canDeleteCliente}
           canDeleteDireccion={canDeleteDireccion}
+          canEdit={canEditCliente(selectedCliente, canChangePersona, canChangeEmpresa)}
           cliente={selectedCliente}
           deleting={deleteClienteMutation.isPending}
+          editing={Boolean(selected?.editing)}
           onAddDireccion={() => setDireccionModal({ type: 'create', clienteId: selectedCliente.id })}
           onClose={() => setSelected(null)}
           onDelete={() => setToDelete({ type: 'cliente', cliente: selectedCliente })}
@@ -296,9 +328,13 @@ export default function ClientesPage({ search }) {
               message: `¿Eliminar ${formatDireccion(direccion)}? Esta acción no se puede deshacer.`,
             })
           }
+          onEdit={() => setSelected({ id: selectedCliente.id, editing: true })}
           onEditDireccion={(direccion, editing) =>
             setDireccionModal({ type: 'direccion', id: direccion.id, editing })
           }
+          onSave={(payload) => updateClienteDatosMutation.mutate({ cliente: selectedCliente, payload })}
+          saving={updateClienteDatosMutation.isPending}
+          tiposDocumento={tiposDocumento}
         />
       ) : null}
 
@@ -359,15 +395,51 @@ export default function ClientesPage({ search }) {
   )
 }
 
+function canEditCliente(cliente, canChangePersona, canChangeEmpresa) {
+  if (cliente?.tipo === 'PERSONA') return Boolean(canChangePersona && cliente.persona?.id)
+  if (cliente?.tipo === 'EMPRESA') return Boolean(canChangeEmpresa && cliente.empresa?.id)
+  return false
+}
+
+function personaFormValues(cliente) {
+  const persona = cliente.persona ?? {}
+  return {
+    tipo_documento: persona.tipo_documento ?? 'DNI',
+    numero_documento: persona.numero_documento ?? '',
+    nombres: persona.nombres ?? '',
+    apellidos: persona.apellidos ?? '',
+    celular: persona.celular ?? '',
+    correo: cliente.correo ?? '',
+    distrito_nacimiento: persona.distrito_nacimiento ?? '',
+    padre: persona.padre ?? '',
+    madre: persona.madre ?? '',
+  }
+}
+
+function empresaFormValues(cliente) {
+  const empresa = cliente.empresa ?? {}
+  return {
+    ruc: empresa.ruc ?? '',
+    razon_social: empresa.razon_social ?? '',
+    correo: cliente.correo ?? '',
+  }
+}
+
 function ClienteModal({
   cliente,
   canAddDireccion,
   canChangeDireccion,
   canDeleteCliente,
   canDeleteDireccion,
+  canEdit,
   deleting,
+  editing,
   onClose,
   onDelete,
+  onEdit,
+  onSave,
+  saving,
+  tiposDocumento,
   onAddDireccion,
   onEditDireccion,
   onDeleteDireccion,
@@ -376,17 +448,48 @@ function ClienteModal({
   const empresa = cliente.empresa
   const representante = empresa?.representante_legal_detalle
   const direcciones = cliente.direcciones ?? []
+  const isPersona = cliente.tipo === 'PERSONA'
+  const form = useForm({
+    defaultValues: isPersona ? personaFormValues(cliente) : empresaFormValues(cliente),
+    validators: withSchema(isPersona ? personaEditSchema : empresaEditSchema),
+    onSubmit: ({ value }) => {
+      if (isPersona) {
+        onSave({
+          tipo_documento: value.tipo_documento,
+          numero_documento: value.numero_documento.trim(),
+          nombres: value.nombres.trim(),
+          apellidos: value.apellidos.trim(),
+          celular: value.celular.trim(),
+          correo: value.correo.trim().toLowerCase(),
+          distrito_nacimiento: value.distrito_nacimiento.trim(),
+          padre: value.padre.trim(),
+          madre: value.madre.trim(),
+        })
+        return
+      }
+      onSave({
+        ruc: value.ruc.trim(),
+        razon_social: value.razon_social.trim(),
+        correo: value.correo.trim().toLowerCase(),
+      })
+    },
+  })
+
+  useEffect(() => {
+    form.reset(isPersona ? personaFormValues(cliente) : empresaFormValues(cliente))
+  }, [form, cliente, isPersona])
+
   return (
     <Modal
       open
-      title={nombreCliente(cliente)}
+      title={editing ? 'Editar cliente' : nombreCliente(cliente)}
       onClose={onClose}
       footer={
         <>
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             Cerrar
           </button>
-          {canDeleteCliente ? (
+          {canDeleteCliente && !editing ? (
             <button
               type="button"
               className="btn btn-ghost text-rose-600"
@@ -396,10 +499,89 @@ function ClienteModal({
               Eliminar
             </button>
           ) : null}
+          {canEdit && !editing ? (
+            <button type="button" className="btn border-none bg-blue-600 text-white" onClick={onEdit}>
+              Editar
+            </button>
+          ) : null}
+          {editing ? (
+            <form.Subscribe selector={(state) => state.isSubmitting}>
+              {(isSubmitting) => (
+                <button
+                  type="button"
+                  className="btn border-none bg-blue-600 text-white"
+                  disabled={saving || isSubmitting}
+                  onClick={() => form.handleSubmit()}
+                >
+                  Guardar
+                </button>
+              )}
+            </form.Subscribe>
+          ) : null}
         </>
       }
     >
-      <dl className="grid grid-cols-1 gap-x-4 gap-y-3 text-sm sm:grid-cols-2">
+      {editing ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 [&_label]:min-w-0">
+          {isPersona ? (
+            <>
+              <Field form={form} name="tipo_documento">
+                {(field) => (
+                  <SelectField
+                    field={field}
+                    includeEmpty={false}
+                    label="Tipo de documento"
+                    options={tiposDocumento}
+                  />
+                )}
+              </Field>
+              <Field form={form} name="numero_documento" validators={validateDocumentNumber}>
+                {(field) => (
+                  <TextField field={field} inputMode="numeric" label="Número de documento" maxLength={9} />
+                )}
+              </Field>
+              <Field form={form} name="nombres">
+                {(field) => <TextField field={field} label="Nombres" normalize="upper" />}
+              </Field>
+              <Field form={form} name="apellidos">
+                {(field) => <TextField field={field} label="Apellidos" normalize="upper" />}
+              </Field>
+              <Field form={form} name="celular">
+                {(field) => (
+                  <TextField field={field} inputMode="numeric" label="Celular" maxLength={9} />
+                )}
+              </Field>
+              <Field form={form} name="correo">
+                {(field) => (
+                  <TextField className="sm:col-span-2" field={field} label="Correo de facturación" type="email" />
+                )}
+              </Field>
+              <Field form={form} name="distrito_nacimiento">
+                {(field) => <TextField field={field} label="Distrito de nacimiento" normalize="upper" />}
+              </Field>
+              <Field form={form} name="padre">
+                {(field) => <TextField field={field} label="Nombre del padre" normalize="upper" />}
+              </Field>
+              <Field form={form} name="madre">
+                {(field) => <TextField className="sm:col-span-2" field={field} label="Nombre de la madre" normalize="upper" />}
+              </Field>
+            </>
+          ) : (
+            <>
+              <Field form={form} name="ruc">
+                {(field) => <TextField field={field} inputMode="numeric" label="RUC" maxLength={11} />}
+              </Field>
+              <Field form={form} name="razon_social">
+                {(field) => <TextField field={field} label="Razón social" normalize="upper" />}
+              </Field>
+              <Field form={form} name="correo">
+                {(field) => <TextField className="sm:col-span-2" field={field} label="Correo de facturación" type="email" />}
+              </Field>
+            </>
+          )}
+        </div>
+      ) : (
+      <dl className="grid grid-cols-1 gap-x-4 gap-y-3 text-sm sm:grid-cols-2 [&>div]:min-w-0 [&>div]:overflow-hidden [&_dd]:[overflow-wrap:anywhere]">
         <div>
           <dt className="text-slate-400">Tipo</dt>
           <dd>{tipoClienteLabel(cliente.tipo)}</dd>
@@ -414,9 +596,9 @@ function ClienteModal({
           </div>
         ) : null}
         {correoCliente(cliente) ? (
-          <div>
+          <div className="sm:col-span-2">
             <dt className="text-slate-400">Correo de facturación</dt>
-            <dd>{correoCliente(cliente)}</dd>
+            <dd className="break-all">{correoCliente(cliente)}</dd>
           </div>
         ) : null}
         {persona ? (
@@ -471,16 +653,17 @@ function ClienteModal({
             </div>
           </>
         ) : null}
-        {representante ? (
-          <div className="col-span-2">
-            <dt className="text-slate-400">Representante legal</dt>
-            <dd>
-              {representante.nombres} {representante.apellidos} · {representante.tipo_documento}{' '}
-              {representante.numero_documento}
-            </dd>
-          </div>
-        ) : null}
-      </dl>
+          {representante ? (
+            <div className="col-span-2">
+              <dt className="text-slate-400">Representante legal</dt>
+              <dd>
+                {representante.nombres} {representante.apellidos} · {representante.tipo_documento}{' '}
+                {representante.numero_documento}
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+      )}
 
       <div className="mt-5 flex items-center justify-between">
         <h3 className="font-semibold">Direcciones</h3>

@@ -134,7 +134,7 @@ class PersonaSerializer(serializers.ModelSerializer):
     cliente = serializers.PrimaryKeyRelatedField(
         queryset=Cliente.objects.all(), required=False
     )
-    correo = serializers.EmailField(write_only=True)
+    correo = serializers.EmailField(write_only=True, required=False)
 
     class Meta:
         model = Persona
@@ -154,6 +154,10 @@ class PersonaSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         uppercase_fields(attrs, ["nombres", "apellidos", "distrito_nacimiento", "padre", "madre"])
+        if self.instance is None and not attrs.get("correo"):
+            raise serializers.ValidationError(
+                {"correo": "El correo de facturación es obligatorio."}
+            )
         if "correo" in attrs:
             attrs["correo"] = normalize_correo(attrs["correo"])
         tipo = attrs.get("tipo_documento") or getattr(self.instance, "tipo_documento", None)
@@ -175,6 +179,15 @@ class PersonaSerializer(serializers.ModelSerializer):
         cliente_con_correo(validated_data, TipoCliente.PERSONA)
         return super().create(validated_data)
 
+    def update(self, instance, validated_data):
+        validated_data.pop("cliente", None)
+        correo = validated_data.pop("correo", None)
+        instance = super().update(instance, validated_data)
+        if correo is not None and instance.cliente.correo != correo:
+            instance.cliente.correo = correo
+            instance.cliente.save(update_fields=["correo"])
+        return instance
+
 
 class EmpresaSerializer(serializers.ModelSerializer):
     cliente = serializers.PrimaryKeyRelatedField(
@@ -183,7 +196,7 @@ class EmpresaSerializer(serializers.ModelSerializer):
     representante_legal_detalle = PersonaSerializer(
         source="representante_legal", read_only=True
     )
-    correo = serializers.EmailField(write_only=True)
+    correo = serializers.EmailField(write_only=True, required=False)
 
     class Meta:
         model = Empresa
@@ -199,6 +212,10 @@ class EmpresaSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         uppercase_fields(attrs, ["razon_social"])
+        if self.instance is None and not attrs.get("correo"):
+            raise serializers.ValidationError(
+                {"correo": "El correo de facturación es obligatorio."}
+            )
         if "correo" in attrs:
             attrs["correo"] = normalize_correo(attrs["correo"])
         return attrs
@@ -206,6 +223,15 @@ class EmpresaSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         cliente_con_correo(validated_data, TipoCliente.EMPRESA)
         return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data.pop("cliente", None)
+        correo = validated_data.pop("correo", None)
+        instance = super().update(instance, validated_data)
+        if correo is not None and instance.cliente.correo != correo:
+            instance.cliente.correo = correo
+            instance.cliente.save(update_fields=["correo"])
+        return instance
 
 
 class ClienteSerializer(serializers.ModelSerializer):

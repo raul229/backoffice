@@ -29,9 +29,9 @@ function hasValue(value) {
 function InfoItem({ label, value, className = '' }) {
   if (!hasValue(value)) return null
   return (
-    <div className={className}>
+    <div className={`min-w-0 ${className}`.trim()}>
       <dt className="text-slate-400">{label}</dt>
-      <dd className="font-medium">{value}</dd>
+      <dd className="[overflow-wrap:anywhere] font-medium">{value}</dd>
     </div>
   )
 }
@@ -227,7 +227,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="bo-card p-4 sm:p-5">
           <h2 className="mb-4 font-semibold">Información general</h2>
-          <dl className="grid grid-cols-1 gap-x-4 gap-y-3 text-sm sm:grid-cols-2">
+          <dl className="grid grid-cols-1 gap-x-4 gap-y-3 text-sm sm:grid-cols-2 [&>div]:min-w-0">
             <InfoItem label="Cliente" value={nombreCliente(cliente)} />
             <div>
               <dt className="mb-1 text-slate-400">Asesor</dt>
@@ -271,7 +271,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
               }
             />
             <InfoItem label="Celular" value={celularCliente(cliente)} />
-            <InfoItem label="Correo de facturación" value={correoCliente(cliente)} />
+            <InfoItem className="sm:col-span-2" label="Correo de facturación" value={correoCliente(cliente)} />
             {cliente?.tipo === 'PERSONA' ? (
               <>
                 <InfoItem label="Distrito de nacimiento" value={persona?.distrito_nacimiento} />

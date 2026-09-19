@@ -293,6 +293,13 @@ export function createPersona(payload) {
   });
 }
 
+export function updatePersona(id, payload) {
+  return request(`/personas/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function updateCliente(id, payload) {
   return request(`/clientes/${id}/`, {
     method: "PATCH",
@@ -303,6 +310,13 @@ export function updateCliente(id, payload) {
 export function createEmpresa(payload) {
   return request("/empresas/", {
     method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateEmpresa(id, payload) {
+  return request(`/empresas/${id}/`, {
+    method: "PATCH",
     body: JSON.stringify(payload),
   });
 }

@@ -181,3 +181,32 @@ export const nuevaVentaSchema = z
   .superRefine(requireNuevaVentaCliente)
 
 export const nuevaVentaClienteSchema = z.object(nuevaVentaBase).superRefine(requireNuevaVentaCliente)
+
+export const personaEditSchema = z
+  .object({
+    tipo_documento: requiredText(),
+    numero_documento: z.string(),
+    nombres: requiredText(),
+    apellidos: requiredText(),
+    celular: digitCode(9, 'El celular debe tener 9 dígitos'),
+    correo: requiredText('El correo de facturación es obligatorio').email('Usa un correo válido'),
+    distrito_nacimiento: requiredText(),
+    padre: requiredText(),
+    madre: requiredText(),
+  })
+  .superRefine((value, ctx) => {
+    const documento = documentNumberSchema(value.tipo_documento).safeParse(value.numero_documento)
+    if (!documento.success) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['numero_documento'],
+        message: documento.error.issues[0]?.message,
+      })
+    }
+  })
+
+export const empresaEditSchema = z.object({
+  ruc: digitCode(11, 'El RUC debe tener 11 dígitos'),
+  razon_social: requiredText(),
+  correo: requiredText('El correo de facturación es obligatorio').email('Usa un correo válido'),
+})
