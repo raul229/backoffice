@@ -324,6 +324,76 @@ class ApiEndpointsTests(APITestCase):
             ["Uno", "Dos"],
         )
 
+    def test_reorder_flujo_pasos_keeps_venta_paso_estado(self):
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        producto = Producto.objects.create(nombre="Fibra 90", velocidad=90, precio=60)
+        flujo = Flujo.objects.create(nombre="Flujo reorder", tipo_cliente=TipoCliente.PERSONA)
+        paso_uno = Paso.objects.create(nombre="Uno", descripcion="Uno")
+        paso_dos = Paso.objects.create(nombre="Dos", descripcion="Dos")
+        paso_tres = Paso.objects.create(nombre="Tres", descripcion="Tres")
+        primero = FlujoPaso.objects.create(flujo=flujo, paso=paso_uno, orden=1)
+        segundo = FlujoPaso.objects.create(flujo=flujo, paso=paso_dos, orden=2)
+
+        created = self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        venta_paso_uno = next(
+            paso for paso in created.data["pasos"] if paso["flujo_paso"] == primero.id
+        )
+        self.client.patch(
+            f"/api/venta-pasos/{venta_paso_uno['id']}/",
+            {"estado": "APROBADO"},
+            format="json",
+        )
+
+        tercero = self.client.post(
+            "/api/flujo-pasos/",
+            {"flujo": flujo.id, "paso": paso_tres.id, "orden": 3},
+            format="json",
+        )
+        self.assertEqual(tercero.status_code, status.HTTP_201_CREATED)
+
+        invalid = self.client.patch(
+            f"/api/flujos/{flujo.id}/reordenar-pasos/",
+            {"ids": [tercero.data["id"], primero.id]},
+            format="json",
+        )
+        self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST)
+
+        response = self.client.patch(
+            f"/api/flujos/{flujo.id}/reordenar-pasos/",
+            {"ids": [tercero.data["id"], primero.id, segundo.id]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [paso["paso_detalle"]["nombre"] for paso in response.data["pasos_detalle"]],
+            ["Tres", "Uno", "Dos"],
+        )
+        self.assertEqual(
+            [paso["orden"] for paso in response.data["pasos_detalle"]],
+            [1, 2, 3],
+        )
+
+        detalle = self.client.get(f"/api/ventas/{created.data['id']}/")
+        self.assertEqual(detalle.status_code, status.HTTP_200_OK)
+        nombres = [paso["flujo_paso_detalle"]["paso_detalle"]["nombre"] for paso in detalle.data["pasos"]]
+        estados = {
+            paso["flujo_paso_detalle"]["paso_detalle"]["nombre"]: paso["estado"]
+            for paso in detalle.data["pasos"]
+        }
+        self.assertEqual(nombres, ["Tres", "Uno", "Dos"])
+        self.assertEqual(estados["Uno"], "APROBADO")
+        self.assertEqual(estados["Dos"], "PENDIENTE")
+        self.assertEqual(estados["Tres"], "PENDIENTE")
+        self.assertEqual(
+            next(paso["id"] for paso in detalle.data["pasos"] if paso["flujo_paso"] == primero.id),
+            venta_paso_uno["id"],
+        )
+        self.assertEqual(detalle.data["estado"], "EN_PROCESO")
 
     def test_user_only_sees_own_ventas(self):
         grupo = Group.objects.get(name="Asesor")

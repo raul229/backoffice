@@ -2,7 +2,7 @@ from django.contrib.auth.models import Permission, User
 from django.db import transaction
 from django.db.models import F, Q
 from django.db.models.deletion import ProtectedError
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import DjangoModelPermissions, IsAuthenticated
 from rest_framework.response import Response
@@ -23,7 +23,7 @@ from .models import (
     VentaComentario,
     VentaPaso,
 )
-from .workflow import sync_estado_venta_con_pasos, sync_ventas_con_flujo
+from .workflow import reordenar_pasos_de_flujo, sync_estado_venta_con_pasos, sync_ventas_con_flujo
 from .serializers import (
     CHOICE_GROUPS,
     ClienteSerializer,
@@ -139,6 +139,14 @@ class FlujoViewSet(AuthenticatedModelViewSet):
             )
         FlujoPaso.objects.filter(flujo=instance).delete()
         instance.delete()
+
+    @action(detail=True, methods=["patch"], url_path="reordenar-pasos")
+    def reordenar_pasos(self, request, pk=None):
+        flujo = self.get_object()
+        ids = request.data.get("ids")
+        reordenar_pasos_de_flujo(flujo, ids)
+        flujo = self.get_queryset().get(pk=flujo.pk)
+        return Response(self.get_serializer(flujo).data)
 
 
 class FlujoPasoViewSet(AuthenticatedModelViewSet):

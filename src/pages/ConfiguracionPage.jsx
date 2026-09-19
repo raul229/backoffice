@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Field from '../components/Field.jsx'
@@ -19,11 +19,13 @@ import {
   getPasos,
   getProductos,
   getPromociones,
+  reorderFlujoPasos,
   updateFlujo,
   updatePaso,
   updateProducto,
   updatePromocion,
 } from '../service/api.js'
+import { IconGrip } from '../lib/icons.jsx'
 import { tipoClienteLabel } from '../lib/venta.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
@@ -108,6 +110,12 @@ export default function ConfiguracionPage() {
   const deleteLinkMutation = useMutation({
     mutationFn: deleteFlujoPaso,
     onSuccess: () => notify('Paso quitado del flujo.'),
+    onError: (err) => setError(err.message),
+  })
+
+  const reorderPasosMutation = useMutation({
+    mutationFn: ({ flujoId, ids }) => reorderFlujoPasos(flujoId, ids),
+    onSuccess: () => notify('Orden de pasos actualizado.'),
     onError: (err) => setError(err.message),
   })
 
@@ -672,12 +680,16 @@ export default function ConfiguracionPage() {
             })
           }
           onRemovePaso={(id) => deleteLinkMutation.mutate(id)}
+          onReorder={(ids) =>
+            reorderPasosMutation.mutateAsync({ flujoId: selectedFlujo.id, ids })
+          }
           onSave={(nombre) =>
             updateFlujoMutation.mutate({ id: selectedFlujo.id, payload: { nombre } })
           }
           pasos={pasos}
           pending={updateFlujoMutation.isPending}
           removePending={deleteLinkMutation.isPending}
+          reorderPending={reorderPasosMutation.isPending}
         />
       ) : null}
     </div>
@@ -1022,6 +1034,10 @@ function CreateFlujoModal({ onClose, onSave, pending }) {
   )
 }
 
+function sortFlujoPasos(pasos) {
+  return [...(pasos ?? [])].sort((a, b) => a.orden - b.orden)
+}
+
 function FlujoModal({
   flujo,
   pasos,
@@ -1031,22 +1047,44 @@ function FlujoModal({
   onDelete,
   onAddPaso,
   onRemovePaso,
+  onReorder,
   pending,
   addPending,
   removePending,
+  reorderPending,
 }) {
   const form = useForm({
     defaultValues: { nombre: flujo.nombre },
     validators: withSchema(flujoNombreSchema),
     onSubmit: ({ value }) => onSave(value.nombre.trim()),
   })
-  const ordered = [...(flujo.pasos_detalle ?? [])].sort((a, b) => a.orden - b.orden)
-  const usados = new Set(ordered.map((item) => item.paso))
+  const [items, setItems] = useState(() => sortFlujoPasos(flujo.pasos_detalle))
+  const itemsRef = useRef(items)
+  itemsRef.current = items
+  const dragFrom = useRef(null)
+  const dragging = useRef(false)
+  const [dragId, setDragId] = useState(null)
+  const canDrag = editing && items.length > 1 && !addPending && !removePending && !reorderPending
+  const usados = new Set(items.map((item) => item.paso))
   const disponibles = pasos.filter((paso) => !usados.has(paso.id))
 
   useEffect(() => {
     form.reset({ nombre: flujo.nombre })
   }, [form, flujo.nombre])
+
+  useEffect(() => {
+    if (dragging.current) return
+    setItems(sortFlujoPasos(flujo.pasos_detalle))
+  }, [flujo.pasos_detalle])
+
+  const persistOrder = () => {
+    const ids = itemsRef.current.map((item) => item.id)
+    const original = sortFlujoPasos(flujo.pasos_detalle).map((item) => item.id)
+    if (ids.join(',') === original.join(',')) return
+    Promise.resolve(onReorder(ids)).catch(() => {
+      setItems(sortFlujoPasos(flujo.pasos_detalle))
+    })
+  }
 
   return (
     <Modal
@@ -1112,28 +1150,74 @@ function FlujoModal({
           ))}
         </select>
       ) : null}
-      {ordered.length === 0 ? (
+      {items.length === 0 ? (
         <p className="text-sm text-slate-500">Este flujo aún no tiene pasos.</p>
       ) : (
-        <ol className="space-y-2">
-          {ordered.map((item) => (
-            <li key={item.id} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm">
-              <span>
-                {item.orden}. {item.paso_detalle?.nombre}
-              </span>
-              {editing ? (
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-xs text-rose-600"
-                  disabled={removePending}
-                  onClick={() => onRemovePaso(item.id)}
-                >
-                  Quitar
-                </button>
-              ) : null}
-            </li>
-          ))}
-        </ol>
+        <>
+          {canDrag ? (
+            <p className="mb-2 text-xs text-slate-500">Arrastra los pasos para cambiar el orden.</p>
+          ) : null}
+          <ol className="space-y-2">
+            {items.map((item, index) => (
+              <li
+                key={item.id}
+                className={`flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm ${
+                  canDrag ? 'cursor-grab active:cursor-grabbing' : ''
+                } ${dragId === item.id ? 'opacity-40' : ''}`}
+                draggable={canDrag}
+                onDragStart={(event) => {
+                  dragging.current = true
+                  dragFrom.current = index
+                  setDragId(item.id)
+                  event.dataTransfer.effectAllowed = 'move'
+                  event.dataTransfer.setData('text/plain', String(item.id))
+                }}
+                onDragOver={(event) => {
+                  if (!canDrag) return
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
+                  const from = dragFrom.current
+                  if (from === null || from === index) return
+                  setItems((prev) => {
+                    const next = [...prev]
+                    const [moved] = next.splice(from, 1)
+                    next.splice(index, 0, moved)
+                    return next
+                  })
+                  dragFrom.current = index
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                }}
+                onDragEnd={() => {
+                  dragging.current = false
+                  dragFrom.current = null
+                  setDragId(null)
+                  persistOrder()
+                }}
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  {canDrag ? (
+                    <IconGrip className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                  ) : null}
+                  <span>
+                    {index + 1}. {item.paso_detalle?.nombre}
+                  </span>
+                </span>
+                {editing ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs text-rose-600"
+                    disabled={removePending || reorderPending}
+                    onClick={() => onRemovePaso(item.id)}
+                  >
+                    Quitar
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ol>
+        </>
       )}
     </Modal>
   )

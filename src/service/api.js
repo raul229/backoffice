@@ -267,6 +267,13 @@ export function deleteFlujoPaso(id) {
   });
 }
 
+export function reorderFlujoPasos(flujoId, ids) {
+  return request(`/flujos/${flujoId}/reordenar-pasos/`, {
+    method: "PATCH",
+    body: JSON.stringify({ ids }),
+  });
+}
+
 export function getVentas() {
   return request("/ventas/");
 }
