@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
@@ -77,11 +77,20 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   const [editing, setEditing] = useState(false)
   const [confirm, setConfirm] = useState(null)
   const [comentario, setComentario] = useState('')
+  const comentariosListRef = useRef(null)
   const queryClient = useQueryClient()
   const { isPending, isError, error, data: venta } = useQuery({
     queryKey: ['venta', ventaId],
     queryFn: () => getVenta(ventaId),
   })
+  const comentarios = venta?.comentarios ?? []
+  const ultimoComentarioId = comentarios.at(-1)?.id
+
+  useEffect(() => {
+    const list = comentariosListRef.current
+    if (!list) return
+    list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' })
+  }, [comentarios.length, ultimoComentarioId])
   const flujosQuery = useQuery({ queryKey: ['flujos'], queryFn: getFlujos })
   const canReasignar = can('api.reasignar_venta')
   const asesoresQuery = useQuery({
@@ -153,7 +162,6 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   const canDeleteVenta = can('api.delete_venta')
   const canEditCodigos = can('api.change_venta_codigos')
   const canAddComentario = can('api.add_ventacomentario')
-  const comentarios = venta.comentarios ?? []
   const saving =
     pasoMutation.isPending ||
     ventaMutation.isPending ||
@@ -426,7 +434,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
       <section className="bo-card flex min-h-0 flex-col p-4 sm:p-5">
         <h2 className="mb-1 font-semibold">Comentarios</h2>
         <p className="mb-4 text-sm text-slate-500">Notas para el ejecutivo y el equipo, fuera del flujo.</p>
-        <div className="mb-4 max-h-72 space-y-3 overflow-y-auto">
+        <div ref={comentariosListRef} className="mb-4 max-h-72 space-y-3 overflow-y-auto">
           {comentarios.length === 0 ? (
             <p className="text-sm text-slate-500">Aún no hay comentarios.</p>
           ) : (
