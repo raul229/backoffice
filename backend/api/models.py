@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class TipoCliente(models.TextChoices):
@@ -181,6 +182,7 @@ class Venta(models.Model):
         related_name="ventas",
     )
     fecha = models.DateTimeField(auto_now_add=True)
+    actualizado = models.DateTimeField(default=timezone.now)
     producto = models.ForeignKey(Producto, on_delete=models.PROTECT)
     flujo=models.ForeignKey(Flujo, on_delete=models.PROTECT)
     promociones = models.ManyToManyField(Promocion, through=PromocionVenta)
@@ -207,6 +209,14 @@ class Venta(models.Model):
             ("change_venta_codigos", "Puede editar códigos de seguimiento de una venta"),
             ("reasignar_venta", "Puede reasignar ventas a otro asesor"),
         ]
+
+    def save(self, *args, **kwargs):
+        self.actualizado = timezone.now()
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            kwargs["update_fields"] = {*update_fields, "actualizado"}
+        super().save(*args, **kwargs)
+
     
 class VentaPaso(models.Model):
     venta=models.ForeignKey(Venta, on_delete=models.CASCADE)

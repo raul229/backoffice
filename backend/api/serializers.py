@@ -379,6 +379,7 @@ class VentaSerializer(serializers.ModelSerializer):
             "direccion",
             "direccion_detalle",
             "fecha",
+            "actualizado",
             "producto",
             "producto_detalle",
             "flujo",
@@ -399,7 +400,7 @@ class VentaSerializer(serializers.ModelSerializer):
             "creado_por",
             "creado_por_detalle",
         ]
-        read_only_fields = ["fecha"]
+        read_only_fields = ["fecha", "actualizado"]
 
     def validate(self, attrs):
         uppercase_fields(attrs, list(VENTA_CODIGO_FIELDS))

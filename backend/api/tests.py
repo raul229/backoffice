@@ -142,6 +142,43 @@ class ApiEndpointsTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(len(response.data["pasos"]), 2)
         self.assertEqual(response.data["promociones"], [promocion.id])
+        self.assertIn("actualizado", response.data)
+
+    def test_ventas_list_orders_recently_updated_first(self):
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        producto = Producto.objects.create(nombre="Fibra 60", velocidad=60, precio=45)
+        flujo = Flujo.objects.create(nombre="Flujo orden", tipo_cliente=TipoCliente.PERSONA)
+        paso = Paso.objects.create(nombre="Uno", descripcion="Uno")
+        FlujoPaso.objects.create(flujo=flujo, paso=paso, orden=1)
+
+        primera = self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+        segunda = self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+        self.assertEqual(primera.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(segunda.status_code, status.HTTP_201_CREATED)
+
+        lista = self.client.get("/api/ventas/")
+        self.assertEqual(
+            [venta["id"] for venta in lista.data],
+            [segunda.data["id"], primera.data["id"]],
+        )
+
+        patched = self.client.patch(
+            f"/api/ventas/{primera.data['id']}/",
+            {"psi": "ABC123"},
+            format="json",
+        )
+        self.assertEqual(patched.status_code, status.HTTP_200_OK)
+        reordenada = self.client.get("/api/ventas/")
+        self.assertEqual(reordenada.data[0]["id"], primera.data["id"])
+        self.assertGreater(reordenada.data[0]["actualizado"], primera.data["actualizado"])
 
     def test_venta_keeps_its_own_direccion(self):
         cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)

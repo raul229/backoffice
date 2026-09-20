@@ -38,9 +38,6 @@ export default function DashboardPage({
 }) {
   const { user, can } = useAuth()
   const kpis = computeKpis(ventas)
-  const recientes = [...filtered]
-    .sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
-    .slice(0, 6)
 
   return (
     <div className="space-y-5">
@@ -110,10 +107,11 @@ export default function DashboardPage({
           <VentasTable
             emptyLabel="No hay ventas con esos filtros."
             isPending={isPending}
+            limit={6}
             onDelete={onDelete}
             onOpen={onOpen}
             showAsesor={can('api.view_all_ventas')}
-            ventas={recientes}
+            ventas={filtered}
           />
         </section>
 

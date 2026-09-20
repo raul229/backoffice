@@ -189,7 +189,7 @@ class VentaViewSet(AuthenticatedModelViewSet):
             "ventapaso_set__flujo_paso__paso",
             "comentarios__creado_por",
         )
-        .all()
+        .order_by("-actualizado", "-id")
     )
     serializer_class = VentaSerializer
 
@@ -237,6 +237,7 @@ class VentaPasoViewSet(AuthenticatedModelViewSet):
     def perform_update(self, serializer):
         paso = serializer.save()
         sync_estado_venta_con_pasos(paso.venta)
+        paso.venta.save(update_fields=["actualizado"])
 
 
 class VentaComentarioViewSet(AuthenticatedModelViewSet):
@@ -252,7 +253,8 @@ class VentaComentarioViewSet(AuthenticatedModelViewSet):
         return queryset.filter(venta__creado_por=user)
 
     def perform_create(self, serializer):
-        serializer.save(creado_por=self.request.user)
+        comentario = serializer.save(creado_por=self.request.user)
+        comentario.venta.save(update_fields=["actualizado"])
 
 
 @api_view(["GET"])

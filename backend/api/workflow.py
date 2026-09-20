@@ -38,9 +38,12 @@ def sync_ventas_con_flujo(flujo, ventas=None):
             ]
         )
         if flujo_paso_ids:
-            venta.ventapaso_set.exclude(flujo_paso_id__in=flujo_paso_ids).delete()
+            deleted, _unused = venta.ventapaso_set.exclude(flujo_paso_id__in=flujo_paso_ids).delete()
         else:
-            venta.ventapaso_set.all().delete()
+            deleted, _unused = venta.ventapaso_set.all().delete()
+        created = any(flujo_paso.id not in actuales for flujo_paso in flujo_pasos)
+        if created or deleted:
+            venta.save(update_fields=["actualizado"])
         sync_estado_venta_con_pasos(venta)
 
 
