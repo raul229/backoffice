@@ -178,6 +178,14 @@ CSRF_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_SAMESITE = "None" if not DEBUG else "Lax"
 CSRF_COOKIE_SAMESITE = "None" if not DEBUG else "Lax"
 
+FILE_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
+
+CONTRATOS_ENTEL = os.environ.get("CONTRATOS_ENTEL", "")
+CORREO_BACKOFFICE = os.environ.get("CORREO_BACKOFFICE", "")
+CORREO_GERENTE = os.environ.get("CORREO_GERENTE", "")
+CORREOS_ADICIONALES = os.environ.get("CORREOS_ADICIONALES", "")
+
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration

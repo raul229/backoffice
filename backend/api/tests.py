@@ -568,6 +568,234 @@ class ApiEndpointsTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("producto", response.data)
 
+    def _venta_empresa_entel(self, nombre_producto="Internet Empresas", velocidad=200, promo="bono de velocidad por 6m"):
+        rrll = Persona.objects.create(
+            cliente=Cliente.objects.create(tipo=TipoCliente.PERSONA),
+            tipo_documento="DNI",
+            numero_documento="87654321",
+            nombres="Ana",
+            apellidos="Perez",
+            celular="987654321",
+        )
+        empresa_cliente = Cliente.objects.create(tipo=TipoCliente.EMPRESA, correo="ana@empresa.com")
+        Empresa.objects.create(
+            cliente=empresa_cliente,
+            ruc="20522317285",
+            razon_social="INDOTECH SAC",
+            representante_legal=rrll,
+        )
+        direccion = Direccion.objects.create(
+            cliente=empresa_cliente,
+            tipo="CALLE",
+            direccion="Luiggi Barsato",
+            numero="167",
+            distrito="San Borja",
+        )
+        producto = Producto.objects.create(
+            nombre=nombre_producto,
+            velocidad=velocidad,
+            precio=90,
+            tipo_cliente=TipoCliente.EMPRESA,
+        )
+        flujo = Flujo.objects.create(nombre="Empresa", tipo_cliente=TipoCliente.EMPRESA)
+        paso = Paso.objects.create(nombre="Uno", descripcion="Uno")
+        FlujoPaso.objects.create(flujo=flujo, paso=paso, orden=1)
+        promocion = Promocion.objects.create(nombre=promo, descripcion="Entel")
+        created = self.client.post(
+            "/api/ventas/",
+            {
+                "cliente": empresa_cliente.id,
+                "producto": producto.id,
+                "flujo": flujo.id,
+                "direccion": direccion.id,
+                "promociones": [promocion.id],
+                "psi": "PSI1",
+                "siro": "SIRO1",
+                "numero_oportunidad": "OPP1",
+            },
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        return created.data["id"]
+
+    def test_generar_contrato_rejects_persona_natural(self):
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        producto = Producto.objects.create(nombre="Fibra 200", velocidad=200, precio=90)
+        flujo = Flujo.objects.create(nombre="Persona", tipo_cliente=TipoCliente.PERSONA)
+        paso = Paso.objects.create(nombre="Uno", descripcion="Uno")
+        FlujoPaso.objects.create(flujo=flujo, paso=paso, orden=1)
+        created = self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        response = self.client.post(f"/api/ventas/{created.data['id']}/generar-contrato/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("persona jurídica", response.data["detail"])
+
+    def test_asesor_cannot_generar_contrato(self):
+        ana = User.objects.create_user("ana_contrato", password="secret")
+        ana.groups.add(Group.objects.get(name="Asesor"))
+        venta_id = self._venta_empresa_entel()
+        self.client.force_authenticate(ana)
+        response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_generar_contrato_entel_returns_zip(self):
+        from pathlib import Path
+        import zipfile
+        from io import BytesIO
+
+        plantillas = Path("/home/raul/Proyectos/Python/Contratos/CONTRATOS_ENTEL")
+        if not (plantillas / "internet empresas.pdf").exists():
+            self.skipTest("Plantillas Entel no disponibles en este entorno")
+        venta_id = self._venta_empresa_entel()
+        response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "application/zip")
+        self.assertIn("INDOTECH SAC - 20522317285.zip", response["Content-Disposition"])
+        with zipfile.ZipFile(BytesIO(response.content)) as archivo:
+            nombres = set(archivo.namelist())
+        self.assertIn("internet empresas.pdf", nombres)
+        self.assertIn("bono duplica.pdf", nombres)
+
+    def test_generar_contrato_fecha_invalida(self):
+        venta_id = self._venta_empresa_entel()
+        response = self.client.post(
+            f"/api/ventas/{venta_id}/generar-contrato/",
+            {"fecha": "no-es-fecha"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("fecha", response.data)
+
+    def test_generar_contrato_acepta_fecha_pasada(self):
+        import pymupdf
+        from pathlib import Path
+        import zipfile
+        from io import BytesIO
+
+        plantillas = Path("/home/raul/Proyectos/Python/Contratos/CONTRATOS_ENTEL")
+        if not (plantillas / "internet empresas.pdf").exists():
+            self.skipTest("Plantillas Entel no disponibles en este entorno")
+        venta_id = self._venta_empresa_entel()
+        response = self.client.post(
+            f"/api/ventas/{venta_id}/generar-contrato/",
+            {"fecha": "2024-03-15"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        with zipfile.ZipFile(BytesIO(response.content)) as archivo:
+            texto = "".join(
+                page.get_text()
+                for page in pymupdf.open(stream=archivo.read("internet empresas.pdf"), filetype="pdf")
+            )
+        self.assertIn("15/03/2024", texto)
+
+    def test_generar_contrato_acepta_direccion_personalizada(self):
+        import pymupdf
+        from pathlib import Path
+        import zipfile
+        from io import BytesIO
+
+        plantillas = Path("/home/raul/Proyectos/Python/Contratos/CONTRATOS_ENTEL")
+        if not (plantillas / "internet empresas.pdf").exists():
+            self.skipTest("Plantillas Entel no disponibles en este entorno")
+        venta_id = self._venta_empresa_entel()
+        direccion = "AV JAVIER PRADO ESTE 4450, SAN ISIDRO - PORTAL FACTIBILIDAD"
+        response = self.client.post(
+            f"/api/ventas/{venta_id}/generar-contrato/",
+            {"fecha": "2024-03-15", "direccion": direccion},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        with zipfile.ZipFile(BytesIO(response.content)) as archivo:
+            texto = "".join(
+                page.get_text()
+                for page in pymupdf.open(stream=archivo.read("internet empresas.pdf"), filetype="pdf")
+            )
+        self.assertIn("PORTAL FACTIBILIDAD", texto)
+        self.assertNotIn("Luiggi Barsato", texto)
+
+    def test_asesor_cannot_ver_plantillas_contrato(self):
+        ana = User.objects.create_user("ana_plantilla", password="secret")
+        ana.groups.add(Group.objects.get(name="Asesor"))
+        self.client.force_authenticate(ana)
+        response = self.client.get("/api/plantillas-contrato/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_plantillas_contrato_catalogo_y_carga(self):
+        import pymupdf
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        lista = self.client.get("/api/plantillas-contrato/")
+        self.assertEqual(lista.status_code, status.HTTP_200_OK)
+        claves = [item["clave"] for item in lista.data]
+        self.assertIn("internet-empresas", claves)
+        self.assertFalse(lista.data[0]["cargada"])
+
+        pdf = pymupdf.open()
+        for _ in range(5):
+            pdf.new_page()
+        contenido = pdf.tobytes()
+        pdf.close()
+        subida = self.client.post(
+            "/api/plantillas-contrato/internet-empresas/",
+            {"archivo": SimpleUploadedFile("contrato.pdf", contenido, content_type="application/pdf")},
+            format="multipart",
+        )
+        self.assertEqual(subida.status_code, status.HTTP_200_OK)
+        self.assertTrue(subida.data["cargada"])
+        self.assertEqual(subida.data["nombre_archivo"], "contrato.pdf")
+
+        mala = self.client.post(
+            "/api/plantillas-contrato/internet-empresas/",
+            {"archivo": SimpleUploadedFile("nota.txt", b"hola", content_type="text/plain")},
+            format="multipart",
+        )
+        self.assertEqual(mala.status_code, status.HTTP_400_BAD_REQUEST)
+
+        descarga = self.client.get("/api/plantillas-contrato/internet-empresas/archivo/")
+        self.assertEqual(descarga.status_code, status.HTTP_200_OK)
+        self.assertEqual(bytes(descarga.content), contenido)
+
+    def test_generar_contrato_usa_plantilla_en_bd(self):
+        from pathlib import Path
+        import zipfile
+        from io import BytesIO
+        from unittest.mock import patch
+
+        from .contratos.datos_entel import CATALOGO_PLANTILLAS_ENTEL
+        from .models import PlantillaContrato
+
+        plantillas = Path("/home/raul/Proyectos/Python/Contratos/CONTRATOS_ENTEL")
+        if not (plantillas / "internet empresas.pdf").exists():
+            self.skipTest("Plantillas Entel no disponibles en este entorno")
+        for item in CATALOGO_PLANTILLAS_ENTEL:
+            ruta = plantillas / item["archivo"]
+            if not ruta.is_file():
+                continue
+            data = ruta.read_bytes()
+            PlantillaContrato.objects.update_or_create(
+                clave=item["clave"],
+                defaults={
+                    "nombre_archivo": item["archivo"],
+                    "content_type": "application/octet-stream",
+                    "tamano": len(data),
+                    "contenido": data,
+                    "actualizado_por": self.user,
+                },
+            )
+        venta_id = self._venta_empresa_entel()
+        with patch("api.contratos.almacen.carpeta_plantillas_disco", return_value=None):
+            response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        with zipfile.ZipFile(BytesIO(response.content)) as archivo:
+            nombres = set(archivo.namelist())
+        self.assertIn("internet empresas.pdf", nombres)
+        self.assertIn("bono duplica.pdf", nombres)
+
 
 class AuthAndPermissionsTests(APITestCase):
     def test_login_and_me(self):
@@ -1319,4 +1547,5 @@ class LookupRucTests(APITestCase):
         self.assertEqual(parsed.data["parsed"]["tipo_direccion"], "CALLE")
         self.assertEqual(parsed.data["parsed"]["numero"], "167")
         self.assertEqual(parsed.data["parsed"]["distrito"], "SAN BORJA")
+
 

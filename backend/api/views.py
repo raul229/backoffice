@@ -2,8 +2,10 @@ from django.contrib.auth.models import Permission, User
 from django.db import transaction
 from django.db.models import F, Q
 from django.db.models.deletion import ProtectedError
+from django.http import HttpResponse
+from django.utils.http import content_disposition_header
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import DjangoModelPermissions, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
@@ -24,6 +26,7 @@ from .models import (
     VentaPaso,
 )
 from .workflow import reordenar_pasos_de_flujo, sync_estado_venta_con_pasos, sync_ventas_con_flujo
+from .contratos import generar_zip_entel
 from .serializers import (
     CHOICE_GROUPS,
     ClienteSerializer,
@@ -209,6 +212,25 @@ class VentaViewSet(AuthenticatedModelViewSet):
         instance = self.get_object()
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="generar-contrato",
+        permission_classes=[IsAuthenticated],
+    )
+    def generar_contrato(self, request, pk=None):
+        if not request.user.is_superuser and not request.user.has_perm("api.generar_contrato"):
+            raise PermissionDenied("No tienes permiso para generar contratos.")
+        venta = self.get_object()
+        contenido, nombre = generar_zip_entel(
+            venta,
+            fecha=request.data.get("fecha"),
+            direccion=request.data.get("direccion"),
+        )
+        response = HttpResponse(contenido, content_type="application/zip")
+        response["Content-Disposition"] = content_disposition_header(True, nombre)
+        return response
 
 
 class PromocionVentaViewSet(AuthenticatedModelViewSet):

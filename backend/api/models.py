@@ -208,6 +208,7 @@ class Venta(models.Model):
             ("view_all_ventas", "Puede ver todas las ventas"),
             ("change_venta_codigos", "Puede editar códigos de seguimiento de una venta"),
             ("reasignar_venta", "Puede reasignar ventas a otro asesor"),
+            ("generar_contrato", "Puede generar contratos de una venta"),
         ]
 
     def save(self, *args, **kwargs):
@@ -238,5 +239,24 @@ class VentaComentario(models.Model):
 
     class Meta:
         ordering = ["fecha"]
-    
+
+
+class PlantillaContrato(models.Model):
+    clave = models.CharField(max_length=40, unique=True)
+    nombre_archivo = models.CharField(max_length=200)
+    content_type = models.CharField(max_length=120, blank=True)
+    tamano = models.PositiveIntegerField(default=0)
+    contenido = models.BinaryField()
+    actualizado = models.DateTimeField(auto_now=True)
+    actualizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="plantillas_contrato",
+    )
+
+    def __str__(self):
+        return self.clave
+
 

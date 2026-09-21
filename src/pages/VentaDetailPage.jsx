@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
-import { getVenta, getFlujos, getAsesores, updateVenta, updateVentaPaso, deleteVenta, createVentaComentario } from '../service/api.js'
+import { getVenta, getFlujos, getAsesores, updateVenta, updateVentaPaso, deleteVenta, createVentaComentario, generarContrato } from '../service/api.js'
 import { displayName } from '../lib/auth.js'
 import {
   celularCliente,
@@ -21,6 +21,15 @@ import {
 
 const PASO_ESTADOS = ['PENDIENTE', 'EN_PROCESO', 'OBSERVADO', 'SUBSANANDO', 'APROBADO', 'RECHAZADO']
 const VENTA_ESTADOS = ['EN_PROCESO', 'INSTALADO', 'ANULADO']
+
+function fechaLimaHoy() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Lima',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+}
 
 function hasValue(value) {
   return value != null && String(value).trim() !== ''
@@ -122,6 +131,19 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
     },
   })
 
+  const contratoMutation = useMutation({
+    mutationFn: (payload) => generarContrato(ventaId, payload),
+    onSuccess: ({ blob, filename }) => {
+      setConfirm(null)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      link.click()
+      URL.revokeObjectURL(url)
+    },
+  })
+
   const deleteMutation = useMutation({
     mutationFn: () => deleteVenta(ventaId),
     onSuccess: () => {
@@ -162,11 +184,14 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   const canDeleteVenta = can('api.delete_venta')
   const canEditCodigos = can('api.change_venta_codigos')
   const canAddComentario = can('api.add_ventacomentario')
+  const canGenerarContrato = can('api.generar_contrato')
+  const esEmpresa = cliente?.tipo === 'EMPRESA'
   const saving =
     pasoMutation.isPending ||
     ventaMutation.isPending ||
     deleteMutation.isPending ||
-    comentarioMutation.isPending
+    comentarioMutation.isPending ||
+    contratoMutation.isPending
   const showVentaSelects = editing && canChangeVenta
   const showPasoSelects = editing && canChangePaso
 
@@ -182,6 +207,23 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
           <button type="button" className="btn btn-ghost" onClick={onBack}>
             Cerrar
           </button>
+          {canGenerarContrato ? (
+            <button
+              type="button"
+              className="btn border-none bg-emerald-600 text-white hover:bg-emerald-700"
+              disabled={saving || !esEmpresa}
+              onClick={() =>
+                setConfirm({
+                  type: 'contrato',
+                  fecha: fechaLimaHoy(),
+                  direccion: direccion ? formatDireccion(direccion) : '',
+                })
+              }
+              title={esEmpresa ? 'Generar contratos Entel' : 'Solo disponible para persona jurídica'}
+            >
+              Generar contrato
+            </button>
+          ) : null}
           {canDeleteVenta ? (
             <button
               type="button"
@@ -229,6 +271,11 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
       {deleteMutation.isError ? (
         <div className="alert alert-error">
           <span>{deleteMutation.error.message}</span>
+        </div>
+      ) : null}
+      {contratoMutation.isError ? (
+        <div className="alert alert-error">
+          <span>{contratoMutation.error.message}</span>
         </div>
       ) : null}
 
@@ -509,6 +556,95 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
           setConfirm(null)
         }}
       />
+    ) : null}
+    {confirm?.type === 'contrato' ? (
+      <Modal
+        open
+        stacked
+        title="Generar contrato"
+        onClose={() => {
+          if (!contratoMutation.isPending) setConfirm(null)
+        }}
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={contratoMutation.isPending}
+              onClick={() => setConfirm(null)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn border-none bg-emerald-600 text-white hover:bg-emerald-700"
+              disabled={contratoMutation.isPending || !confirm.fecha}
+              onClick={() =>
+                contratoMutation.mutate({ fecha: confirm.fecha, direccion: confirm.direccion })
+              }
+            >
+              {contratoMutation.isPending ? 'Generando…' : 'Generar'}
+            </button>
+          </>
+        }
+      >
+        <p className="mb-4 text-sm text-slate-600">
+          El ZIP se descarga como{' '}
+          <span className="font-medium text-slate-800">
+            {`${empresa?.razon_social || 'RAZÓN SOCIAL'} - ${empresa?.ruc || 'RUC'}.zip`}
+          </span>
+          . Plan, velocidad y promoción se toman de la venta. Ajusta la fecha o la dirección solo si
+          el contrato debe usar otros datos (por ejemplo el formato de factibilidad).
+        </p>
+        <dl className="mb-4 grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
+          <div>
+            <dt className="text-slate-400">Plan</dt>
+            <dd className="font-medium">{venta.producto_detalle?.nombre ?? '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-slate-400">Velocidad</dt>
+            <dd>{venta.producto_detalle?.velocidad ? `${venta.producto_detalle.velocidad} Mbps` : '—'}</dd>
+          </div>
+          <div className="sm:col-span-2">
+            <dt className="text-slate-400">Promociones</dt>
+            <dd>
+              {venta.promociones_detalle?.length
+                ? venta.promociones_detalle.map((promo) => promo.nombre).join(', ')
+                : 'Sin promoción'}
+            </dd>
+          </div>
+        </dl>
+        <label className="block text-sm">
+          <span className="mb-1 block text-slate-400">Fecha del contrato</span>
+          <input
+            className="input input-bordered w-full"
+            disabled={contratoMutation.isPending}
+            max={fechaLimaHoy()}
+            onChange={(event) => setConfirm({ ...confirm, fecha: event.target.value })}
+            type="date"
+            value={confirm.fecha}
+          />
+        </label>
+        <label className="mt-4 block text-sm">
+          <span className="mb-1 block text-slate-400">Dirección del contrato</span>
+          <textarea
+            className="textarea textarea-bordered w-full text-sm"
+            disabled={contratoMutation.isPending}
+            maxLength={400}
+            onChange={(event) => setConfirm({ ...confirm, direccion: event.target.value })}
+            rows={3}
+            value={confirm.direccion ?? ''}
+          />
+          <span className="mt-1 block text-xs text-slate-400">
+            Viene de la venta. Pégala en el formato del sistema de factibilidad si es distinto.
+          </span>
+        </label>
+        {contratoMutation.isError ? (
+          <div className="alert alert-error mt-4">
+            <span>{contratoMutation.error.message}</span>
+          </div>
+        ) : null}
+      </Modal>
     ) : null}
     </>
   )

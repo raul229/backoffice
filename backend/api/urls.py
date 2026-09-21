@@ -4,6 +4,11 @@ from rest_framework.routers import DefaultRouter
 from .auth_views import change_password, csrf, login_view, logout_view, me
 from .roles_views import permission_catalog, role_detail, roles, user_detail, users
 from .lookup_views import lookup_direccion, lookup_ruc
+from .plantillas_views import (
+    descargar_plantilla_contrato,
+    plantillas_contrato,
+    subir_plantilla_contrato,
+)
 from .views import (
     ClienteViewSet,
     DireccionViewSet,
@@ -41,6 +46,17 @@ urlpatterns = [
     path("", include(router.urls)),
     path("choices/", choices, name="api-choices"),
     path("asesores/", asesores, name="api-asesores"),
+    path("plantillas-contrato/", plantillas_contrato, name="api-plantillas-contrato"),
+    path(
+        "plantillas-contrato/<slug:clave>/",
+        subir_plantilla_contrato,
+        name="api-plantillas-contrato-subir",
+    ),
+    path(
+        "plantillas-contrato/<slug:clave>/archivo/",
+        descargar_plantilla_contrato,
+        name="api-plantillas-contrato-archivo",
+    ),
     path("lookup/ruc/", lookup_ruc, name="api-lookup-ruc"),
     path("lookup/direccion/", lookup_direccion, name="api-lookup-direccion"),
     path("auth/csrf/", csrf, name="api-csrf"),

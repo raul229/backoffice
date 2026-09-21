@@ -30,6 +30,7 @@ import { tipoClienteLabel } from '../lib/venta.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
+import PlantillasContratoTab from '../components/PlantillasContratoTab.jsx'
 
 export default function ConfiguracionPage() {
   const { can } = useAuth()
@@ -224,7 +225,8 @@ export default function ConfiguracionPage() {
         <div>
           <h1 className="text-xl font-bold sm:text-2xl">Configuración</h1>
           <p className="text-sm text-slate-500">
-            Productos, promociones, flujos y pasos se editan en un modal para evitar cambios accidentales.
+            Productos, promociones, flujos, pasos y plantillas de contrato se editan aquí para evitar
+            cambios accidentales.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -273,6 +275,9 @@ export default function ConfiguracionPage() {
           ['promociones', 'Promociones'],
           ['pasos', 'Pasos'],
           ['flujos', 'Flujos'],
+          ...(can('api.view_plantillacontrato') || can('api.change_plantillacontrato')
+            ? [['contratos', 'Contratos']]
+            : []),
         ].map(([id, label]) => (
           <button
             key={id}
@@ -551,6 +556,16 @@ export default function ConfiguracionPage() {
           </table>
         )}
       </section>
+      ) : null}
+
+      {tab === 'contratos' ? (
+        <PlantillasContratoTab
+          onError={(message) => {
+            setError(message)
+            setOk('')
+          }}
+          onOk={notify}
+        />
       ) : null}
 
       {confirm ? (

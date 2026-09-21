@@ -380,3 +380,127 @@ export function createVentaComentario(payload) {
     body: JSON.stringify(payload),
   });
 }
+
+function filenameFromDisposition(header, fallback) {
+  if (!header) return fallback
+  const encoded = /filename\*=(?:UTF-8''|utf-8'')([^;]+)/i.exec(header)
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1].trim().replace(/^"(.*)"$/, "$1"))
+    } catch {
+      /* ignore */
+    }
+  }
+  const quoted = /filename="([^"]+)"/i.exec(header)
+  if (quoted) return quoted[1]
+  const plain = /filename=([^;]+)/i.exec(header)
+  return plain ? plain[1].trim() : fallback
+}
+
+export async function generarContrato(ventaId, opciones = {}) {
+  const payload = typeof opciones === "string" ? { fecha: opciones } : opciones
+  const headers = { "Content-Type": "application/json" }
+  const token = csrfToken()
+  if (token) headers["X-CSRFToken"] = token
+  const response = await fetch(`/api/ventas/${ventaId}/generar-contrato/`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify({
+      ...(payload.fecha ? { fecha: payload.fecha } : {}),
+      ...(payload.direccion != null ? { direccion: payload.direccion } : {}),
+    }),
+  })
+  if (response.status === 401) {
+    window.dispatchEvent(new Event("auth:required"))
+  }
+  if (!response.ok) {
+    let message = response.statusText || "No se pudo generar el contrato"
+    try {
+      const data = await response.json()
+      message =
+        data.detail ||
+        Object.entries(data)
+          .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : value}`)
+          .join(" · ") ||
+        message
+    } catch {
+      /* ignore */
+    }
+    throw new Error(message)
+  }
+  const blob = await response.blob()
+  return {
+    blob,
+    filename: filenameFromDisposition(
+      response.headers.get("Content-Disposition"),
+      `contratos-${ventaId}.zip`,
+    ),
+  }
+}
+
+export function getPlantillasContrato() {
+  return request("/plantillas-contrato/")
+}
+
+export async function uploadPlantillaContrato(clave, file) {
+  const headers = {}
+  const token = csrfToken()
+  if (token) headers["X-CSRFToken"] = token
+  const body = new FormData()
+  body.append("archivo", file)
+  const response = await fetch(`/api/plantillas-contrato/${clave}/`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body,
+  })
+  if (response.status === 401) {
+    window.dispatchEvent(new Event("auth:required"))
+  }
+  if (!response.ok) {
+    let message = response.statusText || "No se pudo cargar la plantilla"
+    try {
+      const data = await response.json()
+      message =
+        data.detail ||
+        data.archivo ||
+        Object.entries(data)
+          .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : value}`)
+          .join(" · ") ||
+        message
+    } catch {
+      /* ignore */
+    }
+    throw new Error(Array.isArray(message) ? message.join(", ") : message)
+  }
+  return response.json()
+}
+
+export async function downloadPlantillaContrato(clave, fallbackName) {
+  const headers = {}
+  const token = csrfToken()
+  if (token) headers["X-CSRFToken"] = token
+  const response = await fetch(`/api/plantillas-contrato/${clave}/archivo/`, {
+    credentials: "include",
+    headers,
+  })
+  if (response.status === 401) {
+    window.dispatchEvent(new Event("auth:required"))
+  }
+  if (!response.ok) {
+    let message = response.statusText || "No se pudo descargar la plantilla"
+    try {
+      const data = await response.json()
+      message = data.detail || message
+    } catch {
+      /* ignore */
+    }
+    throw new Error(message)
+  }
+  const blob = await response.blob()
+  return {
+    blob,
+    filename: filenameFromDisposition(response.headers.get("Content-Disposition"), fallbackName),
+  }
+}

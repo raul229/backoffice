@@ -18,6 +18,7 @@ PERMISSION_CATALOG = [
             ("api.change_venta", "Editar estado y flujo de una venta"),
             ("api.change_venta_codigos", "Editar códigos de seguimiento (PSI, SIRO, orden…)"),
             ("api.reasignar_venta", "Reasignar ventas a otro asesor"),
+            ("api.generar_contrato", "Generar contratos de una venta"),
             ("api.delete_venta", "Eliminar ventas"),
             ("api.view_ventapaso", "Ver historial de pasos"),
             ("api.change_ventapaso", "Cambiar estado de un paso"),
@@ -66,6 +67,10 @@ PERMISSION_CATALOG = [
             ("api.view_flujopaso", "Ver pasos de un flujo"),
             ("api.add_flujopaso", "Agregar pasos a un flujo"),
             ("api.delete_flujopaso", "Quitar pasos de un flujo"),
+            ("api.view_plantillacontrato", "Ver plantillas de contrato"),
+            ("api.add_plantillacontrato", "Cargar plantillas de contrato"),
+            ("api.change_plantillacontrato", "Reemplazar plantillas de contrato"),
+            ("api.delete_plantillacontrato", "Quitar plantillas de contrato"),
         ],
     },
     {
