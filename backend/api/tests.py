@@ -1281,6 +1281,36 @@ class LookupRucTests(APITestCase):
         self.assertEqual(ce["nombres"], "MARIA ELENA")
         self.assertEqual(ce["apellidos"], "SMITH JOHNSON")
 
+        encoded = parse_sunat_html(
+            """
+            <div class="list-group-item">
+              <div class="row">
+                <div class="col-sm-5">
+                  <h4 class="list-group-item-heading">N&uacute;mero de RUC:</h4>
+                </div>
+                <div class="col-sm-7">
+                  <h4 class="list-group-item-heading">20131312955 - SUPERINTENDENCIA NACIONAL DE ADUANAS Y DE ADMINISTRACION TRIBUTARIA - SUNAT</h4>
+                </div>
+              </div>
+            </div>
+            <div class="list-group-item">
+              <div class="row">
+                <div class="col-sm-5">
+                  <h4 class="list-group-item-heading">Domicilio Fiscal:</h4>
+                </div>
+                <div class="col-sm-7">
+                  <p class="list-group-item-text">AV. GARCILASO DE LA VEGA NRO. 1472 LIMA - LIMA - LIMA</p>
+                </div>
+              </div>
+            </div>
+            """
+        )
+        self.assertEqual(encoded["ruc"], "20131312955")
+        self.assertIn("SUPERINTENDENCIA NACIONAL", encoded["razon_social"])
+        self.assertEqual(encoded["tipo_direccion"], "AVENIDA")
+        self.assertEqual(encoded["numero"], "1472")
+        self.assertEqual(encoded["distrito"], "LIMA")
+
     def test_lookup_uses_existing_cliente_and_last_sale(self):
         representante = Persona.objects.create(
             cliente=Cliente.objects.create(tipo=TipoCliente.PERSONA),

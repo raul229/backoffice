@@ -118,10 +118,17 @@ const LOOKUP_FIELDS = [
   'promociones',
 ]
 
-function cambiarTipoCliente(form, tipo, { lastRucLookup, setLookupStatus, setRepresentantes, setStep }) {
+function cambiarTipoCliente(form, tipo, { lastRucLookup, lookupRequestId, setLookupStatus, setRepresentantes, setStep }) {
   if (form.getFieldValue('tipo_cliente') === tipo) return
-  form.reset({ ...defaultValues, tipo_cliente: tipo })
+  const ruc = form.getFieldValue('ruc')
+  form.setFieldValue('tipo_cliente', tipo)
+  form.setFieldValue('ruc', ruc)
+  form.setFieldValue('cliente_id', '')
+  form.setFieldValue('flujo', '')
+  form.setFieldValue('producto', '')
+  form.setFieldValue('promociones', [])
   lastRucLookup.current = ''
+  lookupRequestId.current += 1
   setLookupStatus('')
   setRepresentantes([])
   setStep(0)
@@ -153,6 +160,7 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
   const [representantes, setRepresentantes] = useState([])
   const [direccionSugerencias, setDireccionSugerencias] = useState([])
   const lastRucLookup = useRef('')
+  const lookupRequestId = useRef(0)
   const direccionTimer = useRef(0)
 
   const choicesQuery = useQuery({ queryKey: ['choices'], queryFn: getChoices })
@@ -247,9 +255,11 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
   const buscarPorRuc = async (ruc) => {
     if (!/^\d{11}$/.test(ruc) || lastRucLookup.current === ruc) return
     lastRucLookup.current = ruc
+    const requestId = ++lookupRequestId.current
     setLookupStatus('Buscando RUC...')
     try {
       const data = await lookupRuc(ruc)
+      if (requestId !== lookupRequestId.current) return
       applyLookup(form, data)
       const reps = data.representantes ?? []
       setRepresentantes(reps)
@@ -263,6 +273,8 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
         )
       }
     } catch (error) {
+      if (requestId !== lookupRequestId.current) return
+      lastRucLookup.current = ''
       form.setFieldValue('cliente_id', '')
       setRepresentantes([])
       setLookupStatus(error.message || 'No se encontraron datos para este RUC.')
@@ -331,6 +343,7 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                           onClick={() =>
                             cambiarTipoCliente(form, 'PERSONA', {
                               lastRucLookup,
+                              lookupRequestId,
                               setLookupStatus,
                               setRepresentantes,
                               setStep,
@@ -347,6 +360,7 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                           onClick={() =>
                             cambiarTipoCliente(form, 'EMPRESA', {
                               lastRucLookup,
+                              lookupRequestId,
                               setLookupStatus,
                               setRepresentantes,
                               setStep,
@@ -365,6 +379,7 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                             const ruc = String(value || '')
                             if (ruc.length !== 11) {
                               lastRucLookup.current = ''
+                              lookupRequestId.current += 1
                               form.setFieldValue('cliente_id', '')
                               setLookupStatus('')
                               setRepresentantes([])

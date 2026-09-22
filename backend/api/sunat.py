@@ -10,6 +10,11 @@ SUNAT_URL = "https://e-consultaruc.sunat.gob.pe/cl-ti-itmrconsruc/jcrS00Alias"
 SUNAT_REFERER = (
     "https://e-consultaruc.sunat.gob.pe/cl-ti-itmrconsruc/FrameCriterioBusquedaWeb.jsp"
 )
+SUNAT_ORIGIN = "https://e-consultaruc.sunat.gob.pe"
+SUNAT_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
 
 VIA_TIPOS = (
     ("AVENIDA", "AVENIDA"),
@@ -180,26 +185,42 @@ def parse_representantes(html_text):
     return representantes
 
 
-def _sunat_post(opener, fields, referer=SUNAT_REFERER):
+def _sunat_headers(referer=SUNAT_REFERER, form=False):
+    headers = {
+        "User-Agent": SUNAT_USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "es-PE,es;q=0.9,en;q=0.8",
+        "Referer": referer,
+    }
+    if form:
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+        headers["Origin"] = SUNAT_ORIGIN
+    return headers
+
+
+def _sunat_request(opener, url, fields=None, referer=SUNAT_REFERER):
+    data = urllib.parse.urlencode(fields).encode() if fields is not None else None
     request = urllib.request.Request(
-        SUNAT_URL,
-        data=urllib.parse.urlencode(fields).encode(),
-        method="POST",
-        headers={
-            "User-Agent": "Mozilla/5.0",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Origin": "https://e-consultaruc.sunat.gob.pe",
-            "Referer": referer,
-        },
+        url,
+        data=data,
+        method="POST" if data is not None else "GET",
+        headers=_sunat_headers(referer, form=data is not None),
     )
     with opener.open(request, timeout=20) as response:
         return response.read().decode("iso-8859-1", errors="replace")
+
+
+def _sunat_post(opener, fields, referer=SUNAT_REFERER):
+    return _sunat_request(opener, SUNAT_URL, fields, referer=referer)
 
 
 def consultar_sunat(ruc):
     opener = urllib.request.build_opener(
         urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
     )
+    # SUNAT rejects the lookup POST unless the browser first opens the search page
+    # and sends a real User-Agent. Without that session the WAF answers 403.
+    _sunat_request(opener, SUNAT_REFERER)
     html_text = _sunat_post(
         opener,
         {
