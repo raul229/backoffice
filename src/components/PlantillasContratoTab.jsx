@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { downloadPlantillaContrato, getPlantillasContrato, uploadPlantillaContrato } from '../service/api.js'
 import { displayName } from '../lib/auth.js'
 import { formatFecha } from '../lib/venta.js'
 import { useAuth } from '../context/AuthContext.jsx'
+import DataTable, { ActionsCell } from './DataTable.jsx'
 
 function formatBytes(n) {
   if (!n) return ''
@@ -50,6 +51,115 @@ export default function PlantillasContratoTab({ onError, onOk }) {
 
   const grupos = [...new Set(plantillas.map((item) => item.grupo))]
 
+  const plantillaColumns = useMemo(
+    () => [
+      {
+        id: 'plantilla',
+        accessorKey: 'etiqueta',
+        header: 'Plantilla',
+        cell: (info) => {
+          const item = info.row.original
+          return (
+            <>
+              <p className="font-medium">{item.etiqueta}</p>
+              <p className="text-xs text-slate-500">{item.descripcion}</p>
+            </>
+          )
+        },
+      },
+      {
+        id: 'estado',
+        accessorFn: (row) => (row.cargada ? 'Cargada' : row.requerida ? 'Falta' : 'Opcional'),
+        header: 'Estado',
+        cell: (info) => {
+          const item = info.row.original
+          return item.cargada ? (
+            <span className="badge badge-ghost whitespace-nowrap border-emerald-200 bg-emerald-50 text-emerald-700">
+              Cargada{item.tamano ? ` · ${formatBytes(item.tamano)}` : ''}
+            </span>
+          ) : (
+            <span
+              className={`badge badge-ghost ${
+                item.requerida ? 'border-amber-200 bg-amber-50 text-amber-800' : 'text-slate-500'
+              }`}
+            >
+              {item.requerida ? 'Falta' : 'Opcional'}
+            </span>
+          )
+        },
+      },
+      {
+        id: 'actualizada',
+        accessorFn: (row) => row.actualizado || '',
+        header: 'Actualizada',
+        cell: (info) => {
+          const item = info.row.original
+          return (
+            <span className="text-sm text-slate-500">
+              {item.cargada ? (
+                <>
+                  {formatFecha(item.actualizado)}
+                  {item.actualizado_por ? ` · ${displayName(item.actualizado_por)}` : ''}
+                </>
+              ) : (
+                '—'
+              )}
+            </span>
+          )
+        },
+      },
+      {
+        id: 'acciones',
+        header: '',
+        cell: (info) => {
+          const item = info.row.original
+          return (
+            <ActionsCell>
+              {item.cargada ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  disabled={downloadMutation.isPending}
+                  onClick={() => downloadMutation.mutate(item)}
+                >
+                  Descargar
+                </button>
+              ) : null}
+              {canChange ? (
+                <>
+                  <input
+                    ref={(node) => {
+                      inputsRef.current[item.clave] = node
+                    }}
+                    accept={item.acepta.join(',')}
+                    className="hidden"
+                    type="file"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0]
+                      event.target.value = ''
+                      if (!file) return
+                      setUploading(item.clave)
+                      uploadMutation.mutate({ clave: item.clave, file })
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs"
+                    disabled={Boolean(uploading)}
+                    onClick={() => inputsRef.current[item.clave]?.click()}
+                  >
+                    {uploading === item.clave ? 'Subiendo…' : item.cargada ? 'Reemplazar' : 'Cargar'}
+                  </button>
+                </>
+              ) : null}
+            </ActionsCell>
+          )
+        },
+      },
+    ],
+    [canChange, downloadMutation, uploadMutation, uploading],
+  )
+
   return (
     <section className="space-y-4">
       <div className="bo-card p-4 sm:p-5">
@@ -68,102 +178,15 @@ export default function PlantillasContratoTab({ onError, onOk }) {
         </div>
       ) : (
         grupos.map((grupo) => (
-          <section key={grupo} className="bo-card bo-table-wrap p-4 sm:p-5">
+          <section key={grupo} className="bo-card p-4 sm:p-5">
             <h3 className="mb-3 font-semibold">{grupo}</h3>
-            <table className="table table-sm sm:table-md">
-              <thead>
-                <tr className="text-slate-400">
-                  <th>Plantilla</th>
-                  <th>Estado</th>
-                  <th>Actualizada</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {plantillas
-                  .filter((item) => item.grupo === grupo)
-                  .map((item) => (
-                    <tr key={item.clave}>
-                      <td>
-                        <p className="font-medium">{item.etiqueta}</p>
-                        <p className="text-xs text-slate-500">{item.descripcion}</p>
-                      </td>
-                      <td>
-                        {item.cargada ? (
-                          <span className="badge badge-ghost whitespace-nowrap border-emerald-200 bg-emerald-50 text-emerald-700">
-                            Cargada{item.tamano ? ` · ${formatBytes(item.tamano)}` : ''}
-                          </span>
-                        ) : (
-                          <span
-                            className={`badge badge-ghost ${
-                              item.requerida
-                                ? 'border-amber-200 bg-amber-50 text-amber-800'
-                                : 'text-slate-500'
-                            }`}
-                          >
-                            {item.requerida ? 'Falta' : 'Opcional'}
-                          </span>
-                        )}
-                      </td>
-                      <td className="text-sm text-slate-500">
-                        {item.cargada ? (
-                          <>
-                            {formatFecha(item.actualizado)}
-                            {item.actualizado_por
-                              ? ` · ${displayName(item.actualizado_por)}`
-                              : ''}
-                          </>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className="text-right">
-                        {item.cargada ? (
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-xs"
-                            disabled={downloadMutation.isPending}
-                            onClick={() => downloadMutation.mutate(item)}
-                          >
-                            Descargar
-                          </button>
-                        ) : null}
-                        {canChange ? (
-                          <>
-                            <input
-                              ref={(node) => {
-                                inputsRef.current[item.clave] = node
-                              }}
-                              accept={item.acepta.join(',')}
-                              className="hidden"
-                              type="file"
-                              onChange={(event) => {
-                                const file = event.target.files?.[0]
-                                event.target.value = ''
-                                if (!file) return
-                                setUploading(item.clave)
-                                uploadMutation.mutate({ clave: item.clave, file })
-                              }}
-                            />
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-xs"
-                              disabled={Boolean(uploading)}
-                              onClick={() => inputsRef.current[item.clave]?.click()}
-                            >
-                              {uploading === item.clave
-                                ? 'Subiendo…'
-                                : item.cargada
-                                  ? 'Reemplazar'
-                                  : 'Cargar'}
-                            </button>
-                          </>
-                        ) : null}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+            <DataTable
+              tableKey={`plantillas-${grupo}`}
+              columns={plantillaColumns}
+              data={plantillas.filter((item) => item.grupo === grupo)}
+              emptyLabel="No hay plantillas en este grupo."
+              getRowId={(row) => row.clave}
+            />
           </section>
         ))
       )}

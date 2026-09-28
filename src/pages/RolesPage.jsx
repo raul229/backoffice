@@ -19,6 +19,7 @@ import { displayName } from '../lib/auth.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
+import DataTable, { ActionsCell } from '../components/DataTable.jsx'
 
 const emptyUser = {
   username: '',
@@ -129,6 +130,128 @@ export default function RolesPage() {
     [modal, users],
   )
 
+  const roleColumns = useMemo(
+    () => [
+      {
+        id: 'name',
+        accessorKey: 'name',
+        header: 'Rol',
+        cell: (info) => <span className="font-medium">{info.getValue()}</span>,
+      },
+      {
+        id: 'users_count',
+        accessorKey: 'users_count',
+        header: 'Usuarios',
+      },
+      {
+        id: 'acciones',
+        header: '',
+        cell: (info) => {
+          const role = info.row.original
+          return (
+            <ActionsCell>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={() => setModal({ type: 'role', id: role.id, editing: false })}
+              >
+                Ver
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={() => setModal({ type: 'role', id: role.id, editing: true })}
+              >
+                Editar
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs text-rose-600"
+                onClick={() =>
+                  setConfirm({
+                    title: 'Eliminar rol',
+                    message: `¿Eliminar el rol “${role.name}”? Esta acción no se puede deshacer.`,
+                    run: () => removeRole.mutate(role.id),
+                  })
+                }
+              >
+                Eliminar
+              </button>
+            </ActionsCell>
+          )
+        },
+      },
+    ],
+    [removeRole],
+  )
+
+  const userColumns = useMemo(
+    () => [
+      {
+        id: 'username',
+        accessorKey: 'username',
+        header: 'Usuario',
+        cell: (info) => <span className="font-medium">{info.getValue()}</span>,
+      },
+      {
+        id: 'nombre',
+        accessorFn: displayName,
+        header: 'Nombre',
+      },
+      {
+        id: 'rol',
+        accessorFn: (row) => row.groups[0] || 'Sin rol',
+        header: 'Rol',
+      },
+      {
+        id: 'estado',
+        accessorFn: (row) => (row.is_active ? 'Activo' : 'Inactivo'),
+        header: 'Estado',
+      },
+      {
+        id: 'acciones',
+        header: '',
+        cell: (info) => {
+          const user = info.row.original
+          return (
+            <ActionsCell>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={() => setModal({ type: 'user', id: user.id, editing: false })}
+              >
+                Ver
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={() => setModal({ type: 'user', id: user.id, editing: true })}
+              >
+                Editar
+              </button>
+              {user.id === currentUser?.id ? null : (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs text-rose-600"
+                  onClick={() =>
+                    setConfirm({
+                      title: 'Eliminar usuario',
+                      message: `¿Eliminar al usuario “${user.username}”? Esta acción no se puede deshacer.`,
+                      run: () => removeUser.mutate(user.id),
+                    })
+                  }
+                >
+                  Eliminar
+                </button>
+              )}
+            </ActionsCell>
+          )
+        },
+      },
+    ],
+    [currentUser?.id, removeUser],
+  )
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -167,110 +290,28 @@ export default function RolesPage() {
         </div>
       ) : null}
 
-      <section className="bo-card bo-table-wrap p-4 sm:p-5">
+      <section className="bo-card p-4 sm:p-5">
         <h2 className="mb-3 font-semibold">Roles</h2>
-        <table className="table table-sm sm:table-md">
-          <thead>
-            <tr className="text-slate-400">
-              <th>Rol</th>
-              <th>Usuarios</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {roles.map((role) => (
-              <tr key={role.id}>
-                <td className="font-medium">{role.name}</td>
-                <td>{role.users_count}</td>
-                <td className="text-right">
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-xs"
-                    onClick={() => setModal({ type: 'role', id: role.id, editing: false })}
-                  >
-                    Ver
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-xs"
-                    onClick={() => setModal({ type: 'role', id: role.id, editing: true })}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-xs text-rose-600"
-                    onClick={() =>
-                      setConfirm({
-                        title: 'Eliminar rol',
-                        message: `¿Eliminar el rol “${role.name}”? Esta acción no se puede deshacer.`,
-                        run: () => removeRole.mutate(role.id),
-                      })
-                    }
-                  >
-                    Eliminar
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          tableKey="roles-table"
+          columns={roleColumns}
+          data={roles}
+          emptyLabel="Aún no hay roles."
+          getRowId={(row) => String(row.id)}
+          isPending={rolesQuery.isPending}
+        />
       </section>
 
-      <section className="bo-card bo-table-wrap p-4 sm:p-5">
+      <section className="bo-card p-4 sm:p-5">
         <h2 className="mb-3 font-semibold">Usuarios</h2>
-        <table className="table table-sm sm:table-md">
-          <thead>
-            <tr className="text-slate-400">
-              <th>Usuario</th>
-              <th>Nombre</th>
-              <th>Rol</th>
-              <th>Estado</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user) => (
-              <tr key={user.id}>
-                <td className="font-medium">{user.username}</td>
-                <td>{displayName(user)}</td>
-                <td>{user.groups[0] || 'Sin rol'}</td>
-                <td>{user.is_active ? 'Activo' : 'Inactivo'}</td>
-                <td className="text-right">
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-xs"
-                    onClick={() => setModal({ type: 'user', id: user.id, editing: false })}
-                  >
-                    Ver
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-xs"
-                    onClick={() => setModal({ type: 'user', id: user.id, editing: true })}
-                  >
-                    Editar
-                  </button>
-                  {user.id === currentUser?.id ? null : (
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-xs text-rose-600"
-                      onClick={() =>
-                        setConfirm({
-                          title: 'Eliminar usuario',
-                          message: `¿Eliminar al usuario “${user.username}”? Esta acción no se puede deshacer.`,
-                          run: () => removeUser.mutate(user.id),
-                        })
-                      }
-                    >
-                      Eliminar
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          tableKey="users-table"
+          columns={userColumns}
+          data={users}
+          emptyLabel="Aún no hay usuarios."
+          getRowId={(row) => String(row.id)}
+          isPending={usersQuery.isPending}
+        />
       </section>
 
       {confirm ? (

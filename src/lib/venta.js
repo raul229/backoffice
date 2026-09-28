@@ -80,6 +80,42 @@ export function formatFecha(value) {
   })
 }
 
+export function pasosOrdenados(venta) {
+  return [...(venta?.pasos ?? [])].sort(
+    (a, b) => (a.flujo_paso_detalle?.orden ?? 0) - (b.flujo_paso_detalle?.orden ?? 0),
+  )
+}
+
+export function nombrePaso(paso) {
+  return paso?.flujo_paso_detalle?.paso_detalle?.nombre ?? ''
+}
+
+export function pasoActual(venta) {
+  const pasos = pasosOrdenados(venta)
+  if (!pasos.length) return null
+  if (venta?.estado === 'INSTALADO' || pasos.every((paso) => paso.estado === 'APROBADO')) {
+    return pasos[pasos.length - 1]
+  }
+  const byEstado = (estado) => pasos.find((paso) => paso.estado === estado)
+  return (
+    byEstado('OBSERVADO') ||
+    byEstado('SUBSANANDO') ||
+    byEstado('EN_PROCESO') ||
+    byEstado('PENDIENTE') ||
+    byEstado('RECHAZADO') ||
+    pasos[pasos.length - 1]
+  )
+}
+
+export const PASO_ESTADO_UI = {
+  PENDIENTE: { label: 'Pendiente', className: 'bg-slate-100 text-slate-600' },
+  EN_PROCESO: { label: 'En proceso', className: 'bg-blue-100 text-blue-700' },
+  OBSERVADO: { label: 'Observado', className: 'bg-orange-100 text-orange-700' },
+  SUBSANANDO: { label: 'Subsanando', className: 'bg-amber-100 text-amber-800' },
+  APROBADO: { label: 'Aprobado', className: 'bg-emerald-100 text-emerald-700' },
+  RECHAZADO: { label: 'Rechazado', className: 'bg-rose-100 text-rose-700' },
+}
+
 export function estadoUi(venta) {
   const pasos = venta.pasos ?? []
   if (pasos.some((paso) => paso.estado === 'OBSERVADO' || paso.estado === 'SUBSANANDO')) {
@@ -91,8 +127,8 @@ export function estadoUi(venta) {
     return 'aprobada'
   }
   const enProceso = pasos.find((paso) => paso.estado === 'EN_PROCESO')
-  const nombrePaso = enProceso?.flujo_paso_detalle?.paso_detalle?.nombre?.toLowerCase() ?? ''
-  if (nombrePaso.includes('evaluacion') || nombrePaso.includes('valid')) return 'validacion'
+  const nombreEnProceso = enProceso?.flujo_paso_detalle?.paso_detalle?.nombre?.toLowerCase() ?? ''
+  if (nombreEnProceso.includes('evaluacion') || nombreEnProceso.includes('valid')) return 'validacion'
   return 'seguimiento'
 }
 
@@ -180,6 +216,8 @@ export function matchesSearch(venta, query) {
     correoCliente(cliente),
     venta.producto_detalle?.nombre,
     venta.estado,
+    nombrePaso(pasoActual(venta)),
+    pasoActual(venta)?.estado,
     venta.creado_por_detalle?.username,
     `${venta.creado_por_detalle?.first_name ?? ''} ${venta.creado_por_detalle?.last_name ?? ''}`.trim(),
     ...VENTA_CODIGOS.map((item) => venta[item.key]),

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Field from '../components/Field.jsx'
@@ -25,6 +25,7 @@ import {
 import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
+import DataTable, { ActionsCell } from '../components/DataTable.jsx'
 
 export default function ClientesPage({ search }) {
   const { can } = useAuth()
@@ -134,6 +135,140 @@ export default function ClientesPage({ search }) {
   const selectedCliente = (clientes ?? []).find((cliente) => cliente.id === selected?.id)
   const editingDireccion = allDirecciones.find((item) => item.id === direccionModal?.id)
 
+  const clienteColumns = useMemo(
+    () => [
+      {
+        id: 'cliente',
+        accessorFn: nombreCliente,
+        header: 'Cliente',
+        cell: (info) => <span className="font-medium">{info.getValue()}</span>,
+      },
+      {
+        id: 'tipo',
+        accessorFn: (row) => tipoClienteLabel(row.tipo),
+        header: 'Tipo',
+      },
+      {
+        id: 'documento',
+        accessorFn: (row) => documentoCliente(row) || '—',
+        header: 'Documento',
+      },
+      {
+        id: 'correo',
+        accessorFn: (row) => correoCliente(row) || '—',
+        header: 'Correo',
+        cell: (info) => <span className="max-w-[14rem] break-all">{info.getValue()}</span>,
+      },
+      {
+        id: 'contacto',
+        accessorFn: (row) => celularCliente(row) || '—',
+        header: 'Contacto',
+      },
+      {
+        id: 'acciones',
+        header: '',
+        cell: (info) => {
+          const cliente = info.row.original
+          return (
+            <ActionsCell>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={() => setSelected({ id: cliente.id })}
+              >
+                Ver
+              </button>
+              {canEditCliente(cliente, canChangePersona, canChangeEmpresa) ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  onClick={() => setSelected({ id: cliente.id, editing: true })}
+                >
+                  Editar
+                </button>
+              ) : null}
+              {canDeleteCliente ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs text-rose-600"
+                  disabled={deleteClienteMutation.isPending}
+                  onClick={() => setToDelete({ type: 'cliente', cliente })}
+                >
+                  Eliminar
+                </button>
+              ) : null}
+            </ActionsCell>
+          )
+        },
+      },
+    ],
+    [canChangeEmpresa, canChangePersona, canDeleteCliente, deleteClienteMutation.isPending],
+  )
+
+  const direccionColumns = useMemo(
+    () => [
+      {
+        id: 'cliente',
+        accessorKey: 'clienteNombre',
+        header: 'Cliente',
+        cell: (info) => <span className="font-medium">{info.getValue()}</span>,
+      },
+      {
+        id: 'direccion',
+        accessorFn: (row) => `${row.tipo} ${row.direccion} ${row.numero}`,
+        header: 'Dirección',
+      },
+      {
+        id: 'distrito',
+        accessorKey: 'distrito',
+        header: 'Distrito',
+      },
+      {
+        id: 'acciones',
+        header: '',
+        cell: (info) => {
+          const direccion = info.row.original
+          return (
+            <ActionsCell>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={() => setDireccionModal({ type: 'direccion', id: direccion.id, editing: false })}
+              >
+                Ver
+              </button>
+              {canChangeDireccion ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  onClick={() => setDireccionModal({ type: 'direccion', id: direccion.id, editing: true })}
+                >
+                  Editar
+                </button>
+              ) : null}
+              {canDeleteDireccion ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs text-rose-600"
+                  onClick={() =>
+                    setToDelete({
+                      type: 'direccion',
+                      direccion,
+                      message: `¿Eliminar ${formatDireccion(direccion)}? Esta acción no se puede deshacer.`,
+                    })
+                  }
+                >
+                  Eliminar
+                </button>
+              ) : null}
+            </ActionsCell>
+          )
+        },
+      },
+    ],
+    [canChangeDireccion, canDeleteDireccion],
+  )
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -180,133 +315,28 @@ export default function ClientesPage({ search }) {
           <span>{loadError.message}</span>
         </div>
       ) : tab === 'clientes' ? (
-          <section className="bo-card bo-table-wrap p-4 sm:p-5">
-            <table className="table table-sm sm:table-md">
-              <thead>
-                <tr className="text-slate-400">
-                  <th>Cliente</th>
-                  <th>Tipo</th>
-                  <th>Documento</th>
-                  <th>Correo</th>
-                  <th>Contacto</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {isPending ? (
-                  <tr>
-                    <td colSpan={6}>Cargando clientes...</td>
-                  </tr>
-                ) : filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={6}>No hay clientes para mostrar.</td>
-                  </tr>
-                ) : (
-                  filtered.map((cliente) => (
-                    <tr key={cliente.id}>
-                      <td className="font-medium">{nombreCliente(cliente)}</td>
-                      <td>{tipoClienteLabel(cliente.tipo)}</td>
-                      <td>{documentoCliente(cliente) || '—'}</td>
-                      <td className="max-w-[14rem] break-all">{correoCliente(cliente) || '—'}</td>
-                      <td>{celularCliente(cliente) || '—'}</td>
-                      <td className="text-right">
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-xs"
-                          onClick={() => setSelected({ id: cliente.id })}
-                        >
-                          Ver
-                        </button>
-                        {canEditCliente(cliente, canChangePersona, canChangeEmpresa) ? (
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-xs"
-                            onClick={() => setSelected({ id: cliente.id, editing: true })}
-                          >
-                            Editar
-                          </button>
-                        ) : null}
-                        {canDeleteCliente ? (
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-xs text-rose-600"
-                            disabled={deleteClienteMutation.isPending}
-                            onClick={() => setToDelete({ type: 'cliente', cliente })}
-                          >
-                            Eliminar
-                          </button>
-                        ) : null}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+          <section className="bo-card p-4 sm:p-5">
+            <DataTable
+              tableKey="clientes-table"
+              columns={clienteColumns}
+              data={filtered}
+              emptyLabel="No hay clientes para mostrar."
+              getRowId={(row) => String(row.id)}
+              isPending={isPending}
+            />
           </section>
           ) : (
-          <section className="bo-card bo-table-wrap p-4 sm:p-5">
-            {isPending ? (
-              <p className="text-sm text-slate-500">Cargando direcciones...</p>
-            ) : direcciones.length === 0 ? (
-              <p className="text-sm text-slate-500">Aún no hay direcciones registradas.</p>
-            ) : (
-              <table className="table table-sm sm:table-md">
-                <thead>
-                  <tr className="text-slate-400">
-                    <th>Cliente</th>
-                    <th>Dirección</th>
-                    <th>Distrito</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {direcciones.map((direccion) => (
-                    <tr key={direccion.id}>
-                      <td className="font-medium">{direccion.clienteNombre}</td>
-                      <td>
-                        {direccion.tipo} {direccion.direccion} {direccion.numero}
-                      </td>
-                      <td>{direccion.distrito}</td>
-                      <td className="text-right">
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-xs"
-                          onClick={() => setDireccionModal({ type: 'direccion', id: direccion.id, editing: false })}
-                        >
-                          Ver
-                        </button>
-                        {canChangeDireccion ? (
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-xs"
-                            onClick={() => setDireccionModal({ type: 'direccion', id: direccion.id, editing: true })}
-                          >
-                            Editar
-                          </button>
-                        ) : null}
-                        {canDeleteDireccion ? (
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-xs text-rose-600"
-                            onClick={() =>
-                              setToDelete({
-                                type: 'direccion',
-                                direccion,
-                                message: `¿Eliminar ${formatDireccion(direccion)}? Esta acción no se puede deshacer.`,
-                              })
-                            }
-                          >
-                            Eliminar
-                          </button>
-                        ) : null}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+          <section className="bo-card p-4 sm:p-5">
+            <DataTable
+              tableKey="direcciones-table"
+              columns={direccionColumns}
+              data={direcciones}
+              emptyLabel="Aún no hay direcciones registradas."
+              getRowId={(row) => String(row.id)}
+              isPending={isPending}
+            />
           </section>
-      )}
+          )}
 
       {selectedCliente ? (
         <ClienteModal

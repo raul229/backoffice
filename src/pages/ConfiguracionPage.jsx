@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Field from '../components/Field.jsx'
@@ -30,6 +30,7 @@ import { tipoClienteLabel } from '../lib/venta.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
+import DataTable, { ActionsCell } from '../components/DataTable.jsx'
 import PlantillasContratoTab from '../components/PlantillasContratoTab.jsx'
 
 export default function ConfiguracionPage() {
@@ -219,6 +220,269 @@ export default function ConfiguracionPage() {
   const selectedProducto = productos.find((producto) => producto.id === modal?.id)
   const selectedPromocion = promociones.find((promo) => promo.id === modal?.id)
 
+  const productoColumns = useMemo(
+    () => [
+      {
+        id: 'nombre',
+        accessorKey: 'nombre',
+        header: 'Producto',
+        cell: (info) => <span className="font-medium">{info.getValue()}</span>,
+      },
+      {
+        id: 'tipo',
+        accessorFn: (row) => tipoClienteLabel(row.tipo_cliente),
+        header: 'Tipo',
+      },
+      {
+        id: 'velocidad',
+        accessorFn: (row) => `${row.velocidad} Mbps`,
+        header: 'Velocidad',
+      },
+      {
+        id: 'precio',
+        accessorFn: (row) => `S/ ${row.precio}`,
+        header: 'Precio',
+      },
+      {
+        id: 'acciones',
+        header: '',
+        cell: (info) => {
+          const producto = info.row.original
+          return (
+            <ActionsCell>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={() => setModal({ type: 'producto', id: producto.id, editing: false })}
+              >
+                Ver
+              </button>
+              {canChangeProducto ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  onClick={() => setModal({ type: 'producto', id: producto.id, editing: true })}
+                >
+                  Editar
+                </button>
+              ) : null}
+              {canDeleteProducto ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs text-rose-600"
+                  onClick={() =>
+                    setConfirm({
+                      title: 'Eliminar producto',
+                      message: `¿Eliminar el producto “${producto.nombre}”? Si una venta lo usa, no se podrá borrar.`,
+                      run: () => deleteProductoMutation.mutate(producto.id),
+                    })
+                  }
+                >
+                  Eliminar
+                </button>
+              ) : null}
+            </ActionsCell>
+          )
+        },
+      },
+    ],
+    [canChangeProducto, canDeleteProducto, deleteProductoMutation],
+  )
+
+  const promocionColumns = useMemo(
+    () => [
+      {
+        id: 'nombre',
+        accessorKey: 'nombre',
+        header: 'Promoción',
+        cell: (info) => <span className="font-medium">{info.getValue()}</span>,
+      },
+      {
+        id: 'descripcion',
+        accessorKey: 'descripcion',
+        header: 'Descripción',
+        cell: (info) => (
+          <span className="max-w-md truncate text-sm text-slate-500">{info.getValue()}</span>
+        ),
+      },
+      {
+        id: 'acciones',
+        header: '',
+        cell: (info) => {
+          const promo = info.row.original
+          return (
+            <ActionsCell>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={() => setModal({ type: 'promocion', id: promo.id, editing: false })}
+              >
+                Ver
+              </button>
+              {canChangePromocion ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  onClick={() => setModal({ type: 'promocion', id: promo.id, editing: true })}
+                >
+                  Editar
+                </button>
+              ) : null}
+              {canDeletePromocion ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs text-rose-600"
+                  onClick={() =>
+                    setConfirm({
+                      title: 'Eliminar promoción',
+                      message: `¿Eliminar la promoción “${promo.nombre}”? Esta acción no se puede deshacer.`,
+                      run: () => deletePromocionMutation.mutate(promo.id),
+                    })
+                  }
+                >
+                  Eliminar
+                </button>
+              ) : null}
+            </ActionsCell>
+          )
+        },
+      },
+    ],
+    [canChangePromocion, canDeletePromocion, deletePromocionMutation],
+  )
+
+  const pasoColumns = useMemo(
+    () => [
+      {
+        id: 'nombre',
+        accessorKey: 'nombre',
+        header: 'Paso',
+        cell: (info) => <span className="font-medium">{info.getValue()}</span>,
+      },
+      {
+        id: 'descripcion',
+        accessorKey: 'descripcion',
+        header: 'Descripción',
+        cell: (info) => (
+          <span className="max-w-md truncate text-sm text-slate-500">{info.getValue()}</span>
+        ),
+      },
+      {
+        id: 'acciones',
+        header: '',
+        cell: (info) => {
+          const paso = info.row.original
+          return (
+            <ActionsCell>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={() => setModal({ type: 'paso', id: paso.id, editing: false })}
+              >
+                Ver
+              </button>
+              {canChange ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  onClick={() => setModal({ type: 'paso', id: paso.id, editing: true })}
+                >
+                  Editar
+                </button>
+              ) : null}
+              {canDeletePaso ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs text-rose-600"
+                  onClick={() =>
+                    setConfirm({
+                      title: 'Eliminar paso',
+                      message: `¿Eliminar el paso “${paso.nombre}”? Esta acción no se puede deshacer.`,
+                      run: () => deletePasoMutation.mutate(paso.id),
+                    })
+                  }
+                >
+                  Eliminar
+                </button>
+              ) : null}
+            </ActionsCell>
+          )
+        },
+      },
+    ],
+    [canChange, canDeletePaso, deletePasoMutation],
+  )
+
+  const flujoColumns = useMemo(
+    () => [
+      {
+        id: 'nombre',
+        accessorKey: 'nombre',
+        header: 'Flujo',
+        cell: (info) => <span className="font-medium">{info.getValue()}</span>,
+      },
+      {
+        id: 'tipo',
+        accessorFn: (row) => tipoClienteLabel(row.tipo_cliente),
+        header: 'Tipo',
+      },
+      {
+        id: 'pasos',
+        accessorFn: (row) => {
+          const ordered = [...(row.pasos_detalle ?? [])].sort((a, b) => a.orden - b.orden)
+          return ordered.length
+            ? ordered.map((item) => item.paso_detalle?.nombre).join(' → ')
+            : 'Sin pasos'
+        },
+        header: 'Pasos',
+        cell: (info) => <span className="text-sm text-slate-500">{info.getValue()}</span>,
+      },
+      {
+        id: 'acciones',
+        header: '',
+        cell: (info) => {
+          const flujo = info.row.original
+          return (
+            <ActionsCell>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={() => setModal({ type: 'flujo', id: flujo.id, editing: false })}
+              >
+                Ver
+              </button>
+              {canChange ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  onClick={() => setModal({ type: 'flujo', id: flujo.id, editing: true })}
+                >
+                  Editar
+                </button>
+              ) : null}
+              {canDeleteFlujo ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs text-rose-600"
+                  onClick={() =>
+                    setConfirm({
+                      title: 'Eliminar flujo',
+                      message: `¿Eliminar el flujo “${flujo.nombre}”? Esta acción no se puede deshacer.`,
+                      run: () => deleteFlujoMutation.mutate(flujo.id),
+                    })
+                  }
+                >
+                  Eliminar
+                </button>
+              ) : null}
+            </ActionsCell>
+          )
+        },
+      },
+    ],
+    [canChange, canDeleteFlujo, deleteFlujoMutation],
+  )
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -302,259 +566,54 @@ export default function ConfiguracionPage() {
       ) : null}
 
       {tab === 'productos' ? (
-      <section className="bo-card bo-table-wrap p-4 sm:p-5">
-        {productosQuery.isPending ? (
-          <p className="text-sm text-slate-500">Cargando productos...</p>
-        ) : productos.length === 0 ? (
-          <p className="text-sm text-slate-500">Aún no hay productos en el catálogo.</p>
-        ) : (
-          <table className="table table-sm sm:table-md">
-            <thead>
-              <tr className="text-slate-400">
-                <th>Producto</th>
-                <th>Tipo</th>
-                <th>Velocidad</th>
-                <th>Precio</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {productos.map((producto) => (
-                <tr key={producto.id}>
-                  <td className="font-medium">{producto.nombre}</td>
-                  <td>{tipoClienteLabel(producto.tipo_cliente)}</td>
-                  <td>{producto.velocidad} Mbps</td>
-                  <td>S/ {producto.precio}</td>
-                  <td className="text-right">
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-xs"
-                      onClick={() => setModal({ type: 'producto', id: producto.id, editing: false })}
-                    >
-                      Ver
-                    </button>
-                    {canChangeProducto ? (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-xs"
-                        onClick={() => setModal({ type: 'producto', id: producto.id, editing: true })}
-                      >
-                        Editar
-                      </button>
-                    ) : null}
-                    {canDeleteProducto ? (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-xs text-rose-600"
-                        onClick={() =>
-                          setConfirm({
-                            title: 'Eliminar producto',
-                            message: `¿Eliminar el producto “${producto.nombre}”? Si una venta lo usa, no se podrá borrar.`,
-                            run: () => deleteProductoMutation.mutate(producto.id),
-                          })
-                        }
-                      >
-                        Eliminar
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      <section className="bo-card p-4 sm:p-5">
+        <DataTable
+          tableKey="productos-table"
+          columns={productoColumns}
+          data={productos}
+          emptyLabel="Aún no hay productos en el catálogo."
+          getRowId={(row) => String(row.id)}
+          isPending={productosQuery.isPending}
+        />
       </section>
       ) : null}
 
       {tab === 'promociones' ? (
-      <section className="bo-card bo-table-wrap p-4 sm:p-5">
-        {promocionesQuery.isPending ? (
-          <p className="text-sm text-slate-500">Cargando promociones...</p>
-        ) : promociones.length === 0 ? (
-          <p className="text-sm text-slate-500">Aún no hay promociones en el catálogo.</p>
-        ) : (
-          <table className="table table-sm sm:table-md">
-            <thead>
-              <tr className="text-slate-400">
-                <th>Promoción</th>
-                <th>Descripción</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {promociones.map((promo) => (
-                <tr key={promo.id}>
-                  <td className="font-medium">{promo.nombre}</td>
-                  <td className="max-w-md truncate text-sm text-slate-500">{promo.descripcion}</td>
-                  <td className="text-right">
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-xs"
-                      onClick={() => setModal({ type: 'promocion', id: promo.id, editing: false })}
-                    >
-                      Ver
-                    </button>
-                    {canChangePromocion ? (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-xs"
-                        onClick={() => setModal({ type: 'promocion', id: promo.id, editing: true })}
-                      >
-                        Editar
-                      </button>
-                    ) : null}
-                    {canDeletePromocion ? (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-xs text-rose-600"
-                        onClick={() =>
-                          setConfirm({
-                            title: 'Eliminar promoción',
-                            message: `¿Eliminar la promoción “${promo.nombre}”? Esta acción no se puede deshacer.`,
-                            run: () => deletePromocionMutation.mutate(promo.id),
-                          })
-                        }
-                      >
-                        Eliminar
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      <section className="bo-card p-4 sm:p-5">
+        <DataTable
+          tableKey="promociones-table"
+          columns={promocionColumns}
+          data={promociones}
+          emptyLabel="Aún no hay promociones en el catálogo."
+          getRowId={(row) => String(row.id)}
+          isPending={promocionesQuery.isPending}
+        />
       </section>
       ) : null}
 
       {tab === 'pasos' ? (
-      <section className="bo-card bo-table-wrap p-4 sm:p-5">
-        {pasosQuery.isPending ? (
-          <p className="text-sm text-slate-500">Cargando pasos...</p>
-        ) : pasos.length === 0 ? (
-          <p className="text-sm text-slate-500">Aún no hay pasos en el catálogo.</p>
-        ) : (
-          <table className="table table-sm sm:table-md">
-            <thead>
-              <tr className="text-slate-400">
-                <th>Paso</th>
-                <th>Descripción</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {pasos.map((paso) => (
-                <tr key={paso.id}>
-                  <td className="font-medium">{paso.nombre}</td>
-                  <td className="max-w-md truncate text-sm text-slate-500">{paso.descripcion}</td>
-                  <td className="text-right">
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-xs"
-                      onClick={() => setModal({ type: 'paso', id: paso.id, editing: false })}
-                    >
-                      Ver
-                    </button>
-                    {canChange ? (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-xs"
-                        onClick={() => setModal({ type: 'paso', id: paso.id, editing: true })}
-                      >
-                        Editar
-                      </button>
-                    ) : null}
-                    {canDeletePaso ? (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-xs text-rose-600"
-                        onClick={() =>
-                          setConfirm({
-                            title: 'Eliminar paso',
-                            message: `¿Eliminar el paso “${paso.nombre}”? Esta acción no se puede deshacer.`,
-                            run: () => deletePasoMutation.mutate(paso.id),
-                          })
-                        }
-                      >
-                        Eliminar
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      <section className="bo-card p-4 sm:p-5">
+        <DataTable
+          tableKey="pasos-table"
+          columns={pasoColumns}
+          data={pasos}
+          emptyLabel="Aún no hay pasos en el catálogo."
+          getRowId={(row) => String(row.id)}
+          isPending={pasosQuery.isPending}
+        />
       </section>
       ) : null}
 
       {tab === 'flujos' ? (
-      <section className="bo-card bo-table-wrap p-4 sm:p-5">
-        {flujosQuery.isPending ? (
-          <p className="text-sm text-slate-500">Cargando flujos...</p>
-        ) : flujos.length === 0 ? (
-          <p className="text-sm text-slate-500">Aún no hay flujos.</p>
-        ) : (
-          <table className="table table-sm sm:table-md">
-            <thead>
-              <tr className="text-slate-400">
-                <th>Flujo</th>
-                <th>Tipo</th>
-                <th>Pasos</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {flujos.map((flujo) => {
-                const ordered = [...(flujo.pasos_detalle ?? [])].sort((a, b) => a.orden - b.orden)
-                return (
-                  <tr key={flujo.id}>
-                    <td className="font-medium">{flujo.nombre}</td>
-                    <td>{tipoClienteLabel(flujo.tipo_cliente)}</td>
-                    <td className="text-sm text-slate-500">
-                      {ordered.length
-                        ? ordered.map((item) => item.paso_detalle?.nombre).join(' → ')
-                        : 'Sin pasos'}
-                    </td>
-                    <td className="text-right">
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-xs"
-                        onClick={() => setModal({ type: 'flujo', id: flujo.id, editing: false })}
-                      >
-                        Ver
-                      </button>
-                      {canChange ? (
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-xs"
-                          onClick={() => setModal({ type: 'flujo', id: flujo.id, editing: true })}
-                        >
-                          Editar
-                        </button>
-                      ) : null}
-                      {canDeleteFlujo ? (
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-xs text-rose-600"
-                          onClick={() =>
-                            setConfirm({
-                              title: 'Eliminar flujo',
-                              message: `¿Eliminar el flujo “${flujo.nombre}”? Esta acción no se puede deshacer.`,
-                              run: () => deleteFlujoMutation.mutate(flujo.id),
-                            })
-                          }
-                        >
-                          Eliminar
-                        </button>
-                      ) : null}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
+      <section className="bo-card p-4 sm:p-5">
+        <DataTable
+          tableKey="flujos-table"
+          columns={flujoColumns}
+          data={flujos}
+          emptyLabel="Aún no hay flujos."
+          getRowId={(row) => String(row.id)}
+          isPending={flujosQuery.isPending}
+        />
       </section>
       ) : null}
 

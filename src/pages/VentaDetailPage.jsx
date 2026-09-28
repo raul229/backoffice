@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
-import StatusBadge from '../components/StatusBadge.jsx'
+import StatusBadge, { PasoEstadoBadge } from '../components/StatusBadge.jsx'
 import { getVenta, getFlujos, getAsesores, updateVenta, updateVentaPaso, deleteVenta, createVentaComentario, generarContrato } from '../service/api.js'
 import { displayName } from '../lib/auth.js'
 import {
@@ -14,7 +14,9 @@ import {
   formatDireccion,
   formatFecha,
   nombreCliente,
+  nombrePaso,
   numeroVenta,
+  pasoActual,
   tipoClienteLabel,
   VENTA_CODIGOS,
 } from '../lib/venta.js'
@@ -178,6 +180,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   const pasos = [...(venta.pasos ?? [])].sort(
     (a, b) => (a.flujo_paso_detalle?.orden ?? 0) - (b.flujo_paso_detalle?.orden ?? 0),
   )
+  const paso = pasoActual(venta)
   const flujos = flujosPorTipo(flujosQuery.data, cliente?.tipo)
   const canChangeVenta = can('api.change_venta')
   const canChangePaso = can('api.change_ventapaso')
@@ -249,7 +252,13 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
       }
     >
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <StatusBadge venta={venta} />
+        {venta.estado === 'ANULADO' || venta.estado === 'INSTALADO' ? (
+          <StatusBadge venta={venta} />
+        ) : null}
+        {nombrePaso(paso) ? (
+          <span className="text-sm font-medium text-slate-700">{nombrePaso(paso)}</span>
+        ) : null}
+        <PasoEstadoBadge estado={paso?.estado} venta={venta} />
         <p className="text-sm text-slate-500">Registrada {formatFecha(venta.fecha)}</p>
         {VENTA_CODIGOS.filter((item) => item.primary && venta[item.key]).map((item) => (
           <span key={item.key} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">

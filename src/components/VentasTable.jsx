@@ -1,31 +1,16 @@
 import { useMemo } from 'react'
-import {
-  createSortedRowModel,
-  rowSortingFeature,
-  sortFn_datetime,
-  sortFn_text,
-  tableFeatures,
-  useTable,
-} from '@tanstack/react-table'
-import StatusBadge from './StatusBadge.jsx'
+import { sortFn_datetime, sortFn_text } from '@tanstack/react-table'
+import DataTable, { ActionsCell } from './DataTable.jsx'
+import { PasoEstadoBadge } from './StatusBadge.jsx'
 import { displayName } from '../lib/auth.js'
 import {
-  ESTADO_UI,
-  estadoUi,
   formatFecha,
+  nombrePaso,
+  pasoActual,
   tipoClienteLabel,
   nombreCliente,
   numeroVenta,
 } from '../lib/venta.js'
-
-function etiquetaEstado(venta) {
-  return ESTADO_UI[estadoUi(venta)]?.label ?? ''
-}
-
-const features = tableFeatures({
-  rowSortingFeature,
-  sortedRowModel: createSortedRowModel(),
-})
 
 const baseColumns = [
   {
@@ -59,19 +44,31 @@ const restColumns = [
     sortFn: sortFn_text,
   },
   {
+    id: 'paso',
+    accessorFn: (row) => nombrePaso(pasoActual(row)) || '—',
+    header: 'Paso actual',
+    sortFn: sortFn_text,
+    cell: (info) => <span className="font-medium">{info.getValue()}</span>,
+  },
+  {
+    id: 'estadoPaso',
+    accessorFn: (row) =>
+      row.estado === 'ANULADO'
+        ? 'Anulada'
+        : row.estado === 'INSTALADO'
+          ? 'Instalado'
+          : pasoActual(row)?.estado ?? '',
+    header: 'Estado',
+    sortFn: sortFn_text,
+    cell: (info) => <PasoEstadoBadge estado={pasoActual(info.row.original)?.estado} venta={info.row.original} />,
+  },
+  {
     id: 'actualizado',
     accessorFn: (row) => row.actualizado || row.fecha,
     header: 'Modificado',
     sortFn: sortFn_datetime,
     sortDescFirst: true,
     cell: (info) => formatFecha(info.getValue()),
-  },
-  {
-    id: 'estado',
-    accessorFn: etiquetaEstado,
-    header: 'Estado',
-    sortFn: sortFn_text,
-    cell: (info) => <StatusBadge venta={info.row.original} />,
   },
 ]
 
@@ -85,91 +82,48 @@ export default function VentasTable({
   emptyLabel = 'Aún no hay ventas registradas.',
 }) {
   const columns = useMemo(
-    () => [...baseColumns, ...(showAsesor ? [asesorColumn] : []), ...restColumns],
-    [showAsesor],
+    () => [
+      ...baseColumns,
+      ...(showAsesor ? [asesorColumn] : []),
+      ...restColumns,
+      {
+        id: 'acciones',
+        header: '',
+        cell: (info) => (
+          <ActionsCell>
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs"
+              onClick={() => onOpen(info.row.original)}
+            >
+              Ver
+            </button>
+            {onDelete ? (
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs text-rose-600"
+                onClick={() => onDelete(info.row.original)}
+              >
+                Eliminar
+              </button>
+            ) : null}
+          </ActionsCell>
+        ),
+      },
+    ],
+    [onDelete, onOpen, showAsesor],
   )
-  const table = useTable({
-    key: showAsesor ? 'ventas-table-asesor' : 'ventas-table',
-    features,
-    columns,
-    data: ventas,
-    enableSortingRemoval: false,
-    initialState: {
-      sorting: [{ id: 'actualizado', desc: true }],
-    },
-  })
-  const rows = table.getRowModel().rows
-  const visibleRows = limit ? rows.slice(0, limit) : rows
 
   return (
-    <div className="bo-table-wrap">
-      <table className="table table-sm sm:table-md">
-        <thead>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id} className="text-slate-400">
-              {headerGroup.headers.map((header) => (
-                <th key={header.id} className="whitespace-nowrap">
-                  {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                    <button
-                      type="button"
-                      className="font-medium"
-                      onClick={header.column.getToggleSortingHandler()}
-                    >
-                      <table.FlexRender header={header} />
-                      {{
-                        asc: ' ▲',
-                        desc: ' ▼',
-                      }[header.column.getIsSorted()] ?? null}
-                    </button>
-                  ) : (
-                    <table.FlexRender header={header} />
-                  )}
-                </th>
-              ))}
-              <th className="text-right">Acciones</th>
-            </tr>
-          ))}
-        </thead>
-        <tbody>
-          {isPending ? (
-            <tr>
-              <td colSpan={columns.length + 1}>Cargando ventas...</td>
-            </tr>
-          ) : visibleRows.length === 0 ? (
-            <tr>
-              <td colSpan={columns.length + 1}>{emptyLabel}</td>
-            </tr>
-          ) : (
-            visibleRows.map((row) => (
-              <tr key={row.id} className="hover:bg-slate-50">
-                {row.getAllCells().map((cell) => (
-                  <td key={cell.id}>
-                    <table.FlexRender cell={cell} />
-                  </td>
-                ))}
-                <td className="text-right">
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-xs"
-                    onClick={() => onOpen(row.original)}
-                  >
-                    Ver
-                  </button>
-                  {onDelete ? (
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-xs text-rose-600"
-                      onClick={() => onDelete(row.original)}
-                    >
-                      Eliminar
-                    </button>
-                  ) : null}
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      tableKey={showAsesor ? 'ventas-table-asesor' : 'ventas-table'}
+      columns={columns}
+      data={ventas}
+      emptyLabel={emptyLabel}
+      getRowId={(row) => String(row.id)}
+      initialSorting={[{ id: 'actualizado', desc: true }]}
+      isPending={isPending}
+      pageSize={limit || 10}
+    />
   )
 }
