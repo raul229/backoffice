@@ -439,6 +439,44 @@ export async function generarContrato(ventaId, opciones = {}) {
   }
 }
 
+export async function generarCorreoCuentaPlanner(ventaId) {
+  const headers = { "Content-Type": "application/json" }
+  const token = csrfToken()
+  if (token) headers["X-CSRFToken"] = token
+  const response = await fetch(`/api/ventas/${ventaId}/correo-cuenta-planner/`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify({}),
+  })
+  if (response.status === 401) {
+    window.dispatchEvent(new Event("auth:required"))
+  }
+  if (!response.ok) {
+    let message = response.statusText || "No se pudo generar el correo"
+    try {
+      const data = await response.json()
+      message =
+        data.detail ||
+        Object.entries(data)
+          .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : value}`)
+          .join(" · ") ||
+        message
+    } catch {
+      /* ignore */
+    }
+    throw new Error(message)
+  }
+  const blob = await response.blob()
+  return {
+    blob,
+    filename: filenameFromDisposition(
+      response.headers.get("Content-Disposition"),
+      `solicitud-cuenta-${ventaId}.eml`,
+    ),
+  }
+}
+
 export function getPlantillasContrato() {
   return request("/plantillas-contrato/")
 }

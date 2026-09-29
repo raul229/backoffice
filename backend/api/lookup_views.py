@@ -139,6 +139,7 @@ def lookup_ruc(request):
     representantes = sunat.pop("representantes", []) or []
     sunat.pop("ruc", None)
     sunat.pop("tipo_cliente", None)
+    sunat.pop("ficha", None)
     payload = _payload("sunat", ruc, tipo, **sunat)
     if tipo == TipoCliente.PERSONA:
         payload.pop("razon_social", None)

@@ -1,9 +1,22 @@
 from datetime import datetime
 from email.message import EmailMessage
+from email.policy import EmailPolicy
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from django.template import Context, Template
+
+# .eml descargados: UTF-8 literal + 8bit evita quoted-printable (=3D, =C3=xx)
+# que algunos clientes muestran como texto o rompen etiquetas HTML.
+EML_POLICY = EmailPolicy(utf8=True, cte_type="8bit")
+
+
+def nuevo_mensaje_eml() -> EmailMessage:
+    return EmailMessage(policy=EML_POLICY)
+
+
+def serializar_eml(msg: EmailMessage) -> bytes:
+    return msg.as_bytes(policy=EML_POLICY)
 
 
 def dividir_texto(texto, max_caracteres):
@@ -57,7 +70,7 @@ def completar_fechas(contexto: dict) -> dict:
 def generar_eml(plantilla: Path, contexto: dict, adjuntos: list[Path], carpeta_destino: Path) -> Path:
     rendered = Template(plantilla.read_text(encoding="utf-8")).render(Context(contexto, autoescape=False))
     metadata = _parsear_eml_plantilla(rendered)
-    msg = EmailMessage()
+    msg = nuevo_mensaje_eml()
     msg["Subject"] = metadata["subject"]
     msg["From"] = metadata["from"]
     msg["To"] = metadata["to"]
@@ -65,7 +78,7 @@ def generar_eml(plantilla: Path, contexto: dict, adjuntos: list[Path], carpeta_d
         msg["Cc"] = metadata["cc"]
     if metadata.get("bcc"):
         msg["Bcc"] = metadata["bcc"]
-    msg.set_content(metadata["body"])
+    msg.set_content(metadata["body"], charset="utf-8", cte="8bit")
 
     for ruta_adj in adjuntos:
         ruta_adj = Path(ruta_adj)
@@ -81,7 +94,7 @@ def generar_eml(plantilla: Path, contexto: dict, adjuntos: list[Path], carpeta_d
     carpeta_destino.mkdir(parents=True, exist_ok=True)
     nombre = f"correo_{contexto.get('RUC', 'cliente')}.eml"
     salida = carpeta_destino / nombre
-    salida.write_bytes(bytes(msg))
+    salida.write_bytes(serializar_eml(msg))
     return salida
 
 

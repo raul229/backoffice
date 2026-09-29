@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 import StatusBadge, { PasoEstadoBadge } from '../components/StatusBadge.jsx'
-import { getVenta, getFlujos, getAsesores, updateVenta, updateVentaPaso, deleteVenta, createVentaComentario, generarContrato } from '../service/api.js'
+import { getVenta, getFlujos, getAsesores, updateVenta, updateVentaPaso, deleteVenta, createVentaComentario, generarContrato, generarCorreoCuentaPlanner } from '../service/api.js'
 import { displayName } from '../lib/auth.js'
 import {
   celularCliente,
@@ -146,6 +146,18 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
     },
   })
 
+  const cuentaPlannerMutation = useMutation({
+    mutationFn: () => generarCorreoCuentaPlanner(ventaId),
+    onSuccess: ({ blob, filename }) => {
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      link.click()
+      URL.revokeObjectURL(url)
+    },
+  })
+
   const deleteMutation = useMutation({
     mutationFn: () => deleteVenta(ventaId),
     onSuccess: () => {
@@ -194,7 +206,8 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
     ventaMutation.isPending ||
     deleteMutation.isPending ||
     comentarioMutation.isPending ||
-    contratoMutation.isPending
+    contratoMutation.isPending ||
+    cuentaPlannerMutation.isPending
   const showVentaSelects = editing && canChangeVenta
   const showPasoSelects = editing && canChangePaso
 
@@ -211,21 +224,34 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
             Cerrar
           </button>
           {canGenerarContrato ? (
-            <button
-              type="button"
-              className="btn border-none bg-emerald-600 text-white hover:bg-emerald-700"
-              disabled={saving || !esEmpresa}
-              onClick={() =>
-                setConfirm({
-                  type: 'contrato',
-                  fecha: fechaLimaHoy(),
-                  direccion: direccion ? formatDireccion(direccion) : '',
-                })
-              }
-              title={esEmpresa ? 'Generar contratos Entel' : 'Solo disponible para persona jurídica'}
-            >
-              Generar contrato
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn border-none bg-emerald-600 text-white hover:bg-emerald-700"
+                disabled={saving || !esEmpresa}
+                onClick={() =>
+                  setConfirm({
+                    type: 'contrato',
+                    fecha: fechaLimaHoy(),
+                    direccion: direccion ? formatDireccion(direccion) : '',
+                  })
+                }
+                title={esEmpresa ? 'Generar contratos Entel' : 'Solo disponible para persona jurídica'}
+              >
+                Generar contrato
+              </button>
+              {esEmpresa ? (
+                <button
+                  type="button"
+                  className="btn border-none bg-sky-600 text-white hover:bg-sky-700"
+                  disabled={saving}
+                  onClick={() => cuentaPlannerMutation.mutate()}
+                  title="Generar correo de solicitud de creación de cuenta en Planner"
+                >
+                  {cuentaPlannerMutation.isPending ? 'Consultando SUNAT…' : 'Correo cuenta Planner'}
+                </button>
+              ) : null}
+            </>
           ) : null}
           {canDeleteVenta ? (
             <button
@@ -285,6 +311,11 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
       {contratoMutation.isError ? (
         <div className="alert alert-error">
           <span>{contratoMutation.error.message}</span>
+        </div>
+      ) : null}
+      {cuentaPlannerMutation.isError ? (
+        <div className="alert alert-error">
+          <span>{cuentaPlannerMutation.error.message}</span>
         </div>
       ) : null}
 

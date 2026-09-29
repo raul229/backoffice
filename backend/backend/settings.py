@@ -185,6 +185,13 @@ CONTRATOS_ENTEL = os.environ.get("CONTRATOS_ENTEL", "")
 CORREO_BACKOFFICE = os.environ.get("CORREO_BACKOFFICE", "")
 CORREO_GERENTE = os.environ.get("CORREO_GERENTE", "")
 CORREOS_ADICIONALES = os.environ.get("CORREOS_ADICIONALES", "")
+CORREO_ASIGNACION_CUENTAS = os.environ.get(
+    "CORREO_ASIGNACION_CUENTAS", "asignaciondecuentas@entel.pe"
+)
+CORREO_CC_CUENTA_PLANNER = os.environ.get(
+    "CORREO_CC_CUENTA_PLANNER",
+    "gerencia@comunitelperu.com; mabel.alvarezf@entel.pe",
+)
 
 
 # Email

@@ -31,18 +31,29 @@ VIA_TIPOS = (
     ("CAL", "CALLE"),
 )
 
+# SUNAT: label en col-sm-3/5 + valor en col-sm-3/7 (texto o tabla tblResultado).
 PAIR_RE = re.compile(
-    r'list-group-item-heading">\s*([^:<]+):\s*</(?:h4|p)>\s*</div>\s*'
-    r'<div[^>]*>\s*<(?:h4|p)[^>]*>\s*(.*?)</(?:h4|p)>',
+    r'<div class="col-sm-\d+"[^>]*>\s*'
+    r'<h4 class="list-group-item-heading">\s*(.*?):\s*</h4>\s*'
+    r"</div>\s*"
+    r'<div class="col-sm-\d+"[^>]*>\s*(.*?)\s*</div>',
     re.IGNORECASE | re.DOTALL,
 )
+
+TABLE_CELL_RE = re.compile(r"<td[^>]*>(.*?)</td>", re.IGNORECASE | re.DOTALL)
+VALUE_TEXT_RE = re.compile(
+    r"<(?:h4|p)[^>]*>(.*?)</(?:h4|p)>",
+    re.IGNORECASE | re.DOTALL,
+)
+COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 
 REP_ROW_RE = re.compile(
     r"<tr>\s*"
     r"<td[^>]*>\s*([^<]+)</td>\s*"
     r"<td[^>]*>\s*([^<]+)</td>\s*"
     r"<td[^>]*>\s*([^<]+)</td>\s*"
-    r"<td[^>]*>\s*([^<]+)</td>",
+    r"<td[^>]*>\s*([^<]+)</td>"
+    r"(?:\s*<td[^>]*>\s*([^<]*)</td>)?",
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -54,6 +65,35 @@ def _clean(value):
     if value in {"-", "--"}:
         return ""
     return normalize_upper(value)
+
+
+def _clean_multiline(value):
+    value = html.unescape(value or "")
+    value = re.sub(r"<br\s*/?>", "\n", value, flags=re.IGNORECASE)
+    value = re.sub(r"</p\s*>", "\n", value, flags=re.IGNORECASE)
+    value = re.sub(r"<[^>]+>", " ", value)
+    lineas = []
+    for linea in value.splitlines():
+        limpia = re.sub(r"\s+", " ", linea).strip()
+        if limpia and limpia not in {"-", "--"}:
+            lineas.append(normalize_upper(limpia))
+    return "\n".join(lineas)
+
+
+def _valor_desde_contenedor(raw: str) -> str:
+    """Extrae texto de <p>/<h4> o filas de <table class="tblResultado">."""
+    celdas = TABLE_CELL_RE.findall(raw or "")
+    if celdas:
+        lineas = []
+        for celda in celdas:
+            limpia = _clean_multiline(celda)
+            if limpia:
+                lineas.append(limpia)
+        return "\n".join(lineas)
+    match = VALUE_TEXT_RE.search(raw or "")
+    if match:
+        return _clean_multiline(match.group(1))
+    return _clean_multiline(raw)
 
 
 def parse_domicilio(domicilio):
@@ -129,10 +169,21 @@ def split_nombre_completo(nombre):
 
 
 def parse_sunat_html(html_text):
-    html_text = html.unescape(html_text or "")
+    # Quitar comentarios HTML (SUNAT deja un bloque muerto "Razón Social: eeee").
+    html_text = COMMENT_RE.sub("", html_text or "")
+    html_text = html.unescape(html_text)
     pairs = {}
-    for label, value in PAIR_RE.findall(html_text or ""):
-        pairs[_clean(label).lower()] = _clean(value)
+    ficha = []
+    for label_raw, value_raw in PAIR_RE.findall(html_text):
+        label = re.sub(r"\s+", " ", html.unescape(label_raw or "")).strip(" :")
+        # El label no debe arrastrar markup residual.
+        label = re.sub(r"<[^>]+>", " ", label)
+        label = re.sub(r"\s+", " ", label).strip(" :")
+        if not label:
+            continue
+        value = _valor_desde_contenedor(value_raw)
+        pairs[_clean(label).lower()] = value.replace("\n", " ") if value else ""
+        ficha.append({"label": label, "value": value})
 
     ruc_line = pairs.get("número de ruc") or pairs.get("numero de ruc") or ""
     ruc = ""
@@ -145,6 +196,7 @@ def parse_sunat_html(html_text):
         "ruc": ruc,
         "razon_social": razon_social,
         "tipo_cliente": tipo_cliente_desde_ruc(ruc) if ruc else "",
+        "ficha": ficha,
         **parse_domicilio(pairs.get("domicilio fiscal", "")),
     }
 
@@ -164,11 +216,12 @@ def parse_sunat_html(html_text):
 def parse_representantes(html_text):
     html_text = html.unescape(html_text or "")
     representantes = []
-    for tipo_raw, numero_raw, nombre_raw, cargo_raw in REP_ROW_RE.findall(html_text):
+    for tipo_raw, numero_raw, nombre_raw, cargo_raw, fecha_raw in REP_ROW_RE.findall(html_text):
         tipo = _clean(tipo_raw)
         numero = re.sub(r"\D", "", _clean(numero_raw))
         nombre = _clean(nombre_raw)
         cargo = _clean(cargo_raw)
+        fecha_desde = _clean(fecha_raw)
         if not tipo or tipo.upper().startswith("DOCUMENTO") or not numero or not nombre:
             continue
         nombres, apellidos = split_nombre_completo(nombre)
@@ -180,6 +233,7 @@ def parse_representantes(html_text):
                 "apellidos": apellidos,
                 "nombre_completo": nombre,
                 "cargo": cargo,
+                "fecha_desde": fecha_desde,
             }
         )
     return representantes

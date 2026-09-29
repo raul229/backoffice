@@ -26,7 +26,7 @@ from .models import (
     VentaPaso,
 )
 from .workflow import reordenar_pasos_de_flujo, sync_estado_venta_con_pasos, sync_ventas_con_flujo
-from .contratos import generar_zip_entel
+from .contratos import generar_correo_cuenta_planner, generar_zip_entel
 from .serializers import (
     CHOICE_GROUPS,
     ClienteSerializer,
@@ -229,6 +229,21 @@ class VentaViewSet(AuthenticatedModelViewSet):
             direccion=request.data.get("direccion"),
         )
         response = HttpResponse(contenido, content_type="application/zip")
+        response["Content-Disposition"] = content_disposition_header(True, nombre)
+        return response
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="correo-cuenta-planner",
+        permission_classes=[IsAuthenticated],
+    )
+    def correo_cuenta_planner(self, request, pk=None):
+        if not request.user.is_superuser and not request.user.has_perm("api.generar_contrato"):
+            raise PermissionDenied("No tienes permiso para generar el correo de creación de cuenta.")
+        venta = self.get_object()
+        contenido, nombre = generar_correo_cuenta_planner(venta, usuario=request.user)
+        response = HttpResponse(contenido, content_type="message/rfc822")
         response["Content-Disposition"] = content_disposition_header(True, nombre)
         return response
 

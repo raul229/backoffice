@@ -718,6 +718,68 @@ class ApiEndpointsTests(APITestCase):
         self.assertIn("PORTAL FACTIBILIDAD", texto)
         self.assertNotIn("Luiggi Barsato", texto)
 
+    def test_correo_cuenta_planner_rejects_persona_natural(self):
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        producto = Producto.objects.create(nombre="Fibra 200", velocidad=200, precio=90)
+        flujo = Flujo.objects.create(nombre="Persona", tipo_cliente=TipoCliente.PERSONA)
+        paso = Paso.objects.create(nombre="Uno", descripcion="Uno")
+        FlujoPaso.objects.create(flujo=flujo, paso=paso, orden=1)
+        created = self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        response = self.client.post(f"/api/ventas/{created.data['id']}/correo-cuenta-planner/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("persona jurídica", response.data["detail"])
+
+    def test_correo_cuenta_planner_genera_eml(self):
+        from unittest.mock import patch
+        from email import message_from_bytes
+
+        venta_id = self._venta_empresa_entel()
+        with patch(
+            "api.contratos.correo_cuenta.consultar_sunat",
+            return_value={
+                "ruc": "20522317285",
+                "razon_social": "INDOTECH SAC",
+                "tipo_cliente": "EMPRESA",
+                "ficha": [
+                    {"label": "Número de RUC", "value": "20522317285 - INDOTECH SAC"},
+                    {"label": "Tipo Contribuyente", "value": "SOCIEDAD ANONIMA CERRADA"},
+                    {"label": "Estado del Contribuyente", "value": "ACTIVO"},
+                    {"label": "Domicilio Fiscal", "value": "CAL. LUIGGI BARSATO NRO. 167 SAN BORJA"},
+                ],
+                "representantes": [
+                    {
+                        "tipo_documento": "DNI",
+                        "numero_documento": "87654321",
+                        "nombre_completo": "PEREZ ANA",
+                        "cargo": "GERENTE",
+                        "fecha_desde": "01/01/2020",
+                    }
+                ],
+            },
+        ):
+            response = self.client.post(f"/api/ventas/{venta_id}/correo-cuenta-planner/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(
+            "SOLICITUD CREACION DE CUENTA  20522317285- INDOTECH SAC.eml",
+            response["Content-Disposition"],
+        )
+        msg = message_from_bytes(response.content)
+        self.assertIn("SOLICITUD CREACION DE CUENTA // 20522317285- INDOTECH SAC", msg["Subject"])
+        self.assertIn("asignaciondecuentas@entel.pe", msg["To"])
+        cuerpo = response.content.decode("utf-8", errors="replace")
+        self.assertIn("Tipo Contribuyente", cuerpo)
+        self.assertIn("87654321", cuerpo)
+        self.assertIn("ana@empresa.com", cuerpo)
+        self.assertIn("987654321", cuerpo)
+        self.assertIn("Content-Transfer-Encoding: 8bit", cuerpo)
+        self.assertNotIn("quoted-printable", cuerpo)
+        self.assertNotIn("=3D", cuerpo)
+
     def test_asesor_cannot_ver_plantillas_contrato(self):
         ana = User.objects.create_user("ana_plantilla", password="secret")
         ana.groups.add(Group.objects.get(name="Asesor"))
@@ -1222,6 +1284,75 @@ SUNAT_EMPRESA_HTML = """
     </div>
   </div>
 </div>
+<div class="list-group-item">
+  <div class="row">
+    <div class="col-sm-5">
+      <h4 class="list-group-item-heading">Actividad(es) Económica(s):</h4>
+    </div>
+    <div class="col-sm-7">
+      <table class="table tblResultado">
+        <tbody>
+          <tr><td>Principal - 6201 - ACTIVIDADES DE PROGRAMACION INFORMATICA</td></tr>
+          <tr><td>Secundaria 1 - 6202 - CONSULTORES EN INFORMATICA</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div class="list-group-item">
+  <div class="row">
+    <div class="col-sm-5">
+      <h4 class="list-group-item-heading">Comprobantes de Pago c/aut. de impresión (F. 806 u 816):</h4>
+    </div>
+    <div class="col-sm-7">
+      <table class="table tblResultado">
+        <tbody>
+          <tr><td>FACTURA</td></tr>
+          <tr><td>BOLETA DE VENTA</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div class="list-group-item">
+  <div class="row">
+    <div class="col-sm-5">
+      <h4 class="list-group-item-heading">Sistema de Emisión Electrónica:</h4>
+    </div>
+    <div class="col-sm-7">
+      <table class="table tblResultado">
+        <tbody>
+          <tr><td>FACTURA PORTAL DESDE 23/10/2015</td></tr>
+          <tr><td>BOLETA PORTAL DESDE 16/11/2015</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div class="list-group-item">
+  <div class="row">
+    <div class="col-sm-5">
+      <h4 class="list-group-item-heading">Padrones:</h4>
+    </div>
+    <div class="col-sm-7">
+      <table class="table tblResultado">
+        <tbody>
+          <tr><td>NINGUNO</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<!-- <div class="list-group-item">
+  <div class="row">
+    <div class="col-sm-5">
+      <h4 class="list-group-item-heading">Razón Social:</h4>
+    </div>
+    <div class="col-sm-7">
+      <p class="list-group-item-text">eeee</p>
+    </div>
+  </div>
+</div> -->
 """
 
 SUNAT_PERSONA_HTML = """
@@ -1266,6 +1397,17 @@ class LookupRucTests(APITestCase):
         self.assertEqual(empresa["distrito"], "SAN BORJA")
         self.assertEqual(empresa["numero"], "167")
         self.assertEqual(empresa["tipo_direccion"], "CALLE")
+        labels = [item["label"] for item in empresa["ficha"]]
+        self.assertIn("Actividad(es) Económica(s)", labels)
+        self.assertIn("Comprobantes de Pago c/aut. de impresión (F. 806 u 816)", labels)
+        self.assertIn("Sistema de Emisión Electrónica", labels)
+        self.assertIn("Padrones", labels)
+        self.assertNotIn("Razón Social", labels)
+        actividad = next(i for i in empresa["ficha"] if i["label"] == "Actividad(es) Económica(s)")
+        self.assertIn("PRINCIPAL - 6201", actividad["value"])
+        self.assertIn("SECUNDARIA 1 - 6202", actividad["value"])
+        padrones = next(i for i in empresa["ficha"] if i["label"] == "Padrones")
+        self.assertEqual(padrones["value"], "NINGUNO")
 
         persona = parse_sunat_html(SUNAT_PERSONA_HTML)
         self.assertEqual(persona["tipo_cliente"], "PERSONA")
@@ -1402,12 +1544,14 @@ class LookupRucTests(APITestCase):
               <td>12345678</td>
               <td>PEREZ LOPEZ JUAN CARLOS</td>
               <td>GERENTE GENERAL</td>
+              <td>05/06/2017</td>
             </tr>
             <tr>
               <td>DNI</td>
               <td>87654321</td>
               <td>RAMOS DIAZ ANA MARIA</td>
               <td>APODERADO</td>
+              <td>01/02/2019</td>
             </tr>
           </tbody>
         </table>
@@ -1419,6 +1563,8 @@ class LookupRucTests(APITestCase):
         self.assertEqual(reps[0]["nombres"], "JUAN CARLOS")
         self.assertEqual(reps[0]["apellidos"], "PEREZ LOPEZ")
         self.assertEqual(reps[0]["cargo"], "GERENTE GENERAL")
+        self.assertEqual(reps[0]["fecha_desde"], "05/06/2017")
+        self.assertEqual(reps[1]["fecha_desde"], "01/02/2019")
 
     def test_lookup_sunat_single_representante_fills_form(self):
         with patch(
