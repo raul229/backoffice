@@ -95,16 +95,22 @@ def _validar_archivo(item: dict, nombre: str, contenido: bytes) -> None:
             pdf.close()
         return
 
-    if extension == ".xlsm":
+    if extension in {".xlsm", ".xlsx"}:
         if contenido[:2] != b"PK":
-            raise ValidationError({"archivo": "El archivo no es un Excel .xlsm válido."})
+            raise ValidationError({"archivo": "El archivo no es un Excel válido."})
         try:
-            wb = load_workbook(BytesIO(contenido), keep_vba=True, read_only=True, data_only=True)
+            wb = load_workbook(
+                BytesIO(contenido),
+                keep_vba=extension == ".xlsm",
+                read_only=True,
+                data_only=True,
+            )
         except Exception as exc:
-            raise ValidationError({"archivo": "No se pudo leer la hoja de calificación."}) from exc
+            raise ValidationError({"archivo": "No se pudo leer el Excel."}) from exc
         try:
-            if "Formulario" not in wb.sheetnames:
-                raise ValidationError({"archivo": 'Falta la hoja "Formulario" en el Excel.'})
+            for hoja in item.get("hojas") or []:
+                if hoja not in wb.sheetnames:
+                    raise ValidationError({"archivo": f'Falta la hoja "{hoja}" en el Excel.'})
         finally:
             wb.close()
         return

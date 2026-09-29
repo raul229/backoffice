@@ -18,6 +18,8 @@ from .datos_entel import (
     MAPA_ENTEL_POR_ARCHIVO,
     PLANES_ENTEL,
     PLANTILLA_CORREO_ENTEL,
+    PLANTILLA_CREACION_OIT,
+    PLANTILLA_TARIFAS_SERVICIOS,
 )
 from .mapeo import (
     contexto_desde_venta,
@@ -25,6 +27,7 @@ from .mapeo import (
     parsear_direccion_contrato,
     parsear_fecha_contrato,
 )
+from .pack_fijo import llenar_creacion_oit, llenar_tarifas_servicios
 from .utils import dividir_texto, generar_eml
 
 
@@ -63,6 +66,8 @@ def generar_zip_entel(venta, fecha=None, direccion=None) -> tuple[bytes, str]:
             origen_hc = origenes / hc_nombre
             origen_hc.write_bytes(hc_bytes)
             _llenar_hc(origen_hc, destino / hc_nombre, contexto, HC_COORDS_POR_PLAN.get(plan, {}))
+        if plan == "Pack Empresas" and str(contexto.get("NUMERO_FIJO") or "").strip():
+            _materializar_pack_fijo(origenes, destino, contexto)
         eml_bytes = bytes_plantilla(PLANTILLA_CORREO_ENTEL, requerida=False)
         if eml_bytes:
             extra = {
@@ -77,6 +82,19 @@ def generar_zip_entel(venta, fecha=None, direccion=None) -> tuple[bytes, str]:
         return _zip_carpeta(destino), nombre_zip_contrato(
             contexto["RAZON_SOCIAL"], contexto["RUC"]
         )
+
+
+def _materializar_pack_fijo(origenes: Path, destino: Path, contexto: dict) -> None:
+    oit_bytes = bytes_plantilla(PLANTILLA_CREACION_OIT, requerida=False)
+    if oit_bytes:
+        origen = origenes / PLANTILLA_CREACION_OIT
+        origen.write_bytes(oit_bytes)
+        llenar_creacion_oit(origen, destino / PLANTILLA_CREACION_OIT, contexto)
+    tarifas_bytes = bytes_plantilla(PLANTILLA_TARIFAS_SERVICIOS, requerida=False)
+    if tarifas_bytes:
+        origen = origenes / PLANTILLA_TARIFAS_SERVICIOS
+        origen.write_bytes(tarifas_bytes)
+        llenar_tarifas_servicios(origen, destino / PLANTILLA_TARIFAS_SERVICIOS, contexto)
 
 
 def _materializar_pdfs(origenes: Path, plan: str, velocidad: int, promocion: str) -> list[Path]:

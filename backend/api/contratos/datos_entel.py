@@ -148,6 +148,13 @@ HC_COORDS_POR_PLAN: dict[str, dict[str, tuple[str, str]]] = {
 
 
 # --------------------------------------------------
+# PACK + TELÉFONO FIJO — OIT y Tarifas/Servicios
+# --------------------------------------------------
+PLANTILLA_CREACION_OIT = 'plantilla_creacion_oit.xlsx'
+PLANTILLA_TARIFAS_SERVICIOS = 'plantilla_tarifas_y_servicios.xlsm'
+
+
+# --------------------------------------------------
 # PLANTILLA DE CORREO (.eml)
 # --------------------------------------------------
 # Plantilla Jinja2 con bloques subject, from, to, cc, bcc, body.
@@ -199,6 +206,7 @@ CATALOGO_PLANTILLAS_ENTEL = [
         "descripcion": "Excel macro (.xlsm) de calificación para Internet Empresas.",
         "grupo": "Hojas de calificación",
         "acepta": [".xlsm"],
+        "hojas": ["Formulario"],
         "requerida": False,
     },
     {
@@ -208,6 +216,27 @@ CATALOGO_PLANTILLAS_ENTEL = [
         "descripcion": "Excel macro (.xlsm) de calificación para Pack Empresas.",
         "grupo": "Hojas de calificación",
         "acepta": [".xlsm"],
+        "hojas": ["Formulario"],
+        "requerida": False,
+    },
+    {
+        "clave": "creacion-oit",
+        "archivo": PLANTILLA_CREACION_OIT,
+        "etiqueta": "Creación OIT (Pack + fijo)",
+        "descripcion": "Excel de creación de OIT cuando Pack Empresas incluye teléfono fijo.",
+        "grupo": "Pack con fijo",
+        "acepta": [".xlsx"],
+        "hojas": ["CREACIÓN OIT"],
+        "requerida": False,
+    },
+    {
+        "clave": "tarifas-servicios",
+        "archivo": PLANTILLA_TARIFAS_SERVICIOS,
+        "etiqueta": "Tarifas y servicios (Pack + fijo)",
+        "descripcion": "Excel de tarifas y servicios para Pack Empresas con teléfono fijo.",
+        "grupo": "Pack con fijo",
+        "acepta": [".xlsm"],
+        "hojas": ["SOLICITUD T Y S"],
         "requerida": False,
     },
     {

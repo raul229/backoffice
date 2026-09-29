@@ -26,6 +26,9 @@ def bytes_plantilla(archivo: str, requerida: bool = True) -> bytes | None:
         registro = PlantillaContrato.objects.filter(clave=clave).only("contenido").first()
         if registro and registro.contenido:
             return bytes(registro.contenido)
+    embebida = Path(__file__).resolve().parent / "plantillas_pack" / archivo
+    if embebida.is_file():
+        return embebida.read_bytes()
     disco = carpeta_plantillas_disco()
     if disco:
         ruta = disco / archivo

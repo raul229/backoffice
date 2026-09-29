@@ -194,6 +194,7 @@ class Venta(models.Model):
     cotizacion = models.CharField(max_length=50, blank=True)
     contrato = models.CharField(max_length=50, blank=True)
     numero_fijo = models.CharField(max_length=20, blank=True)
+    saf = models.CharField(max_length=50, blank=True)
     numero_orden = models.CharField(max_length=50, blank=True)
     creado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,

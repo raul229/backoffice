@@ -27,6 +27,7 @@ export const VENTA_CODIGOS = [
   { key: 'cotizacion', label: 'Cotización' },
   { key: 'contrato', label: 'Contrato' },
   { key: 'numero_fijo', label: 'N° fijo', hint: 'Teléfono fijo reservado, si el producto lo requiere' },
+  { key: 'saf', label: 'SAF', hint: 'SAF origen para creación de OIT (Pack con fijo)' },
 ]
 
 export function codigosResumen(venta) {

@@ -33,6 +33,7 @@ VENTA_CODIGO_FIELDS = (
     "cotizacion",
     "contrato",
     "numero_fijo",
+    "saf",
     "numero_orden",
 )
 
@@ -394,6 +395,7 @@ class VentaSerializer(serializers.ModelSerializer):
             "cotizacion",
             "contrato",
             "numero_fijo",
+            "saf",
             "numero_orden",
             "pasos",
             "comentarios",

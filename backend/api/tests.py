@@ -718,6 +718,77 @@ class ApiEndpointsTests(APITestCase):
         self.assertIn("PORTAL FACTIBILIDAD", texto)
         self.assertNotIn("Luiggi Barsato", texto)
 
+    def test_pack_fijo_llena_oit_y_tarifas(self):
+        from pathlib import Path
+        import zipfile
+        from io import BytesIO
+        from openpyxl import load_workbook
+
+        plantillas = Path("/home/raul/Proyectos/Python/Contratos/CONTRATOS_ENTEL")
+        if not (plantillas / "pack empresas.pdf").exists():
+            self.skipTest("Plantillas Entel no disponibles en este entorno")
+        venta_id = self._venta_empresa_entel(
+            nombre_producto="Pack Empresas",
+            velocidad=300,
+            promo="30% y bono de velocidad por 6m",
+        )
+        from .models import Venta
+
+        venta = Venta.objects.get(id=venta_id)
+        venta.numero_fijo = "01-7131046"
+        venta.saf = "309341"
+        venta.siro = "77422"
+        venta.cotizacion = "COT-99"
+        venta.save(update_fields=["numero_fijo", "saf", "siro", "cotizacion"])
+        venta.producto.precio = "129.90"
+        venta.producto.save(update_fields=["precio"])
+        response = self.client.post(
+            f"/api/ventas/{venta_id}/generar-contrato/",
+            {"fecha": "2026-09-21"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        with zipfile.ZipFile(BytesIO(response.content)) as archivo:
+            nombres = set(archivo.namelist())
+            self.assertIn("plantilla_creacion_oit.xlsx", nombres)
+            self.assertIn("plantilla_tarifas_y_servicios.xlsm", nombres)
+            oit = load_workbook(BytesIO(archivo.read("plantilla_creacion_oit.xlsx")))[
+                "CREACIÓN OIT"
+            ]
+            self.assertEqual(str(oit["E8"].value), "309341")
+            self.assertEqual(oit["J11"].value, "6 meses")
+            self.assertEqual(oit["J13"].value, 110.08)
+            self.assertEqual(oit["D22"].value, 7131046)
+            self.assertIn("LUIS ZAMBRANO", oit["C30"].value)
+            tarifas = load_workbook(
+                BytesIO(archivo.read("plantilla_tarifas_y_servicios.xlsm")),
+                keep_vba=True,
+            )["SOLICITUD T Y S"]
+            self.assertEqual(tarifas["D12"].value, "LUIS ZAMBRANO")
+            self.assertEqual(tarifas["G31"].value, 5.3)
+            self.assertEqual(float(tarifas["G38"].value), 120.0)
+            self.assertEqual(tarifas["C38"].value, "Pack Empresas 300")
+
+    def test_pack_sin_fijo_no_incluye_oit_tarifas(self):
+        from pathlib import Path
+        import zipfile
+        from io import BytesIO
+
+        plantillas = Path("/home/raul/Proyectos/Python/Contratos/CONTRATOS_ENTEL")
+        if not (plantillas / "pack empresas.pdf").exists():
+            self.skipTest("Plantillas Entel no disponibles en este entorno")
+        venta_id = self._venta_empresa_entel(
+            nombre_producto="Pack Empresas",
+            velocidad=300,
+            promo="Solo 30% por 6m.",
+        )
+        response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        with zipfile.ZipFile(BytesIO(response.content)) as archivo:
+            nombres = set(archivo.namelist())
+        self.assertNotIn("plantilla_creacion_oit.xlsx", nombres)
+        self.assertNotIn("plantilla_tarifas_y_servicios.xlsm", nombres)
+
     def test_correo_cuenta_planner_rejects_persona_natural(self):
         cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
         producto = Producto.objects.create(nombre="Fibra 200", velocidad=200, precio=90)
@@ -1002,6 +1073,14 @@ class AuthAndPermissionsTests(APITestCase):
         self.assertEqual(patched.data["cotizacion"], "COT-66")
         self.assertEqual(patched.data["contrato"], "CT-77")
         self.assertEqual(patched.data["numero_fijo"], "01444555")
+
+        patched_saf = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"saf": "309341"},
+            format="json",
+        )
+        self.assertEqual(patched_saf.status_code, status.HTTP_200_OK)
+        self.assertEqual(patched_saf.data["saf"], "309341")
 
         forbidden = self.client.patch(
             f"/api/ventas/{venta_id}/",
