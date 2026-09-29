@@ -1,45 +1,30 @@
-from pathlib import Path
-
-from django.conf import settings
 from rest_framework.exceptions import ValidationError
 
 from .datos_entel import CLAVE_PLANTILLA_POR_ARCHIVO
 
 
-def carpeta_plantillas_disco() -> Path | None:
-    configurada = getattr(settings, "CONTRATOS_ENTEL", None)
-    if configurada:
-        ruta = Path(configurada)
-        if ruta.is_dir():
-            return ruta
-    local = Path("/home/raul/Proyectos/Python/Contratos/CONTRATOS_ENTEL")
-    if local.is_dir():
-        return local
-    return None
-
-
 def bytes_plantilla(archivo: str, requerida: bool = True) -> bytes | None:
+    """Única fuente: plantillas cargadas en Configuración → Contratos (BD)."""
     from ..models import PlantillaContrato
 
     clave = CLAVE_PLANTILLA_POR_ARCHIVO.get(archivo)
+    registro = None
     if clave:
         registro = PlantillaContrato.objects.filter(clave=clave).only("contenido").first()
-        if registro and registro.contenido:
-            return bytes(registro.contenido)
-    embebida = Path(__file__).resolve().parent / "plantillas_pack" / archivo
-    if embebida.is_file():
-        return embebida.read_bytes()
-    disco = carpeta_plantillas_disco()
-    if disco:
-        ruta = disco / archivo
-        if ruta.is_file():
-            return ruta.read_bytes()
+    if registro and registro.contenido:
+        return bytes(registro.contenido)
     if not requerida:
         return None
+    etiqueta = archivo
+    if clave:
+        from .datos_entel import ITEM_PLANTILLA_POR_CLAVE
+
+        etiqueta = ITEM_PLANTILLA_POR_CLAVE.get(clave, {}).get("etiqueta") or archivo
     raise ValidationError(
         {
             "detail": (
-                f'Falta la plantilla "{archivo}". Cárgala en Configuración → Contratos.'
+                f'Falta la plantilla “{etiqueta}”. '
+                "Cárgala en Configuración → Contratos."
             )
         }
     )

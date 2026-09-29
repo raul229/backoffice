@@ -85,16 +85,14 @@ def generar_zip_entel(venta, fecha=None, direccion=None) -> tuple[bytes, str]:
 
 
 def _materializar_pack_fijo(origenes: Path, destino: Path, contexto: dict) -> None:
-    oit_bytes = bytes_plantilla(PLANTILLA_CREACION_OIT, requerida=False)
-    if oit_bytes:
-        origen = origenes / PLANTILLA_CREACION_OIT
-        origen.write_bytes(oit_bytes)
-        llenar_creacion_oit(origen, destino / PLANTILLA_CREACION_OIT, contexto)
-    tarifas_bytes = bytes_plantilla(PLANTILLA_TARIFAS_SERVICIOS, requerida=False)
-    if tarifas_bytes:
-        origen = origenes / PLANTILLA_TARIFAS_SERVICIOS
-        origen.write_bytes(tarifas_bytes)
-        llenar_tarifas_servicios(origen, destino / PLANTILLA_TARIFAS_SERVICIOS, contexto)
+    oit_bytes = bytes_plantilla(PLANTILLA_CREACION_OIT, requerida=True)
+    origen = origenes / PLANTILLA_CREACION_OIT
+    origen.write_bytes(oit_bytes)
+    llenar_creacion_oit(origen, destino / PLANTILLA_CREACION_OIT, contexto)
+    tarifas_bytes = bytes_plantilla(PLANTILLA_TARIFAS_SERVICIOS, requerida=True)
+    origen = origenes / PLANTILLA_TARIFAS_SERVICIOS
+    origen.write_bytes(tarifas_bytes)
+    llenar_tarifas_servicios(origen, destino / PLANTILLA_TARIFAS_SERVICIOS, contexto)
 
 
 def _materializar_pdfs(origenes: Path, plan: str, velocidad: int, promocion: str) -> list[Path]:

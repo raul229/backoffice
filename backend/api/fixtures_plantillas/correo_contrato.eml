@@ -1,0 +1,18 @@
+subject: Contrato {{NOMBRE_PLAN}} {{VELOCIDAD}}// {{RUC}} - {{RAZON_SOCIAL}}// Nro de oportunidad {{NO_OPORTUNIDAD}}
+from: {{CORREO_BACKOFFICE}}
+to: {{CORREO_RRLL}}
+cc: {{CORREO_GERENTE}}; {{CORREOS_ADICIONALES}}
+body: |
+    Estimado {{RRLL}}
+
+    Enviamos el resumen de la venta del servicio de internet contrato.
+
+    Número de oportunidad: {{NO_OPORTUNIDAD}}
+    Dirección de instalación:
+
+    {{DOMICILIO_INSTALACION}}
+
+    Plan contratado: {{NOMBRE_PLAN}} {{VELOCIDAD}}
+    Nombre de promoción: {{PROMOCION}}
+    Plazo de promoción: 6 meses
+    Gracias por su compra

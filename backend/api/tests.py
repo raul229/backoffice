@@ -2,14 +2,65 @@ from django.contrib.auth.models import Group, User
 from rest_framework import status
 from rest_framework.test import APITestCase
 from unittest.mock import patch
+from pathlib import Path
 
-from .models import Cliente, Direccion, Empresa, Flujo, FlujoPaso, Paso, Persona, Producto, Promocion, TipoCliente, Venta
+from .models import (
+    Cliente,
+    Direccion,
+    Empresa,
+    Flujo,
+    FlujoPaso,
+    Paso,
+    Persona,
+    PlantillaContrato,
+    Producto,
+    Promocion,
+    TipoCliente,
+    Venta,
+)
+
+# Solo para tests: origen opcional de bytes al sembrar la BD.
+_FIXTURES_PLANTILLAS = Path(__file__).resolve().parent / "fixtures_plantillas"
+_PLANTILLAS_DISCO_TEST = Path("/home/raul/Proyectos/Python/Contratos/CONTRATOS_ENTEL")
 
 
 class ApiEndpointsTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_superuser("tester", "tester@test.com", "pass")
         self.client.force_authenticate(self.user)
+
+    def _cargar_plantillas_en_bd(self, requeridas=None):
+        """Siembra PlantillaContrato desde fixtures de prueba (no es runtime)."""
+        from .contratos.datos_entel import CATALOGO_PLANTILLAS_ENTEL
+
+        cargadas = 0
+        for item in CATALOGO_PLANTILLAS_ENTEL:
+            if requeridas is not None and item["clave"] not in requeridas:
+                continue
+            ruta = None
+            for base in (_FIXTURES_PLANTILLAS, _PLANTILLAS_DISCO_TEST):
+                candidata = base / item["archivo"]
+                if candidata.is_file():
+                    ruta = candidata
+                    break
+            if ruta is None:
+                continue
+            data = ruta.read_bytes()
+            PlantillaContrato.objects.update_or_create(
+                clave=item["clave"],
+                defaults={
+                    "nombre_archivo": item["archivo"],
+                    "content_type": "application/octet-stream",
+                    "tamano": len(data),
+                    "contenido": data,
+                    "actualizado_por": self.user,
+                },
+            )
+            cargadas += 1
+        if cargadas == 0:
+            self.skipTest("No hay archivos de plantilla para sembrar en BD de prueba")
+        return cargadas
+
     def test_choices_endpoint_returns_frontend_options(self):
         response = self.client.get("/api/choices/")
 
@@ -643,13 +694,10 @@ class ApiEndpointsTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_generar_contrato_entel_returns_zip(self):
-        from pathlib import Path
         import zipfile
         from io import BytesIO
 
-        plantillas = Path("/home/raul/Proyectos/Python/Contratos/CONTRATOS_ENTEL")
-        if not (plantillas / "internet empresas.pdf").exists():
-            self.skipTest("Plantillas Entel no disponibles en este entorno")
+        self._cargar_plantillas_en_bd()
         venta_id = self._venta_empresa_entel()
         response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -672,13 +720,10 @@ class ApiEndpointsTests(APITestCase):
 
     def test_generar_contrato_acepta_fecha_pasada(self):
         import pymupdf
-        from pathlib import Path
         import zipfile
         from io import BytesIO
 
-        plantillas = Path("/home/raul/Proyectos/Python/Contratos/CONTRATOS_ENTEL")
-        if not (plantillas / "internet empresas.pdf").exists():
-            self.skipTest("Plantillas Entel no disponibles en este entorno")
+        self._cargar_plantillas_en_bd()
         venta_id = self._venta_empresa_entel()
         response = self.client.post(
             f"/api/ventas/{venta_id}/generar-contrato/",
@@ -695,13 +740,10 @@ class ApiEndpointsTests(APITestCase):
 
     def test_generar_contrato_acepta_direccion_personalizada(self):
         import pymupdf
-        from pathlib import Path
         import zipfile
         from io import BytesIO
 
-        plantillas = Path("/home/raul/Proyectos/Python/Contratos/CONTRATOS_ENTEL")
-        if not (plantillas / "internet empresas.pdf").exists():
-            self.skipTest("Plantillas Entel no disponibles en este entorno")
+        self._cargar_plantillas_en_bd()
         venta_id = self._venta_empresa_entel()
         direccion = "AV JAVIER PRADO ESTE 4450, SAN ISIDRO - PORTAL FACTIBILIDAD"
         response = self.client.post(
@@ -719,21 +761,16 @@ class ApiEndpointsTests(APITestCase):
         self.assertNotIn("Luiggi Barsato", texto)
 
     def test_pack_fijo_llena_oit_y_tarifas(self):
-        from pathlib import Path
         import zipfile
         from io import BytesIO
         from openpyxl import load_workbook
 
-        plantillas = Path("/home/raul/Proyectos/Python/Contratos/CONTRATOS_ENTEL")
-        if not (plantillas / "pack empresas.pdf").exists():
-            self.skipTest("Plantillas Entel no disponibles en este entorno")
+        self._cargar_plantillas_en_bd()
         venta_id = self._venta_empresa_entel(
             nombre_producto="Pack Empresas",
             velocidad=300,
             promo="30% y bono de velocidad por 6m",
         )
-        from .models import Venta
-
         venta = Venta.objects.get(id=venta_id)
         venta.numero_fijo = "01-7131046"
         venta.saf = "309341"
@@ -770,13 +807,10 @@ class ApiEndpointsTests(APITestCase):
             self.assertEqual(tarifas["C38"].value, "Pack Empresas 300")
 
     def test_pack_sin_fijo_no_incluye_oit_tarifas(self):
-        from pathlib import Path
         import zipfile
         from io import BytesIO
 
-        plantillas = Path("/home/raul/Proyectos/Python/Contratos/CONTRATOS_ENTEL")
-        if not (plantillas / "pack empresas.pdf").exists():
-            self.skipTest("Plantillas Entel no disponibles en este entorno")
+        self._cargar_plantillas_en_bd()
         venta_id = self._venta_empresa_entel(
             nombre_producto="Pack Empresas",
             velocidad=300,
@@ -788,6 +822,14 @@ class ApiEndpointsTests(APITestCase):
             nombres = set(archivo.namelist())
         self.assertNotIn("plantilla_creacion_oit.xlsx", nombres)
         self.assertNotIn("plantilla_tarifas_y_servicios.xlsm", nombres)
+
+    def test_generar_contrato_sin_plantilla_en_bd(self):
+        PlantillaContrato.objects.all().delete()
+        venta_id = self._venta_empresa_entel()
+        response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Configuración", response.data["detail"])
+
 
     def test_correo_cuenta_planner_rejects_persona_natural(self):
         cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
@@ -894,35 +936,12 @@ class ApiEndpointsTests(APITestCase):
         self.assertEqual(bytes(descarga.content), contenido)
 
     def test_generar_contrato_usa_plantilla_en_bd(self):
-        from pathlib import Path
         import zipfile
         from io import BytesIO
-        from unittest.mock import patch
 
-        from .contratos.datos_entel import CATALOGO_PLANTILLAS_ENTEL
-        from .models import PlantillaContrato
-
-        plantillas = Path("/home/raul/Proyectos/Python/Contratos/CONTRATOS_ENTEL")
-        if not (plantillas / "internet empresas.pdf").exists():
-            self.skipTest("Plantillas Entel no disponibles en este entorno")
-        for item in CATALOGO_PLANTILLAS_ENTEL:
-            ruta = plantillas / item["archivo"]
-            if not ruta.is_file():
-                continue
-            data = ruta.read_bytes()
-            PlantillaContrato.objects.update_or_create(
-                clave=item["clave"],
-                defaults={
-                    "nombre_archivo": item["archivo"],
-                    "content_type": "application/octet-stream",
-                    "tamano": len(data),
-                    "contenido": data,
-                    "actualizado_por": self.user,
-                },
-            )
+        self._cargar_plantillas_en_bd()
         venta_id = self._venta_empresa_entel()
-        with patch("api.contratos.almacen.carpeta_plantillas_disco", return_value=None):
-            response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
+        response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         with zipfile.ZipFile(BytesIO(response.content)) as archivo:
             nombres = set(archivo.namelist())
