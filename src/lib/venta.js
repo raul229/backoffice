@@ -240,9 +240,6 @@ export function filterVentas(ventas, filters) {
         return false
       }
     }
-    if (filters.tipo && filters.tipo !== 'TODOS' && venta.cliente_detalle?.tipo !== filters.tipo) {
-      return false
-    }
     if (filters.desde) {
       if (new Date(venta.fecha) < new Date(`${filters.desde}T00:00:00`)) return false
     }

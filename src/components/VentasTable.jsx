@@ -7,7 +7,6 @@ import {
   formatFecha,
   nombrePaso,
   pasoActual,
-  tipoClienteLabel,
   nombreCliente,
   numeroVenta,
 } from '../lib/venta.js'
@@ -37,12 +36,6 @@ const asesorColumn = {
 }
 
 const restColumns = [
-  {
-    id: 'tipo',
-    accessorFn: (row) => tipoClienteLabel(row.cliente_detalle?.tipo),
-    header: 'Tipo',
-    sortFn: sortFn_text,
-  },
   {
     id: 'paso',
     accessorFn: (row) => nombrePaso(pasoActual(row)) || '—',

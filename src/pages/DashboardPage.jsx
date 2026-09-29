@@ -120,7 +120,7 @@ export default function DashboardPage({
           onKeyDown={(event) => {
             if (event.key !== 'Escape') return
             event.preventDefault()
-            onFilters({ search: '', estado: 'TODOS', tipo: 'TODOS', desde: '', hasta: '' })
+            onFilters({ search: '', estado: 'TODOS', desde: '', hasta: '' })
           }}
         >
           <div className="mb-4 flex items-center justify-between">
@@ -129,7 +129,7 @@ export default function DashboardPage({
               type="button"
               className="text-xs text-blue-600"
               onClick={() =>
-                onFilters({ search: '', estado: 'TODOS', tipo: 'TODOS', desde: '', hasta: '' })
+                onFilters({ search: '', estado: 'TODOS', desde: '', hasta: '' })
               }
             >
               Limpiar filtros
@@ -163,19 +163,6 @@ export default function DashboardPage({
               <option value="INSTALADO">Instalado</option>
               <option value="ANULADO">Anulado</option>
               <option value="OBSERVACION">En observación</option>
-            </select>
-          </label>
-
-          <label className="mb-3 block text-sm">
-            <span className="mb-1 block text-slate-500">Tipo de cliente</span>
-            <select
-              className="select select-bordered w-full"
-              onChange={(event) => onFilters({ ...filters, tipo: event.target.value })}
-              value={filters.tipo}
-            >
-              <option value="TODOS">Todos los tipos</option>
-              <option value="PERSONA">Persona Natural</option>
-              <option value="EMPRESA">Persona Jurídica</option>
             </select>
           </label>
 
