@@ -6,6 +6,8 @@ from zoneinfo import ZoneInfo
 
 from django.template import Context, Template
 
+from .correo_contrato import cuerpo_html_contrato
+
 # .eml descargados: UTF-8 literal + 8bit evita quoted-printable (=3D, =C3=xx)
 # que algunos clientes muestran como texto o rompen etiquetas HTML.
 EML_POLICY = EmailPolicy(utf8=True, cte_type="8bit")
@@ -78,16 +80,24 @@ def generar_eml(plantilla: Path, contexto: dict, adjuntos: list[Path], carpeta_d
         msg["Cc"] = metadata["cc"]
     if metadata.get("bcc"):
         msg["Bcc"] = metadata["bcc"]
-    msg.set_content(metadata["body"], charset="utf-8", cte="8bit")
+    plain = metadata["body"] or _cuerpo_texto_contrato(contexto)
+    msg.set_content(plain, charset="utf-8", cte="8bit")
+    msg.add_alternative(
+        cuerpo_html_contrato(contexto, adjuntos),
+        subtype="html",
+        charset="utf-8",
+        cte="8bit",
+    )
 
     for ruta_adj in adjuntos:
         ruta_adj = Path(ruta_adj)
         if not ruta_adj.exists():
             continue
+        maintype, subtype = _tipo_adjunto(ruta_adj)
         msg.add_attachment(
             ruta_adj.read_bytes(),
-            maintype="application",
-            subtype="octet-stream",
+            maintype=maintype,
+            subtype=subtype,
             filename=ruta_adj.name,
         )
 
@@ -96,6 +106,38 @@ def generar_eml(plantilla: Path, contexto: dict, adjuntos: list[Path], carpeta_d
     salida = carpeta_destino / nombre
     salida.write_bytes(serializar_eml(msg))
     return salida
+
+
+def _tipo_adjunto(ruta: Path) -> tuple[str, str]:
+    extension = ruta.suffix.lower()
+    if extension == ".pdf":
+        return "application", "pdf"
+    if extension in {".xlsx", ".xlsm"}:
+        return "application", "vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    return "application", "octet-stream"
+
+
+def _cuerpo_texto_contrato(contexto: dict) -> str:
+    plan = contexto.get("NOMBRE_PLAN") or ""
+    velocidad = contexto.get("VELOCIDAD") or ""
+    return "\n".join(
+        [
+            f"Estimado {contexto.get('RRLL') or 'cliente'}",
+            "",
+            "Enviamos el resumen de la venta del servicio de internet contrato.",
+            "",
+            f"Número de oportunidad: {contexto.get('NO_OPORTUNIDAD') or '—'}",
+            "Dirección de instalación:",
+            "",
+            str(contexto.get("DOMICILIO_INSTALACION") or "—"),
+            "",
+            f"Plan contratado: {plan} {velocidad}".strip(),
+            f"Nombre de promoción: {contexto.get('PROMOCION') or '—'}",
+            "Plazo de promoción: 6 meses",
+            "Gracias por su compra",
+            "",
+        ]
+    )
 
 
 def _parsear_eml_plantilla(rendered: str) -> dict:
