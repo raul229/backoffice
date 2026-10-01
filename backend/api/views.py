@@ -21,12 +21,15 @@ from .models import (
     Producto,
     Promocion,
     PromocionVenta,
+    TipoCliente,
     Venta,
     VentaComentario,
     VentaPaso,
 )
 from .workflow import reordenar_pasos_de_flujo, sync_estado_venta_con_pasos, sync_ventas_con_flujo
 from .contratos import generar_correo_cuenta_planner, generar_zip_entel
+from .contratos.firmas_escan import leer_firmas_request
+from .contratos.mapeo import inferir_plan
 from .serializers import (
     CHOICE_GROUPS,
     ClienteSerializer,
@@ -223,10 +226,17 @@ class VentaViewSet(AuthenticatedModelViewSet):
         if not request.user.is_superuser and not request.user.has_perm("api.generar_contrato"):
             raise PermissionDenied("No tienes permiso para generar contratos.")
         venta = self.get_object()
+        if venta.cliente.tipo != TipoCliente.EMPRESA:
+            raise ValidationError(
+                {"detail": "Por ahora solo se generan contratos Entel para persona jurídica."}
+            )
+        plan = inferir_plan(venta.producto)
+        firmas = leer_firmas_request(request, plan)
         contenido, nombre = generar_zip_entel(
             venta,
             fecha=request.data.get("fecha"),
             direccion=request.data.get("direccion"),
+            firmas_paginas=firmas,
         )
         response = HttpResponse(contenido, content_type="application/zip")
         response["Content-Disposition"] = content_disposition_header(True, nombre)

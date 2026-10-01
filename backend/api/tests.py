@@ -693,13 +693,41 @@ class ApiEndpointsTests(APITestCase):
         response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def _jpeg_minimo(self):
+        """JPEG pequeño válido para tests de firmas escaneadas."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        import pymupdf
+
+        doc = pymupdf.open()
+        page = doc.new_page(width=200, height=280)
+        page.draw_rect(page.rect, color=(0.8, 0.8, 0.8), fill=(0.9, 0.9, 0.9))
+        data = page.get_pixmap().tobytes("jpeg")
+        doc.close()
+        return SimpleUploadedFile("firma.jpg", data, content_type="image/jpeg")
+
+    def _post_generar_contrato(self, venta_id, data=None, con_firmas=True):
+        payload = dict(data or {})
+        if con_firmas:
+            payload["firma_pagina_3"] = self._jpeg_minimo()
+            payload["firma_pagina_5"] = self._jpeg_minimo()
+            return self.client.post(
+                f"/api/ventas/{venta_id}/generar-contrato/",
+                payload,
+                format="multipart",
+            )
+        return self.client.post(
+            f"/api/ventas/{venta_id}/generar-contrato/",
+            payload,
+            format="json",
+        )
+
     def test_generar_contrato_entel_returns_zip(self):
         import zipfile
         from io import BytesIO
 
         self._cargar_plantillas_en_bd()
         venta_id = self._venta_empresa_entel()
-        response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
+        response = self._post_generar_contrato(venta_id)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response["Content-Type"], "application/zip")
         self.assertIn("INDOTECH SAC - 20522317285.zip", response["Content-Disposition"])
@@ -708,13 +736,16 @@ class ApiEndpointsTests(APITestCase):
         self.assertIn("internet empresas.pdf", nombres)
         self.assertIn("bono duplica.pdf", nombres)
 
+    def test_generar_contrato_internet_exige_firmas(self):
+        self._cargar_plantillas_en_bd()
+        venta_id = self._venta_empresa_entel()
+        response = self._post_generar_contrato(venta_id, con_firmas=False)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("firma", response.data["detail"].lower())
+
     def test_generar_contrato_fecha_invalida(self):
         venta_id = self._venta_empresa_entel()
-        response = self.client.post(
-            f"/api/ventas/{venta_id}/generar-contrato/",
-            {"fecha": "no-es-fecha"},
-            format="json",
-        )
+        response = self._post_generar_contrato(venta_id, {"fecha": "no-es-fecha"})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("fecha", response.data)
 
@@ -725,18 +756,24 @@ class ApiEndpointsTests(APITestCase):
 
         self._cargar_plantillas_en_bd()
         venta_id = self._venta_empresa_entel()
-        response = self.client.post(
-            f"/api/ventas/{venta_id}/generar-contrato/",
-            {"fecha": "2024-03-15"},
-            format="json",
-        )
+        response = self._post_generar_contrato(venta_id, {"fecha": "2024-03-15"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         with zipfile.ZipFile(BytesIO(response.content)) as archivo:
-            texto = "".join(
-                page.get_text()
-                for page in pymupdf.open(stream=archivo.read("internet empresas.pdf"), filetype="pdf")
-            )
-        self.assertIn("15/03/2024", texto)
+            pdf = pymupdf.open(stream=archivo.read("internet empresas.pdf"), filetype="pdf")
+            # Páginas de firma reemplazadas por imagen (índices 2 y 4).
+            self.assertTrue(pdf[2].get_images())
+            self.assertTrue(pdf[4].get_images())
+            # Página 1 sigue llevando datos del cliente.
+            texto = pdf[0].get_text()
+            self.assertIn("INDOTECH", texto.upper())
+            # Sobre la foto de firma se vuelve a pintar RRLL y fecha.
+            texto_p3 = pdf[2].get_text().upper()
+            texto_p5 = pdf[4].get_text().upper()
+            self.assertIn("ANA PEREZ", texto_p3)
+            self.assertIn("15/03/2024", pdf[2].get_text())
+            self.assertIn("ANA PEREZ", texto_p5)
+            self.assertIn("987654321", pdf[4].get_text())
+            pdf.close()
 
     def test_generar_contrato_acepta_direccion_personalizada(self):
         import pymupdf
@@ -746,10 +783,9 @@ class ApiEndpointsTests(APITestCase):
         self._cargar_plantillas_en_bd()
         venta_id = self._venta_empresa_entel()
         direccion = "AV JAVIER PRADO ESTE 4450, SAN ISIDRO - PORTAL FACTIBILIDAD"
-        response = self.client.post(
-            f"/api/ventas/{venta_id}/generar-contrato/",
+        response = self._post_generar_contrato(
+            venta_id,
             {"fecha": "2024-03-15", "direccion": direccion},
-            format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         with zipfile.ZipFile(BytesIO(response.content)) as archivo:
@@ -825,7 +861,11 @@ class ApiEndpointsTests(APITestCase):
 
     def test_generar_contrato_sin_plantilla_en_bd(self):
         PlantillaContrato.objects.all().delete()
-        venta_id = self._venta_empresa_entel()
+        venta_id = self._venta_empresa_entel(
+            nombre_producto="Pack Empresas",
+            velocidad=300,
+            promo="Solo 30% por 6m.",
+        )
         response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("Configuración", response.data["detail"])
@@ -941,7 +981,7 @@ class ApiEndpointsTests(APITestCase):
 
         self._cargar_plantillas_en_bd()
         venta_id = self._venta_empresa_entel()
-        response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
+        response = self._post_generar_contrato(venta_id)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         with zipfile.ZipFile(BytesIO(response.content)) as archivo:
             nombres = set(archivo.namelist())

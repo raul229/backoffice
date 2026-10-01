@@ -21,6 +21,7 @@ from .datos_entel import (
     PLANTILLA_CREACION_OIT,
     PLANTILLA_TARIFAS_SERVICIOS,
 )
+from .firmas_escan import reemplazar_paginas_con_imagenes
 from .mapeo import (
     contexto_desde_venta,
     nombre_zip_contrato,
@@ -31,7 +32,7 @@ from .pack_fijo import llenar_creacion_oit, llenar_tarifas_servicios
 from .utils import dividir_texto, generar_eml
 
 
-def generar_zip_entel(venta, fecha=None, direccion=None) -> tuple[bytes, str]:
+def generar_zip_entel(venta, fecha=None, direccion=None, firmas_paginas=None) -> tuple[bytes, str]:
     contexto, plan, velocidad, promocion = contexto_desde_venta(
         venta,
         fecha=parsear_fecha_contrato(fecha),
@@ -59,7 +60,8 @@ def generar_zip_entel(venta, fecha=None, direccion=None) -> tuple[bytes, str]:
         destino.mkdir()
         pdfs = _materializar_pdfs(origenes, plan, velocidad, promocion)
         for ruta in pdfs:
-            _llenar_pdf(ruta, destino / ruta.name, contexto, datos_plan)
+            firmas = firmas_paginas if ruta.name == ARCHIVOS_BASE_POR_PLAN.get(plan) else None
+            _llenar_pdf(ruta, destino / ruta.name, contexto, datos_plan, firmas_paginas=firmas)
         hc_nombre = HC_ARCHIVO_POR_PLAN[plan]
         hc_bytes = bytes_plantilla(hc_nombre, requerida=False)
         if hc_bytes:
@@ -140,9 +142,18 @@ def _transform(nombre: str, contexto: dict, datos_plan: dict) -> str | None:
     return None
 
 
-def _llenar_pdf(origen: Path, destino: Path, contexto: dict, datos_plan: dict) -> None:
+def _llenar_pdf(
+    origen: Path,
+    destino: Path,
+    contexto: dict,
+    datos_plan: dict,
+    firmas_paginas: dict[int, bytes] | None = None,
+) -> None:
     pdf = pymupdf.open(origen)
     try:
+        # La foto solo trae la firma: se reemplaza la hoja y luego se pinta RRLL/contacto/fecha.
+        if firmas_paginas:
+            reemplazar_paginas_con_imagenes(pdf, firmas_paginas)
         paginas = MAPA_ENTEL_POR_ARCHIVO.get(origen.name, {})
         for num_pagina, coords in paginas.items():
             if num_pagina >= len(pdf):

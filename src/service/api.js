@@ -399,17 +399,35 @@ function filenameFromDisposition(header, fallback) {
 
 export async function generarContrato(ventaId, opciones = {}) {
   const payload = typeof opciones === "string" ? { fecha: opciones } : opciones
-  const headers = { "Content-Type": "application/json" }
   const token = csrfToken()
+  const headers = {}
   if (token) headers["X-CSRFToken"] = token
+
+  let body
+  if (payload.firmaPagina3 || payload.firmaPagina5) {
+    const form = new FormData()
+    if (payload.fecha) form.append("fecha", payload.fecha)
+    if (payload.direccion != null) form.append("direccion", payload.direccion)
+    if (payload.firmaPagina3) {
+      form.append("firma_pagina_3", payload.firmaPagina3, "firma-pagina-3.jpg")
+    }
+    if (payload.firmaPagina5) {
+      form.append("firma_pagina_5", payload.firmaPagina5, "firma-pagina-5.jpg")
+    }
+    body = form
+  } else {
+    headers["Content-Type"] = "application/json"
+    body = JSON.stringify({
+      ...(payload.fecha ? { fecha: payload.fecha } : {}),
+      ...(payload.direccion != null ? { direccion: payload.direccion } : {}),
+    })
+  }
+
   const response = await fetch(`/api/ventas/${ventaId}/generar-contrato/`, {
     method: "POST",
     credentials: "include",
     headers,
-    body: JSON.stringify({
-      ...(payload.fecha ? { fecha: payload.fecha } : {}),
-      ...(payload.direccion != null ? { direccion: payload.direccion } : {}),
-    }),
+    body,
   })
   if (response.status === 401) {
     window.dispatchEvent(new Event("auth:required"))

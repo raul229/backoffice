@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
+import FirmasContratoScan from '../components/FirmasContratoScan.jsx'
 import StatusBadge, { PasoEstadoBadge } from '../components/StatusBadge.jsx'
 import { getVenta, getFlujos, getAsesores, updateVenta, updateVentaPaso, deleteVenta, createVentaComentario, generarContrato, generarCorreoCuentaPlanner } from '../service/api.js'
 import { displayName } from '../lib/auth.js'
@@ -23,6 +24,14 @@ import {
 
 const PASO_ESTADOS = ['PENDIENTE', 'EN_PROCESO', 'OBSERVADO', 'SUBSANANDO', 'APROBADO', 'RECHAZADO']
 const VENTA_ESTADOS = ['EN_PROCESO', 'INSTALADO', 'ANULADO']
+
+function esInternetEmpresas(producto) {
+  // Alineado con inferir_plan del backend: todo lo que no sea Pack es Internet Empresas.
+  // En BD el nombre suele ser "INT EMPRESA" (no "Internet Empresas").
+  const nombre = (producto?.nombre || '').toUpperCase()
+  if (!nombre) return false
+  return !nombre.includes('PACK')
+}
 
 function fechaLimaHoy() {
   return new Intl.DateTimeFormat('en-CA', {
@@ -201,6 +210,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   const canAddComentario = can('api.add_ventacomentario')
   const canGenerarContrato = can('api.generar_contrato')
   const esEmpresa = cliente?.tipo === 'EMPRESA'
+  const requiereFirmasEscaneadas = esInternetEmpresas(venta.producto_detalle)
   const saving =
     pasoMutation.isPending ||
     ventaMutation.isPending ||
@@ -234,6 +244,10 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
                     type: 'contrato',
                     fecha: fechaLimaHoy(),
                     direccion: direccion ? formatDireccion(direccion) : '',
+                    firmaPagina3: null,
+                    firmaPagina5: null,
+                    preview3: null,
+                    preview5: null,
                   })
                 }
                 title={esEmpresa ? 'Generar contratos Entel' : 'Solo disponible para persona jurídica'}
@@ -603,7 +617,11 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
         stacked
         title="Generar contrato"
         onClose={() => {
-          if (!contratoMutation.isPending) setConfirm(null)
+          if (!contratoMutation.isPending) {
+            if (confirm.preview3) URL.revokeObjectURL(confirm.preview3)
+            if (confirm.preview5) URL.revokeObjectURL(confirm.preview5)
+            setConfirm(null)
+          }
         }}
         footer={
           <>
@@ -611,16 +629,33 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
               type="button"
               className="btn btn-ghost"
               disabled={contratoMutation.isPending}
-              onClick={() => setConfirm(null)}
+              onClick={() => {
+                if (confirm.preview3) URL.revokeObjectURL(confirm.preview3)
+                if (confirm.preview5) URL.revokeObjectURL(confirm.preview5)
+                setConfirm(null)
+              }}
             >
               Cancelar
             </button>
             <button
               type="button"
               className="btn border-none bg-emerald-600 text-white hover:bg-emerald-700"
-              disabled={contratoMutation.isPending || !confirm.fecha}
+              disabled={
+                contratoMutation.isPending ||
+                !confirm.fecha ||
+                (requiereFirmasEscaneadas && !(confirm.firmaPagina3 && confirm.firmaPagina5))
+              }
               onClick={() =>
-                contratoMutation.mutate({ fecha: confirm.fecha, direccion: confirm.direccion })
+                contratoMutation.mutate({
+                  fecha: confirm.fecha,
+                  direccion: confirm.direccion,
+                  ...(requiereFirmasEscaneadas
+                    ? {
+                        firmaPagina3: confirm.firmaPagina3,
+                        firmaPagina5: confirm.firmaPagina5,
+                      }
+                    : {}),
+                })
               }
             >
               {contratoMutation.isPending ? 'Generando…' : 'Generar'}
@@ -654,7 +689,17 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
             </dd>
           </div>
         </dl>
-        <label className="block text-sm">
+        {requiereFirmasEscaneadas ? (
+          <FirmasContratoScan
+            disabled={contratoMutation.isPending}
+            firmaPagina3={confirm.firmaPagina3}
+            firmaPagina5={confirm.firmaPagina5}
+            preview3={confirm.preview3}
+            preview5={confirm.preview5}
+            onChange={(patch) => setConfirm({ ...confirm, ...patch })}
+          />
+        ) : null}
+        <label className="mt-4 block text-sm">
           <span className="mb-1 block text-slate-400">Fecha del contrato</span>
           <input
             className="input input-bordered w-full"
