@@ -16,12 +16,13 @@ from .datos_entel import (
     HC_ARCHIVO_POR_PLAN,
     HC_COORDS_POR_PLAN,
     MAPA_ENTEL_POR_ARCHIVO,
+    NOMBRE_PNG_POR_PAGINA,
     PLANES_ENTEL,
     PLANTILLA_CORREO_ENTEL,
     PLANTILLA_CREACION_OIT,
     PLANTILLA_TARIFAS_SERVICIOS,
 )
-from .firmas_escan import reemplazar_paginas_con_imagenes
+from .firmas_escan import firmas_a_png, insertar_firmas_en_pdf
 from .mapeo import (
     contexto_desde_venta,
     nombre_zip_contrato,
@@ -52,6 +53,7 @@ def generar_zip_entel(venta, fecha=None, direccion=None, firmas_paginas=None) ->
         "VELOCIDAD": velocidad,
         **tarifas,
     }
+    firmas_png = firmas_a_png(firmas_paginas) if firmas_paginas else None
     with tempfile.TemporaryDirectory() as tmp:
         raiz = Path(tmp)
         origenes = raiz / "origen"
@@ -60,8 +62,13 @@ def generar_zip_entel(venta, fecha=None, direccion=None, firmas_paginas=None) ->
         destino.mkdir()
         pdfs = _materializar_pdfs(origenes, plan, velocidad, promocion)
         for ruta in pdfs:
-            firmas = firmas_paginas if ruta.name == ARCHIVOS_BASE_POR_PLAN.get(plan) else None
+            firmas = firmas_png if ruta.name == ARCHIVOS_BASE_POR_PLAN.get(plan) else None
             _llenar_pdf(ruta, destino / ruta.name, contexto, datos_plan, firmas_paginas=firmas)
+        if firmas_png:
+            for indice, png in firmas_png.items():
+                nombre = NOMBRE_PNG_POR_PAGINA.get(indice)
+                if nombre:
+                    (destino / nombre).write_bytes(png)
         hc_nombre = HC_ARCHIVO_POR_PLAN[plan]
         hc_bytes = bytes_plantilla(hc_nombre, requerida=False)
         if hc_bytes:
@@ -151,9 +158,6 @@ def _llenar_pdf(
 ) -> None:
     pdf = pymupdf.open(origen)
     try:
-        # La foto solo trae la firma: se reemplaza la hoja y luego se pinta RRLL/contacto/fecha.
-        if firmas_paginas:
-            reemplazar_paginas_con_imagenes(pdf, firmas_paginas)
         paginas = MAPA_ENTEL_POR_ARCHIVO.get(origen.name, {})
         for num_pagina, coords in paginas.items():
             if num_pagina >= len(pdf):
@@ -179,6 +183,9 @@ def _llenar_pdf(
                     texto = str(valor)
                     y_inicial = y
                 pagina.insert_text((x, y_inicial), texto, fontsize=tamano)
+        # Firmas manuscritas encima del texto, en la zona de firma (no reemplazan la hoja).
+        if firmas_paginas:
+            insertar_firmas_en_pdf(pdf, firmas_paginas)
         pdf.save(str(destino))
     finally:
         pdf.close()

@@ -11,8 +11,19 @@ export default function Modal({ open, title, onClose, children, footer, wide = f
     document.addEventListener('keydown', onKey, stacked)
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
+
+    // Al volver de la cámara nativa, el dialog a veces queda sin respuesta en Android.
+    const recover = () => {
+      if (document.visibilityState !== 'visible') return
+      document.body.style.overflow = 'hidden'
+    }
+    document.addEventListener('visibilitychange', recover)
+    window.addEventListener('pageshow', recover)
+
     return () => {
       document.removeEventListener('keydown', onKey, stacked)
+      document.removeEventListener('visibilitychange', recover)
+      window.removeEventListener('pageshow', recover)
       document.body.style.overflow = previous
     }
   }, [open, onClose, stacked])

@@ -6,6 +6,9 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    // Accesible desde el celular en la misma red (npm run dev).
+    host: true,
+    port: 5173,
     proxy: {
       "/api": "http://127.0.0.1:8000",
       "/admin": "http://127.0.0.1:8000",

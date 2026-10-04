@@ -3,9 +3,11 @@ Datos y mapas de coordenadas para los contratos de Entel.
 
 Estructura:
 - PLANES_ENTEL: tarifas por plan y velocidad.
-- COORDS_ENTEL_PAGINA_*: mapas de coordenadas por página lógica.
+- COORDS_ENTEL_PAGINA_*: mapas de coordenadas de texto por página lógica.
+- RECT_FIRMA_POR_PAGINA: recuadros (x0, y0, x1, y1) para pegar firmas manuscritas.
+- HC_COORDS_POR_PLAN: celdas Excel de las hojas de cálculo.
 
-Cada mapa tiene la forma:
+Cada mapa de texto tiene la forma:
     {nombre_campo: (x, y, opciones)}
 
 Opciones disponibles:
@@ -311,7 +313,7 @@ COORDS_ENTEL_PAGINA_2_PACK_EMPRESAS: dict[str, tuple[int, int, dict]] = {
 }
 
 COORDS_ENTEL_PAGINA_3_PACK_EMPRESAS: dict[str, tuple[int, int, dict]] = {
-    'RRLL':  (465, 410, {'max_caracteres': 17}),
+    'RRLL':  (465, 410, {'max_caracteres': 20}),
     'CARGO': (465, 440, {'value': 'GERENTE GENERAL'}),
     'FECHA': (370, 465, {}),
     'HORA':  (495, 465, {'value': '10  00  00'}),
@@ -319,14 +321,14 @@ COORDS_ENTEL_PAGINA_3_PACK_EMPRESAS: dict[str, tuple[int, int, dict]] = {
 
 
 COORDS_ENTEL_PAGINA_3: dict[str, tuple[int, int, dict]] = {
-    'RRLL':  (195, 300, {'max_caracteres': 17}),
+    'RRLL':  (195, 300, {'max_caracteres': 20}),
     'CARGO': (195, 330, {'value': 'GERENTE GENERAL'}),
     'FECHA': (60, 345, {}),
     'HORA':  (220, 345, {'value': '10 : 00 : 00'}),
 }
 
 COORDS_ENTEL_PAGINA_5: dict[str, tuple[int, int, dict]] = {
-    'RRLL':         (40, 510, {'max_caracteres': 17}),
+    'RRLL':         (40, 510, {'max_caracteres': 20}),
     'DNI':          (180, 510, {}),
     'CARGO':        (260, 498, {'value': 'GERENTE\nGENERAL'}),
     'CELULAR_RRLL': (350, 510, {'max_caracteres': 10}),
@@ -353,6 +355,25 @@ COORDS_ENTEL_PAGINA_7: dict[str, tuple[int, int, dict]] = {
     'CELULAR_RRLL':          (230, 290, {'tamano': 10}),
     'DOMICILIO_INSTALACION': (80, 350, {'max_caracteres': 70, 'tamano': 12}),
     'DESCUENTO':             (230, 430, {'transform': 'descuento'}),
+}
+
+
+# --------------------------------------------------
+# FIRMAS MANUSCRITAS (overlay en internet empresas.pdf)
+# --------------------------------------------------
+# Índices físicos (páginas lógicas 3 y 5).
+PAGINA_FIRMA_3 = 2
+PAGINA_FIRMA_5 = 4
+
+# Recuadro ABONADO: (x0, y0, x1, y1) en puntos del PDF.
+RECT_FIRMA_POR_PAGINA: dict[int, tuple[float, float, float, float]] = {
+    PAGINA_FIRMA_3: (80, 148, 525, 400),
+    PAGINA_FIRMA_5: (95, 745, 290, 825),
+}
+
+NOMBRE_PNG_POR_PAGINA: dict[int, str] = {
+    PAGINA_FIRMA_3: 'firma_pagina_3.png',
+    PAGINA_FIRMA_5: 'firma_pagina_5.png',
 }
 
 

@@ -39,6 +39,33 @@ if render_hostname := os.environ.get("RENDER_EXTERNAL_HOSTNAME"):
     ALLOWED_HOSTS.append(render_hostname)
 
 
+def _lan_ips():
+    """IPs locales (Wi‑Fi) para probar el front desde el celular en DEBUG."""
+    import socket
+
+    ips = set()
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            ips.add(sock.getsockname()[0])
+    except OSError:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if not ip.startswith("127."):
+                ips.add(ip)
+    except OSError:
+        pass
+    return sorted(ips)
+
+
+if DEBUG:
+    for ip in _lan_ips():
+        if ip not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(ip)
+
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -165,6 +192,14 @@ LOCAL_ORIGINS = [
     "http://localhost:5175",
     "http://127.0.0.1:5175",
 ]
+if DEBUG:
+    for ip in _lan_ips():
+        for port in (5173, 5174, 5175):
+            LOCAL_ORIGINS.append(f"http://{ip}:{port}")
+            LOCAL_ORIGINS.append(f"https://{ip}:{port}")
+    for port in (5173, 5174, 5175):
+        LOCAL_ORIGINS.append(f"https://localhost:{port}")
+        LOCAL_ORIGINS.append(f"https://127.0.0.1:{port}")
 CORS_ALLOWED_ORIGINS = list(dict.fromkeys(LOCAL_ORIGINS + env_list("CORS_ALLOWED_ORIGINS")))
 CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(LOCAL_ORIGINS + env_list("CSRF_TRUSTED_ORIGINS")))
 

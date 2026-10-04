@@ -735,13 +735,69 @@ class ApiEndpointsTests(APITestCase):
             nombres = set(archivo.namelist())
         self.assertIn("internet empresas.pdf", nombres)
         self.assertIn("bono duplica.pdf", nombres)
+        self.assertIn("firma_pagina_3.png", nombres)
+        self.assertIn("firma_pagina_5.png", nombres)
 
-    def test_generar_contrato_internet_exige_firmas(self):
+    def test_generar_contrato_internet_firmas_opcionales(self):
+        import zipfile
+        from io import BytesIO
+
         self._cargar_plantillas_en_bd()
         venta_id = self._venta_empresa_entel()
         response = self._post_generar_contrato(venta_id, con_firmas=False)
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("firma", response.data["detail"].lower())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        with zipfile.ZipFile(BytesIO(response.content)) as archivo:
+            nombres = set(archivo.namelist())
+        self.assertIn("internet empresas.pdf", nombres)
+        self.assertNotIn("firma_pagina_3.png", nombres)
+        self.assertNotIn("firma_pagina_5.png", nombres)
+
+    def test_generar_contrato_firma_quita_fondo(self):
+        """Pillow deja la firma en PNG con fondo transparente (papel → alpha 0)."""
+        import zipfile
+        from io import BytesIO
+
+        import pymupdf
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image, ImageDraw
+
+        self._cargar_plantillas_en_bd()
+        venta_id = self._venta_empresa_entel()
+
+        img = Image.new("RGB", (160, 60), (235, 240, 245))
+        draw = ImageDraw.Draw(img)
+        draw.line((15, 35, 145, 25), fill=(20, 40, 120), width=3)
+        draw.line((40, 20, 90, 45), fill=(25, 35, 110), width=2)
+        buf = BytesIO()
+        img.save(buf, format="JPEG", quality=90)
+        jpeg_firma = buf.getvalue()
+
+        payload = {
+            "firma_pagina_3": SimpleUploadedFile(
+                "f3.jpg", jpeg_firma, content_type="image/jpeg"
+            ),
+            "firma_pagina_5": SimpleUploadedFile(
+                "f5.jpg", jpeg_firma, content_type="image/jpeg"
+            ),
+        }
+        response = self.client.post(
+            f"/api/ventas/{venta_id}/generar-contrato/",
+            payload,
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        with zipfile.ZipFile(BytesIO(response.content)) as archivo:
+            out = archivo.read("firma_pagina_3.png")
+        resultado = pymupdf.Pixmap(out)
+        self.assertEqual(resultado.alpha, 1)
+        # Esquina (papel) transparente; algún píxel de tinta con alpha alto.
+        self.assertEqual(resultado.pixel(0, 0)[3], 0)
+        alphas = [
+            resultado.pixel(x, y)[3]
+            for y in range(resultado.height)
+            for x in range(resultado.width)
+        ]
+        self.assertGreater(max(alphas), 200)
 
     def test_generar_contrato_fecha_invalida(self):
         venta_id = self._venta_empresa_entel()
@@ -759,20 +815,23 @@ class ApiEndpointsTests(APITestCase):
         response = self._post_generar_contrato(venta_id, {"fecha": "2024-03-15"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         with zipfile.ZipFile(BytesIO(response.content)) as archivo:
+            nombres = set(archivo.namelist())
+            self.assertIn("firma_pagina_3.png", nombres)
+            self.assertIn("firma_pagina_5.png", nombres)
+            self.assertTrue(archivo.read("firma_pagina_3.png").startswith(b"\x89PNG"))
+            self.assertTrue(archivo.read("firma_pagina_5.png").startswith(b"\x89PNG"))
             pdf = pymupdf.open(stream=archivo.read("internet empresas.pdf"), filetype="pdf")
-            # Páginas de firma reemplazadas por imagen (índices 2 y 4).
+            # Overlay de firma en págs 3 y 5 (índices 2 y 4), sin reemplazar la hoja.
             self.assertTrue(pdf[2].get_images())
             self.assertTrue(pdf[4].get_images())
-            # Página 1 sigue llevando datos del cliente.
-            texto = pdf[0].get_text()
-            self.assertIn("INDOTECH", texto.upper())
-            # Sobre la foto de firma se vuelve a pintar RRLL y fecha.
             texto_p3 = pdf[2].get_text().upper()
             texto_p5 = pdf[4].get_text().upper()
             self.assertIn("ANA PEREZ", texto_p3)
             self.assertIn("15/03/2024", pdf[2].get_text())
             self.assertIn("ANA PEREZ", texto_p5)
             self.assertIn("987654321", pdf[4].get_text())
+            # La plantilla original sigue presente (no se tapó toda la página).
+            self.assertIn("ACEPTACIÓN", texto_p3)
             pdf.close()
 
     def test_generar_contrato_acepta_direccion_personalizada(self):

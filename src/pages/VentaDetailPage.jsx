@@ -640,19 +640,15 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
             <button
               type="button"
               className="btn border-none bg-emerald-600 text-white hover:bg-emerald-700"
-              disabled={
-                contratoMutation.isPending ||
-                !confirm.fecha ||
-                (requiereFirmasEscaneadas && !(confirm.firmaPagina3 && confirm.firmaPagina5))
-              }
+              disabled={contratoMutation.isPending || !confirm.fecha}
               onClick={() =>
                 contratoMutation.mutate({
                   fecha: confirm.fecha,
                   direccion: confirm.direccion,
                   ...(requiereFirmasEscaneadas
                     ? {
-                        firmaPagina3: confirm.firmaPagina3,
-                        firmaPagina5: confirm.firmaPagina5,
+                        firmaPagina3: confirm.firmaPagina3 || undefined,
+                        firmaPagina5: confirm.firmaPagina5 || undefined,
                       }
                     : {}),
                 })
