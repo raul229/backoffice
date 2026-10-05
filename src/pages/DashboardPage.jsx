@@ -1,6 +1,14 @@
 import { IconAlert, IconCalendar, IconCheck, IconClock } from '../lib/icons.jsx'
 import { computeKpis } from '../lib/venta.js'
 import VentasTable from '../components/VentasTable.jsx'
+import MultiCheck from '../components/MultiCheck.jsx'
+
+const ESTADOS_VENTA_FILTRO = [
+  { value: 'EN_PROCESO', label: 'En proceso' },
+  { value: 'INSTALADO', label: 'Instalado' },
+  { value: 'ANULADO', label: 'Anulado' },
+  { value: 'OBSERVACION', label: 'En observación' },
+]
 import { useAuth } from '../context/AuthContext.jsx'
 import { displayName } from '../lib/auth.js'
 
@@ -120,7 +128,7 @@ export default function DashboardPage({
           onKeyDown={(event) => {
             if (event.key !== 'Escape') return
             event.preventDefault()
-            onFilters({ search: '', estado: 'TODOS', desde: '', hasta: '' })
+            onFilters({ search: '', estado: [], desde: '', hasta: '' })
           }}
         >
           <div className="mb-4 flex items-center justify-between">
@@ -129,7 +137,7 @@ export default function DashboardPage({
               type="button"
               className="text-xs text-blue-600"
               onClick={() =>
-                onFilters({ search: '', estado: 'TODOS', desde: '', hasta: '' })
+                onFilters({ search: '', estado: [], desde: '', hasta: '' })
               }
             >
               Limpiar filtros
@@ -151,20 +159,12 @@ export default function DashboardPage({
             />
           </label>
 
-          <label className="mb-3 block text-sm">
-            <span className="mb-1 block text-slate-500">Estado</span>
-            <select
-              className="select select-bordered w-full"
-              onChange={(event) => onFilters({ ...filters, estado: event.target.value })}
-              value={filters.estado}
-            >
-              <option value="TODOS">Todos los estados</option>
-              <option value="EN_PROCESO">En proceso</option>
-              <option value="INSTALADO">Instalado</option>
-              <option value="ANULADO">Anulado</option>
-              <option value="OBSERVACION">En observación</option>
-            </select>
-          </label>
+          <MultiCheck
+            label="Estado (vacío = todos)"
+            options={ESTADOS_VENTA_FILTRO}
+            selected={Array.isArray(filters.estado) ? filters.estado : []}
+            onChange={(estado) => onFilters({ ...filters, estado })}
+          />
 
           <div className="mb-4 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
             <label>

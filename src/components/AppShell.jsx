@@ -88,13 +88,6 @@ export default function AppShell({ page, search, onSearch, onNavigate, children 
             )
           })}
         </nav>
-
-        <div className="mt-6 rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-500 p-4">
-          <p className="text-sm font-semibold">Automatiza tareas y ahorra tiempo</p>
-          <p className="mt-1 text-xs text-blue-100">
-            Pronto podrás generar contratos y reportes desde la plataforma.
-          </p>
-        </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">

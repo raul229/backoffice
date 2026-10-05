@@ -229,17 +229,24 @@ export function matchesSearch(venta, query) {
   return haystack.includes(q)
 }
 
+function matchesEstadoFiltro(venta, estado) {
+  if (estado === 'OBSERVACION') return estadoUi(venta) === 'observacion'
+  if (estado === 'INSTALADO') return estadoUi(venta) === 'aprobada'
+  return venta.estado === estado
+}
+
+function estadosFiltroActivos(estado) {
+  if (Array.isArray(estado)) return estado
+  if (estado && estado !== 'TODOS') return [estado]
+  return []
+}
+
 export function filterVentas(ventas, filters) {
+  const estados = estadosFiltroActivos(filters.estado)
   return ventas.filter((venta) => {
     if (!matchesSearch(venta, filters.search ?? '')) return false
-    if (filters.estado && filters.estado !== 'TODOS') {
-      if (filters.estado === 'OBSERVACION') {
-        if (estadoUi(venta) !== 'observacion') return false
-      } else if (filters.estado === 'INSTALADO') {
-        if (estadoUi(venta) !== 'aprobada') return false
-      } else if (venta.estado !== filters.estado) {
-        return false
-      }
+    if (estados.length > 0 && !estados.some((e) => matchesEstadoFiltro(venta, e))) {
+      return false
     }
     if (filters.desde) {
       if (new Date(venta.fecha) < new Date(`${filters.desde}T00:00:00`)) return false

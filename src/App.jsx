@@ -17,7 +17,7 @@ import { filterVentas, numeroVenta } from './lib/venta.js'
 
 const emptyFilters = {
   search: '',
-  estado: 'TODOS',
+  estado: [],
   desde: '',
   hasta: '',
 }
