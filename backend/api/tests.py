@@ -402,6 +402,33 @@ class ApiEndpointsTests(APITestCase):
         reabierta = self.client.get(f"/api/ventas/{created.data['id']}/")
         self.assertEqual(reabierta.data["estado"], "EN_PROCESO")
 
+    def test_reporte_ventas_instalaciones_por_instalado_en(self):
+        from django.utils import timezone
+
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        producto = Producto.objects.create(nombre="Fibra 50", velocidad=50, precio=40)
+        flujo = Flujo.objects.create(nombre="Flujo", tipo_cliente=TipoCliente.PERSONA)
+        paso = Paso.objects.create(nombre="Uno", descripcion="Uno")
+        FlujoPaso.objects.create(flujo=flujo, paso=paso, orden=1)
+
+        created = self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+        venta_id = created.data["id"]
+        pasos = created.data["pasos"]
+        self.client.patch(f"/api/venta-pasos/{pasos[0]['id']}/", {"estado": "APROBADO"}, format="json")
+
+        venta = Venta.objects.get(pk=venta_id)
+        self.assertIsNotNone(venta.instalado_en)
+
+        mes = timezone.now().strftime("%Y-%m")
+        reporte = self.client.get(f"/api/reportes/ventas/?mes={mes}")
+        self.assertEqual(reporte.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(reporte.data["kpis"]["instaladas"]["valor"], 1)
+        self.assertIn("serie_instalaciones", reporte.data)
+
     def test_delete_flujo_paso_used_by_venta(self):
         cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
         producto = Producto.objects.create(nombre="Fibra 50", velocidad=50, precio=40)

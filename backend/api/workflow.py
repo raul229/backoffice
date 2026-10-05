@@ -3,6 +3,7 @@ from django.db.models import F
 from rest_framework.exceptions import ValidationError
 
 from .models import EstadoPaso, EstadoVenta, FlujoPaso, Venta, VentaPaso
+from .venta_estado import persistir_cambio_estado
 
 
 def sync_estado_venta_con_pasos(venta):
@@ -16,8 +17,9 @@ def sync_estado_venta_con_pasos(venta):
     else:
         siguiente = EstadoVenta.EN_PROCESO
     if venta.estado != siguiente:
+        anterior = venta.estado
         venta.estado = siguiente
-        venta.save(update_fields=["estado"])
+        persistir_cambio_estado(venta, anterior)
     return venta
 
 

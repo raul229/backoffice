@@ -9,6 +9,7 @@ from .plantillas_views import (
     plantillas_contrato,
     subir_plantilla_contrato,
 )
+from .reportes_views import reporte_ventas
 from .views import (
     ClienteViewSet,
     DireccionViewSet,
@@ -45,6 +46,7 @@ router.register("venta-comentarios", VentaComentarioViewSet)
 urlpatterns = [
     path("", include(router.urls)),
     path("choices/", choices, name="api-choices"),
+    path("reportes/ventas/", reporte_ventas, name="api-reporte-ventas"),
     path("asesores/", asesores, name="api-asesores"),
     path("plantillas-contrato/", plantillas_contrato, name="api-plantillas-contrato"),
     path(

@@ -210,6 +210,29 @@ export function getFlujos() {
   return request("/flujos/");
 }
 
+export function getFlujoPasos() {
+  return request("/flujo-pasos/");
+}
+
+export function getReporteVentas(params = {}) {
+  const qs = new URLSearchParams();
+  if (params.mes) qs.set("mes", params.mes);
+  if (params.desde) qs.set("desde", params.desde);
+  if (params.hasta) qs.set("hasta", params.hasta);
+  if (params.creado_por) qs.set("creado_por", String(params.creado_por));
+  for (const estado of params.estado ?? []) {
+    qs.append("estado", estado);
+  }
+  for (const id of params.flujo_paso ?? []) {
+    qs.append("flujo_paso", id);
+  }
+  for (const pe of params.paso_estado ?? []) {
+    qs.append("paso_estado", pe);
+  }
+  const query = qs.toString();
+  return request(`/reportes/ventas/${query ? `?${query}` : ""}`);
+}
+
 export function getPasos() {
   return request("/pasos/");
 }

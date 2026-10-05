@@ -183,6 +183,8 @@ class Venta(models.Model):
     )
     fecha = models.DateTimeField(auto_now_add=True)
     actualizado = models.DateTimeField(default=timezone.now)
+    instalado_en = models.DateTimeField(null=True, blank=True)
+    anulado_en = models.DateTimeField(null=True, blank=True)
     producto = models.ForeignKey(Producto, on_delete=models.PROTECT)
     flujo=models.ForeignKey(Flujo, on_delete=models.PROTECT)
     promociones = models.ManyToManyField(Promocion, through=PromocionVenta)

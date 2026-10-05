@@ -7,7 +7,7 @@ import ClientesPage from './pages/ClientesPage.jsx'
 import VentaDetailPage from './pages/VentaDetailPage.jsx'
 import NuevaVentaPage from './pages/NuevaVentaPage.jsx'
 import ConfiguracionPage from './pages/ConfiguracionPage.jsx'
-import PlaceholderPage from './pages/PlaceholderPage.jsx'
+import ReportesPage from './pages/ReportesPage.jsx'
 import RolesPage from './pages/RolesPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import ConfirmModal from './components/ConfirmModal.jsx'
@@ -87,13 +87,8 @@ function App() {
     if (page === 'clientes' && can('api.view_cliente')) {
       return <ClientesPage search={filters.search} />
     }
-    if (page === 'reportes') {
-      return (
-        <PlaceholderPage
-          detail="Esta vista se conectará a reportes agregados cuando existan en el backend."
-          title="Reportes"
-        />
-      )
+    if (page === 'reportes' && can('api.view_venta')) {
+      return <ReportesPage />
     }
     if (page === 'configuracion' && can('api.change_flujo')) {
       return <ConfiguracionPage />

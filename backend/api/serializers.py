@@ -381,6 +381,8 @@ class VentaSerializer(serializers.ModelSerializer):
             "direccion_detalle",
             "fecha",
             "actualizado",
+            "instalado_en",
+            "anulado_en",
             "producto",
             "producto_detalle",
             "flujo",
@@ -402,7 +404,7 @@ class VentaSerializer(serializers.ModelSerializer):
             "creado_por",
             "creado_por_detalle",
         ]
-        read_only_fields = ["fecha", "actualizado"]
+        read_only_fields = ["fecha", "actualizado", "instalado_en", "anulado_en"]
 
     def validate(self, attrs):
         uppercase_fields(attrs, list(VENTA_CODIGO_FIELDS))
@@ -478,10 +480,15 @@ class VentaSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def update(self, instance, validated_data):
+        from .venta_estado import persistir_cambio_estado
+
         promociones = validated_data.pop("promociones", None)
         flujo_nuevo = validated_data.get("flujo")
         flujo_cambio = flujo_nuevo is not None and flujo_nuevo != instance.flujo
+        estado_anterior = instance.estado
         venta = super().update(instance, validated_data)
+        if venta.estado != estado_anterior:
+            persistir_cambio_estado(venta, estado_anterior)
         if promociones is not None:
             venta.promociones.set(promociones)
         if flujo_cambio:
