@@ -5,7 +5,7 @@ import Modal from '../components/Modal.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 import FirmasContratoScan from '../components/FirmasContratoScan.jsx'
 import StatusBadge, { PasoEstadoBadge } from '../components/StatusBadge.jsx'
-import { getVenta, getFlujos, getAsesores, updateVenta, updateVentaPaso, deleteVenta, createVentaComentario, generarContrato, generarCorreoCuentaPlanner } from '../service/api.js'
+import { getVenta, getFlujos, getProductos, getAsesores, updateVenta, updateVentaPaso, deleteVenta, createVentaComentario, generarContrato, generarCorreoCuentaPlanner } from '../service/api.js'
 import { displayName } from '../lib/auth.js'
 import {
   celularCliente,
@@ -20,6 +20,7 @@ import {
   nombrePaso,
   numeroVenta,
   pasoActual,
+  productosPorTipo,
   tipoClienteLabel,
   VENTA_CODIGOS,
 } from '../lib/venta.js'
@@ -145,6 +146,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
     list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' })
   }, [comentarios.length, ultimoComentarioId])
   const flujosQuery = useQuery({ queryKey: ['flujos'], queryFn: getFlujos })
+  const productosQuery = useQuery({ queryKey: ['productos'], queryFn: getProductos })
   const canReasignar = can('api.reasignar_venta')
   const asesoresQuery = useQuery({
     queryKey: ['asesores'],
@@ -236,11 +238,17 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   )
   const paso = pasoActual(venta)
   const flujos = flujosPorTipo(flujosQuery.data, cliente?.tipo)
+  const productos = productosPorTipo(productosQuery.data, cliente?.tipo)
+  const productosOpciones =
+    venta.producto_detalle && !productos.some((item) => item.id === venta.producto)
+      ? [venta.producto_detalle, ...productos]
+      : productos
   const canChangeVenta = can('api.change_venta')
   const canChangePaso = can('api.change_ventapaso')
   const canDeleteVenta = can('api.delete_venta')
   const canEditCodigos = can('api.change_venta_codigos')
   const canEditFechas = can('api.change_venta_fechas')
+  const canEditProducto = can('api.change_venta_producto')
   const canAddComentario = can('api.add_ventacomentario')
   const canGenerarContrato = can('api.generar_contrato')
   const esEmpresa = cliente?.tipo === 'EMPRESA'
@@ -252,8 +260,19 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
     comentarioMutation.isPending ||
     contratoMutation.isPending ||
     cuentaPlannerMutation.isPending
+  const canStartEditing =
+    canChangeVenta ||
+    canChangePaso ||
+    canEditFechas ||
+    canEditProducto ||
+    canEditCodigos ||
+    canReasignar
   const showVentaSelects = editing && canChangeVenta
   const showPasoSelects = editing && canChangePaso
+  const showFechas = editing && canEditFechas
+  const showProducto = editing && canEditProducto
+  const showCodigos = editing && canEditCodigos
+  const showReasignar = editing && canReasignar
 
   return (
     <>
@@ -311,7 +330,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
               Eliminar
             </button>
           ) : null}
-          {canChangeVenta || canChangePaso ? (
+          {canStartEditing ? (
             editing ? (
               <button type="button" className="btn border-none bg-blue-600 text-white" onClick={() => setEditing(false)}>
                 Listo
@@ -378,7 +397,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
             <div>
               <dt className="mb-1 text-slate-400">Asesor</dt>
               <dd>
-                {canReasignar ? (
+                {showReasignar ? (
                   <select
                     className="select select-bordered w-full"
                     disabled={saving || asesoresQuery.isPending}
@@ -433,7 +452,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
               />
             ) : null}
             <InfoItem className="col-span-2" label="Dirección" value={direccion ? formatDireccion(direccion) : ''} />
-            {canEditFechas ? (
+            {showFechas ? (
               <>
                 <FechaField
                   disabled={saving}
@@ -483,8 +502,29 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
               </dd>
             </div>
             <div>
-              <dt className="text-slate-400">Plan</dt>
-              <dd className="font-medium">{venta.producto_detalle?.nombre ?? '—'}</dd>
+              <dt className="mb-1 text-slate-400">Plan</dt>
+              <dd>
+                {showProducto ? (
+                  <select
+                    className="select select-bordered w-full"
+                    disabled={saving || productosQuery.isPending}
+                    onChange={(event) => {
+                      const next = Number(event.target.value)
+                      if (!next || next === venta.producto) return
+                      ventaMutation.mutate({ producto: next })
+                    }}
+                    value={venta.producto ?? ''}
+                  >
+                    {productosOpciones.map((producto) => (
+                      <option key={producto.id} value={producto.id}>
+                        {producto.nombre} · {producto.velocidad} Mbps · S/ {producto.precio}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="font-medium">{venta.producto_detalle?.nombre ?? '—'}</span>
+                )}
+              </dd>
             </div>
             <div>
               <dt className="text-slate-400">Velocidad</dt>
@@ -531,7 +571,6 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
         </section>
       </div>
 
-      {canEditCodigos ? (
       <section className="bo-card p-4 sm:p-5">
         <h2 className="mb-1 font-semibold">Códigos de seguimiento</h2>
         <p className="mb-4 text-sm text-slate-500">
@@ -539,19 +578,26 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
           orden sirve para seguir la instalación.
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {VENTA_CODIGOS.map((item) => (
-            <CodigoField
-              key={item.key}
-              disabled={saving}
-              hint={item.hint}
-              label={item.label}
-              onSave={(value) => ventaMutation.mutate({ [item.key]: value })}
-              value={venta[item.key]}
-            />
-          ))}
+          {VENTA_CODIGOS.map((item) =>
+            showCodigos ? (
+              <CodigoField
+                key={item.key}
+                disabled={saving}
+                hint={item.hint}
+                label={item.label}
+                onSave={(value) => ventaMutation.mutate({ [item.key]: value })}
+                value={venta[item.key]}
+              />
+            ) : (
+              <div key={item.key} className="text-sm">
+                <dt className="mb-1 text-slate-400">{item.label}</dt>
+                <dd className="font-medium uppercase">{venta[item.key] || '—'}</dd>
+                {item.hint ? <p className="mt-1 text-xs text-slate-400">{item.hint}</p> : null}
+              </div>
+            ),
+          )}
         </div>
       </section>
-      ) : null}
 
       <div className="grid items-start gap-4 lg:grid-cols-2">
       <section className="bo-card p-4 sm:p-5">

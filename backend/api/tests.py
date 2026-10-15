@@ -1289,6 +1289,63 @@ class AuthAndPermissionsTests(APITestCase):
         venta.refresh_from_db()
         self.assertIsNone(venta.instalado_en)
 
+    def test_solo_quien_tiene_permiso_puede_cambiar_producto(self):
+        admin = User.objects.create_superuser("admin_producto", "admin_producto@test.com", "pass")
+        marta = User.objects.create_user("marta_producto", password="secret")
+        marta.groups.add(Group.objects.get(name="Operaciones"))
+        supervisor = User.objects.create_user("super_producto", password="secret")
+        supervisor.groups.add(Group.objects.get(name="Supervisor"))
+
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        producto = Producto.objects.create(
+            nombre="Fibra 50", velocidad=50, precio=40, tipo_cliente=TipoCliente.PERSONA
+        )
+        otro = Producto.objects.create(
+            nombre="Fibra 100", velocidad=100, precio=70, tipo_cliente=TipoCliente.PERSONA
+        )
+        empresa = Producto.objects.create(
+            nombre="INT EMPRESA", velocidad=200, precio=90, tipo_cliente=TipoCliente.EMPRESA
+        )
+        flujo = Flujo.objects.create(nombre="Flujo producto", tipo_cliente=TipoCliente.PERSONA)
+        paso = Paso.objects.create(nombre="Uno", descripcion="Uno")
+        FlujoPaso.objects.create(flujo=flujo, paso=paso, orden=1)
+
+        self.client.force_authenticate(admin)
+        created = self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        venta_id = created.data["id"]
+        Venta.objects.filter(id=venta_id).update(creado_por=marta)
+
+        self.client.force_authenticate(marta)
+        forbidden = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"producto": otro.id},
+            format="json",
+        )
+        self.assertEqual(forbidden.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.force_authenticate(supervisor)
+        patched = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"producto": otro.id},
+            format="json",
+        )
+        self.assertEqual(patched.status_code, status.HTTP_200_OK)
+        self.assertEqual(patched.data["producto"], otro.id)
+        self.assertEqual(patched.data["producto_detalle"]["nombre"], "Fibra 100")
+
+        rejected = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"producto": empresa.id},
+            format="json",
+        )
+        self.assertEqual(rejected.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("producto", rejected.data)
+
     def test_supervisor_sees_owner_and_can_reassign_venta(self):
         ana = User.objects.create_user("ana_reasignar", password="secret", first_name="Ana")
         ana.groups.add(Group.objects.get(name="Asesor"))

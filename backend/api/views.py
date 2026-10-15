@@ -80,6 +80,10 @@ class VentaModelPermissions(DjangoModelPermissions):
                 )
             ):
                 return True
+            if keys == {"producto"} and (
+                request.user.is_superuser or request.user.has_perm("api.change_venta_producto")
+            ):
+                return True
         return super().has_permission(request, view)
 
 

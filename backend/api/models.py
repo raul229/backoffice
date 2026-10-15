@@ -230,6 +230,7 @@ class Venta(models.Model):
             ("view_all_ventas", "Puede ver todas las ventas"),
             ("change_venta_codigos", "Puede editar códigos de seguimiento de una venta"),
             ("change_venta_fechas", "Puede editar fecha de ingreso e instalación de una venta"),
+            ("change_venta_producto", "Puede cambiar el producto de una venta"),
             ("reasignar_venta", "Puede reasignar ventas a otro asesor"),
             ("generar_contrato", "Puede generar contratos de una venta"),
         ]

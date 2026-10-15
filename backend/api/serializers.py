@@ -525,6 +525,15 @@ class VentaSerializer(serializers.ModelSerializer):
         incoming = set()
         if self.initial_data is not None and hasattr(self.initial_data, "keys"):
             incoming = {str(key) for key in self.initial_data.keys()}
+        if self.instance is not None and "producto" in incoming:
+            if user is None or not (
+                user.is_superuser or user.has_perm("api.change_venta_producto")
+            ):
+                raise serializers.ValidationError(
+                    {"producto": "No tienes permiso para cambiar el producto de la venta."}
+                )
+            if not attrs.get("producto"):
+                raise serializers.ValidationError({"producto": "Selecciona un producto."})
         if self.instance is not None and incoming & set(VENTA_FECHA_FIELDS):
             if user is None or not (
                 user.is_superuser or user.has_perm("api.change_venta_fechas")
