@@ -87,6 +87,24 @@ export function formatFecha(value) {
   })
 }
 
+export function formatFechaCorta(value) {
+  if (!value) return '—'
+  return new Date(value).toLocaleDateString('es-PE', {
+    timeZone: 'America/Lima',
+    dateStyle: 'short',
+  })
+}
+
+export function fechaInputValue(value) {
+  if (!value) return ''
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Lima',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(value))
+}
+
 export function pasosOrdenados(venta) {
   return [...(venta?.pasos ?? [])].sort(
     (a, b) => (a.flujo_paso_detalle?.orden ?? 0) - (b.flujo_paso_detalle?.orden ?? 0),

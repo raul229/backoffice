@@ -12,8 +12,10 @@ import {
   correoCliente,
   documentoCliente,
   flujosPorTipo,
+  fechaInputValue,
   formatDireccion,
   formatFecha,
+  formatFechaCorta,
   nombreCliente,
   nombrePaso,
   numeroVenta,
@@ -53,6 +55,37 @@ function InfoItem({ label, value, className = '' }) {
       <dt className="text-slate-400">{label}</dt>
       <dd className="[overflow-wrap:anywhere] font-medium">{value}</dd>
     </div>
+  )
+}
+
+function FechaField({ label, value, disabled, allowEmpty = false, onSave }) {
+  const [draft, setDraft] = useState(fechaInputValue(value))
+  useEffect(() => {
+    setDraft(fechaInputValue(value))
+  }, [value])
+
+  return (
+    <label className="text-sm">
+      <span className="mb-1 block text-slate-400">{label}</span>
+      <input
+        className="input input-bordered input-sm w-full"
+        disabled={disabled}
+        onBlur={() => {
+          if (!draft) {
+            if (!allowEmpty) {
+              setDraft(fechaInputValue(value))
+              return
+            }
+            if (value) onSave(null)
+            return
+          }
+          if (draft !== fechaInputValue(value)) onSave(draft)
+        }}
+        onChange={(event) => setDraft(event.target.value)}
+        type="date"
+        value={draft}
+      />
+    </label>
   )
 }
 
@@ -207,6 +240,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   const canChangePaso = can('api.change_ventapaso')
   const canDeleteVenta = can('api.delete_venta')
   const canEditCodigos = can('api.change_venta_codigos')
+  const canEditFechas = can('api.change_venta_fechas')
   const canAddComentario = can('api.add_ventacomentario')
   const canGenerarContrato = can('api.generar_contrato')
   const esEmpresa = cliente?.tipo === 'EMPRESA'
@@ -299,7 +333,10 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
           <span className="text-sm font-medium text-slate-700">{nombrePaso(paso)}</span>
         ) : null}
         <PasoEstadoBadge estado={paso?.estado} venta={venta} />
-        <p className="text-sm text-slate-500">Registrada {formatFecha(venta.fecha)}</p>
+        <p className="text-sm text-slate-500">
+          Ingreso {formatFechaCorta(venta.fecha)}
+          {venta.instalado_en ? ` · Instalación ${formatFechaCorta(venta.instalado_en)}` : ''}
+        </p>
         {VENTA_CODIGOS.filter((item) => item.primary && venta[item.key]).map((item) => (
           <span key={item.key} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
             {item.label} {venta[item.key]}
@@ -396,6 +433,28 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
               />
             ) : null}
             <InfoItem className="col-span-2" label="Dirección" value={direccion ? formatDireccion(direccion) : ''} />
+            {canEditFechas ? (
+              <>
+                <FechaField
+                  disabled={saving}
+                  label="Fecha de ingreso"
+                  onSave={(next) => ventaMutation.mutate({ fecha: next })}
+                  value={venta.fecha}
+                />
+                <FechaField
+                  allowEmpty
+                  disabled={saving}
+                  label="Fecha de instalación"
+                  onSave={(next) => ventaMutation.mutate({ instalado_en: next })}
+                  value={venta.instalado_en}
+                />
+              </>
+            ) : (
+              <>
+                <InfoItem label="Fecha de ingreso" value={formatFechaCorta(venta.fecha)} />
+                <InfoItem label="Fecha de instalación" value={venta.instalado_en ? formatFechaCorta(venta.instalado_en) : ''} />
+              </>
+            )}
           </dl>
         </section>
 

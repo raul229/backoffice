@@ -45,6 +45,7 @@ from .serializers import (
     PromocionVentaSerializer,
     TipoGaleriaSerializer,
     VENTA_CODIGO_FIELDS,
+    VENTA_FECHA_FIELDS,
     VentaComentarioSerializer,
     VentaPasoSerializer,
     VentaSerializer,
@@ -68,6 +69,15 @@ class VentaModelPermissions(DjangoModelPermissions):
                 return True
             if keys == {"creado_por"} and (
                 request.user.is_superuser or request.user.has_perm("api.reasignar_venta")
+            ):
+                return True
+            if (
+                keys
+                and keys <= set(VENTA_FECHA_FIELDS)
+                and (
+                    request.user.is_superuser
+                    or request.user.has_perm("api.change_venta_fechas")
+                )
             ):
                 return True
         return super().has_permission(request, view)

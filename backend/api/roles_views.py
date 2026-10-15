@@ -17,6 +17,7 @@ PERMISSION_CATALOG = [
             ("api.add_venta", "Registrar ventas"),
             ("api.change_venta", "Editar estado y flujo de una venta"),
             ("api.change_venta_codigos", "Editar códigos de seguimiento (PSI, SIRO, orden…)"),
+            ("api.change_venta_fechas", "Editar fecha de ingreso e instalación"),
             ("api.reasignar_venta", "Reasignar ventas a otro asesor"),
             ("api.generar_contrato", "Generar contratos de una venta"),
             ("api.delete_venta", "Eliminar ventas"),

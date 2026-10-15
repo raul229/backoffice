@@ -1,5 +1,9 @@
+from datetime import date, datetime, time
+from zoneinfo import ZoneInfo
+
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 from rest_framework import serializers
 
 from .normalize import uppercase_fields
@@ -37,6 +41,49 @@ VENTA_CODIGO_FIELDS = (
     "saf",
     "numero_orden",
 )
+
+VENTA_FECHA_FIELDS = ("fecha", "instalado_en")
+LIMA = ZoneInfo("America/Lima")
+
+
+def parse_datetime_lima(value):
+    if value in (None, ""):
+        return None
+    if isinstance(value, datetime):
+        if timezone.is_naive(value):
+            return timezone.make_aware(value, LIMA)
+        return value
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return datetime.combine(value, time.min, tzinfo=LIMA)
+    text = str(value).strip()
+    try:
+        if "T" in text or " " in text:
+            dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            if timezone.is_naive(dt):
+                dt = timezone.make_aware(dt, LIMA)
+            return dt
+        parsed = date.fromisoformat(text[:10])
+    except ValueError as exc:
+        raise serializers.ValidationError("Usa una fecha válida (AAAA-MM-DD).") from exc
+    return datetime.combine(parsed, time.min, tzinfo=LIMA)
+
+
+class LimaDateTimeField(serializers.DateTimeField):
+    def to_internal_value(self, value):
+        if value in (None, ""):
+            if not self.allow_null:
+                self.fail("null")
+            return None
+        try:
+            parsed = parse_datetime_lima(value)
+        except serializers.ValidationError:
+            self.fail("invalid")
+            return None
+        if parsed is None:
+            if not self.allow_null:
+                self.fail("null")
+            return None
+        return parsed
 
 
 def user_brief(user):
@@ -411,6 +458,8 @@ class VentaSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
     creado_por_detalle = serializers.SerializerMethodField()
+    fecha = LimaDateTimeField(required=False)
+    instalado_en = LimaDateTimeField(required=False, allow_null=True)
 
     class Meta:
         model = Venta
@@ -445,7 +494,7 @@ class VentaSerializer(serializers.ModelSerializer):
             "creado_por",
             "creado_por_detalle",
         ]
-        read_only_fields = ["fecha", "actualizado", "instalado_en", "anulado_en"]
+        read_only_fields = ["actualizado", "anulado_en"]
 
     def validate(self, attrs):
         uppercase_fields(attrs, list(VENTA_CODIGO_FIELDS))
@@ -473,6 +522,20 @@ class VentaSerializer(serializers.ModelSerializer):
             )
         request = self.context.get("request")
         user = getattr(request, "user", None)
+        incoming = set()
+        if self.initial_data is not None and hasattr(self.initial_data, "keys"):
+            incoming = {str(key) for key in self.initial_data.keys()}
+        if self.instance is not None and incoming & set(VENTA_FECHA_FIELDS):
+            if user is None or not (
+                user.is_superuser or user.has_perm("api.change_venta_fechas")
+            ):
+                raise serializers.ValidationError(
+                    {"fecha": "No tienes permiso para editar las fechas de la venta."}
+                )
+            if "fecha" in attrs and not attrs.get("fecha"):
+                raise serializers.ValidationError(
+                    {"fecha": "La fecha de ingreso es obligatoria."}
+                )
         if "creado_por" in attrs and self.instance is not None:
             if user is None or not (
                 user.is_superuser or user.has_perm("api.reasignar_venta")

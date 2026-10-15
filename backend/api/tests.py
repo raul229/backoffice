@@ -1235,6 +1235,60 @@ class AuthAndPermissionsTests(APITestCase):
         )
         self.assertEqual(forbidden.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_solo_quien_tiene_permiso_puede_editar_fechas(self):
+        from zoneinfo import ZoneInfo
+
+        lima = ZoneInfo("America/Lima")
+        admin = User.objects.create_superuser("admin_fechas", "admin_fechas@test.com", "pass")
+        marta = User.objects.create_user("marta_fechas", password="secret")
+        marta.groups.add(Group.objects.get(name="Operaciones"))
+        supervisor = User.objects.create_user("super_fechas", password="secret")
+        supervisor.groups.add(Group.objects.get(name="Supervisor"))
+
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        producto = Producto.objects.create(nombre="Fibra 50", velocidad=50, precio=40)
+        flujo = Flujo.objects.create(nombre="Flujo fechas", tipo_cliente=TipoCliente.PERSONA)
+        paso = Paso.objects.create(nombre="Uno", descripcion="Uno")
+        FlujoPaso.objects.create(flujo=flujo, paso=paso, orden=1)
+
+        self.client.force_authenticate(admin)
+        created = self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        venta_id = created.data["id"]
+        Venta.objects.filter(id=venta_id).update(creado_por=marta)
+
+        self.client.force_authenticate(marta)
+        forbidden = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"fecha": "2024-01-15", "instalado_en": "2024-02-01"},
+            format="json",
+        )
+        self.assertEqual(forbidden.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.force_authenticate(supervisor)
+        patched = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"fecha": "2024-01-15", "instalado_en": "2024-02-01"},
+            format="json",
+        )
+        self.assertEqual(patched.status_code, status.HTTP_200_OK)
+        venta = Venta.objects.get(id=venta_id)
+        self.assertEqual(venta.fecha.astimezone(lima).date().isoformat(), "2024-01-15")
+        self.assertEqual(venta.instalado_en.astimezone(lima).date().isoformat(), "2024-02-01")
+
+        cleared = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"instalado_en": None},
+            format="json",
+        )
+        self.assertEqual(cleared.status_code, status.HTTP_200_OK)
+        venta.refresh_from_db()
+        self.assertIsNone(venta.instalado_en)
+
     def test_supervisor_sees_owner_and_can_reassign_venta(self):
         ana = User.objects.create_user("ana_reasignar", password="secret", first_name="Ana")
         ana.groups.add(Group.objects.get(name="Asesor"))
