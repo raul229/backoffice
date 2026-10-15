@@ -16,6 +16,7 @@ from .models import (
     Producto,
     Promocion,
     TipoCliente,
+    TipoGaleria,
     Venta,
 )
 
@@ -1911,14 +1912,66 @@ class LookupRucTests(APITestCase):
         self.assertEqual(first.data["id"], second.data["id"])
         self.assertEqual(Direccion.objects.filter(cliente=cliente).count(), 1)
 
+        galeria = TipoGaleria.objects.get(nombre="GALERIA")
         other = self.client.post(
             "/api/direcciones/",
-            {**payload, "tienda": "A-12", "piso": "2", "galeria": "centro lima", "interior": "2"},
+            {
+                **payload,
+                "tienda": "A-12",
+                "piso": "2",
+                "tipo_galeria": galeria.id,
+                "galeria": "centro lima",
+                "interior": "2",
+            },
             format="json",
         )
         self.assertEqual(other.status_code, status.HTTP_201_CREATED)
         self.assertNotEqual(other.data["id"], first.data["id"])
         self.assertEqual(Direccion.objects.filter(cliente=cliente).count(), 2)
+
+    def test_tipos_galeria_seed_and_direccion_pair(self):
+        tipos = self.client.get("/api/tipos-galeria/")
+        self.assertEqual(tipos.status_code, status.HTTP_200_OK)
+        nombres = {item["nombre"] for item in tipos.data}
+        self.assertIn("GALERIA", nombres)
+        self.assertIn("CENTRO COMERCIAL", nombres)
+
+        created = self.client.post("/api/tipos-galeria/", {"nombre": "mall"}, format="json")
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(created.data["nombre"], "MALL")
+
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        missing_tipo = self.client.post(
+            "/api/direcciones/",
+            {
+                "cliente": cliente.id,
+                "tipo": "CALLE",
+                "direccion": "LAS FLORES",
+                "numero": "123",
+                "distrito": "MIRAFLORES",
+                "galeria": "la reina",
+            },
+            format="json",
+        )
+        self.assertEqual(missing_tipo.status_code, status.HTTP_400_BAD_REQUEST)
+
+        ok = self.client.post(
+            "/api/direcciones/",
+            {
+                "cliente": cliente.id,
+                "tipo": "CALLE",
+                "direccion": "LAS FLORES",
+                "numero": "123",
+                "distrito": "MIRAFLORES",
+                "tipo_galeria": created.data["id"],
+                "galeria": "la reina",
+            },
+            format="json",
+        )
+        self.assertEqual(ok.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(ok.data["galeria"], "LA REINA")
+        self.assertEqual(ok.data["tipo_galeria"], created.data["id"])
+        self.assertEqual(ok.data["tipo_galeria_nombre"], "MALL")
 
     def test_lookup_direccion_returns_saved_and_parsed(self):
         cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)

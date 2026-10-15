@@ -77,19 +77,37 @@ export const promocionFormSchema = z.object({
   descripcion: z.string(),
 })
 
-export const direccionFormSchema = z.object({
-  cliente: requiredText('Selecciona un cliente'),
-  tipo: requiredText(),
-  direccion: requiredText(),
-  numero: requiredText(),
-  distrito: requiredText(),
-  urbanizacion: z.string(),
-  interior: z.string(),
-  tienda: z.string(),
-  piso: z.string(),
-  galeria: z.string(),
-  referencia: z.string(),
+export const tipoGaleriaFormSchema = z.object({
+  nombre: requiredText(),
 })
+
+export function requireGaleriaPair(value, ctx) {
+  const tipo = String(value.tipo_galeria ?? '').trim()
+  const nombre = String(value.galeria ?? '').trim()
+  if (nombre && !tipo) {
+    ctx.addIssue({ code: 'custom', path: ['tipo_galeria'], message: 'Selecciona el tipo' })
+  }
+  if (tipo && !nombre) {
+    ctx.addIssue({ code: 'custom', path: ['galeria'], message: 'Indica el nombre' })
+  }
+}
+
+export const direccionFormSchema = z
+  .object({
+    cliente: requiredText('Selecciona un cliente'),
+    tipo: requiredText(),
+    direccion: requiredText(),
+    numero: requiredText(),
+    distrito: requiredText(),
+    urbanizacion: z.string(),
+    interior: z.string(),
+    tienda: z.string(),
+    piso: z.string(),
+    tipo_galeria: z.string(),
+    galeria: z.string(),
+    referencia: z.string(),
+  })
+  .superRefine(requireGaleriaPair)
 
 export const DOCUMENT_LENGTH = { DNI: 8, CE: 9 }
 
@@ -170,6 +188,7 @@ const nuevaVentaDireccionBase = {
   interior: z.string(),
   tienda: z.string(),
   piso: z.string(),
+  tipo_galeria: z.string(),
   galeria: z.string(),
   referencia: z.string(),
 }
@@ -187,12 +206,13 @@ export const nuevaVentaSchema = z
     promociones: z.array(z.string()),
   })
   .superRefine(requireNuevaVentaCliente)
+  .superRefine(requireGaleriaPair)
 
 export const nuevaVentaClienteSchema = z
   .object(nuevaVentaClienteBase)
   .superRefine(requireNuevaVentaCliente)
 
-export const nuevaVentaDireccionSchema = z.object(nuevaVentaDireccionBase)
+export const nuevaVentaDireccionSchema = z.object(nuevaVentaDireccionBase).superRefine(requireGaleriaPair)
 
 export const personaEditSchema = z
   .object({

@@ -8,6 +8,13 @@ from .utils import completar_fechas
 from ..models import TipoCliente
 
 
+def texto_galeria(direccion) -> str:
+    if not direccion or not direccion.galeria:
+        return ""
+    tipo = direccion.tipo_galeria.nombre if getattr(direccion, "tipo_galeria_id", None) else ""
+    return f"{tipo} {direccion.galeria}".strip() if tipo else direccion.galeria
+
+
 def format_direccion(direccion) -> str:
     if not direccion:
         return ""
@@ -15,7 +22,7 @@ def format_direccion(direccion) -> str:
         f"PISO {direccion.piso}" if direccion.piso else "",
         f"INT. {direccion.interior}" if direccion.interior else "",
         f"TIENDA {direccion.tienda}" if direccion.tienda else "",
-        f"GAL. {direccion.galeria}" if direccion.galeria else "",
+        texto_galeria(direccion),
         f"URB. {direccion.urbanizacion}" if direccion.urbanizacion else "",
         direccion.referencia or "",
     ]

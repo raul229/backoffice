@@ -56,8 +56,20 @@ class TipoDireccion(models.TextChoices):
     AVENIDA = "AVENIDA", "Avenida"
     CALLE = "CALLE", "Calle"
     PASAJE = "PASAJE", "Pasaje"
-    
-    
+
+
+class TipoGaleria(models.Model):
+    nombre = models.CharField(max_length=80, unique=True)
+
+    class Meta:
+        ordering = ["nombre"]
+        verbose_name = "tipo de galería"
+        verbose_name_plural = "tipos de galería"
+
+    def __str__(self):
+        return self.nombre
+
+
 class Direccion(models.Model):
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
     tipo = models.CharField(max_length=20, choices=TipoDireccion.choices)
@@ -68,6 +80,13 @@ class Direccion(models.Model):
     interior = models.CharField(max_length=20, blank=True)
     tienda = models.CharField(max_length=30, blank=True)
     piso = models.CharField(max_length=20, blank=True)
+    tipo_galeria = models.ForeignKey(
+        TipoGaleria,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="direcciones",
+    )
     galeria = models.CharField(max_length=100, blank=True)
     referencia = models.CharField(max_length=200, blank=True)
 

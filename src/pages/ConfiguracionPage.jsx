@@ -3,27 +3,31 @@ import { useForm } from '@tanstack/react-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Field from '../components/Field.jsx'
 import { SelectField, TextAreaField, TextField } from '../components/FormFields.jsx'
-import { createFlujoSchema, flujoNombreSchema, pasoFormSchema, productoFormSchema, promocionFormSchema, withSchema } from '../lib/schemas.js'
+import { createFlujoSchema, flujoNombreSchema, pasoFormSchema, productoFormSchema, promocionFormSchema, tipoGaleriaFormSchema, withSchema } from '../lib/schemas.js'
 import {
   createFlujo,
   createFlujoPaso,
   createPaso,
   createProducto,
   createPromocion,
+  createTipoGaleria,
   deleteFlujo,
   deleteFlujoPaso,
   deletePaso,
   deleteProducto,
   deletePromocion,
+  deleteTipoGaleria,
   getFlujos,
   getPasos,
   getProductos,
   getPromociones,
+  getTiposGaleria,
   reorderFlujoPasos,
   updateFlujo,
   updatePaso,
   updateProducto,
   updatePromocion,
+  updateTipoGaleria,
 } from '../service/api.js'
 import { IconGrip } from '../lib/icons.jsx'
 import { tipoClienteLabel } from '../lib/venta.js'
@@ -46,23 +50,28 @@ export default function ConfiguracionPage() {
   const pasosQuery = useQuery({ queryKey: ['pasos'], queryFn: getPasos })
   const productosQuery = useQuery({ queryKey: ['productos'], queryFn: getProductos })
   const promocionesQuery = useQuery({ queryKey: ['promociones'], queryFn: getPromociones })
+  const tiposGaleriaQuery = useQuery({ queryKey: ['tipos-galeria'], queryFn: getTiposGaleria })
   const flujos = flujosQuery.data ?? []
   const pasos = pasosQuery.data ?? []
   const productos = productosQuery.data ?? []
   const promociones = promocionesQuery.data ?? []
+  const tiposGaleria = tiposGaleriaQuery.data ?? []
   const canChange = can('api.change_flujo') || can('api.change_paso')
   const canChangeProducto = can('api.change_producto')
   const canChangePromocion = can('api.change_promocion')
+  const canChangeTipoGaleria = can('api.change_tipogaleria')
   const canDeleteFlujo = can('api.delete_flujo')
   const canDeletePaso = can('api.delete_paso')
   const canDeleteProducto = can('api.delete_producto')
   const canDeletePromocion = can('api.delete_promocion')
+  const canDeleteTipoGaleria = can('api.delete_tipogaleria')
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['flujos'] })
     queryClient.invalidateQueries({ queryKey: ['pasos'] })
     queryClient.invalidateQueries({ queryKey: ['productos'] })
     queryClient.invalidateQueries({ queryKey: ['promociones'] })
+    queryClient.invalidateQueries({ queryKey: ['tipos-galeria'] })
     queryClient.invalidateQueries({ queryKey: ['tabla-ventas'] })
   }
 
@@ -215,10 +224,39 @@ export default function ConfiguracionPage() {
     onError: (err) => setError(err.message),
   })
 
+  const createTipoGaleriaMutation = useMutation({
+    mutationFn: createTipoGaleria,
+    onSuccess: () => {
+      notify('Tipo de galería creado.')
+      close()
+    },
+    onError: (err) => setError(err.message),
+  })
+
+  const updateTipoGaleriaMutation = useMutation({
+    mutationFn: ({ id, payload }) => updateTipoGaleria(id, payload),
+    onSuccess: () => {
+      notify('Tipo de galería actualizado.')
+      close()
+    },
+    onError: (err) => setError(err.message),
+  })
+
+  const deleteTipoGaleriaMutation = useMutation({
+    mutationFn: deleteTipoGaleria,
+    onSuccess: () => {
+      notify('Tipo de galería eliminado.')
+      close()
+      setConfirm(null)
+    },
+    onError: (err) => setError(err.message),
+  })
+
   const selectedPaso = pasos.find((paso) => paso.id === modal?.id)
   const selectedFlujo = flujos.find((flujo) => flujo.id === modal?.id)
   const selectedProducto = productos.find((producto) => producto.id === modal?.id)
   const selectedPromocion = promociones.find((promo) => promo.id === modal?.id)
+  const selectedTipoGaleria = tiposGaleria.find((tipo) => tipo.id === modal?.id)
 
   const productoColumns = useMemo(
     () => [
@@ -349,6 +387,60 @@ export default function ConfiguracionPage() {
       },
     ],
     [canChangePromocion, canDeletePromocion, deletePromocionMutation],
+  )
+
+  const tipoGaleriaColumns = useMemo(
+    () => [
+      {
+        id: 'nombre',
+        accessorKey: 'nombre',
+        header: 'Tipo',
+        cell: (info) => <span className="font-medium">{info.getValue()}</span>,
+      },
+      {
+        id: 'acciones',
+        header: '',
+        cell: (info) => {
+          const tipo = info.row.original
+          return (
+            <ActionsCell>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={() => setModal({ type: 'tipo-galeria', id: tipo.id, editing: false })}
+              >
+                Ver
+              </button>
+              {canChangeTipoGaleria ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  onClick={() => setModal({ type: 'tipo-galeria', id: tipo.id, editing: true })}
+                >
+                  Editar
+                </button>
+              ) : null}
+              {canDeleteTipoGaleria ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs text-rose-600"
+                  onClick={() =>
+                    setConfirm({
+                      title: 'Eliminar tipo',
+                      message: `¿Eliminar el tipo “${tipo.nombre}”? Si una dirección lo usa, no se podrá borrar.`,
+                      run: () => deleteTipoGaleriaMutation.mutate(tipo.id),
+                    })
+                  }
+                >
+                  Eliminar
+                </button>
+              ) : null}
+            </ActionsCell>
+          )
+        },
+      },
+    ],
+    [canChangeTipoGaleria, canDeleteTipoGaleria, deleteTipoGaleriaMutation],
   )
 
   const pasoColumns = useMemo(
@@ -489,8 +581,8 @@ export default function ConfiguracionPage() {
         <div>
           <h1 className="text-xl font-bold sm:text-2xl">Configuración</h1>
           <p className="text-sm text-slate-500">
-            Productos, promociones, flujos, pasos y plantillas de contrato se editan aquí para evitar
-            cambios accidentales.
+            Productos, promociones, tipos de galería, flujos, pasos y plantillas de contrato se editan
+            aquí para evitar cambios accidentales.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -510,6 +602,15 @@ export default function ConfiguracionPage() {
               onClick={() => setModal({ type: 'create-promocion' })}
             >
               Nueva promoción
+            </button>
+          ) : null}
+          {tab === 'tipos-galeria' && can('api.add_tipogaleria') ? (
+            <button
+              type="button"
+              className="btn btn-sm rounded-full border-none bg-blue-600 text-white"
+              onClick={() => setModal({ type: 'create-tipo-galeria' })}
+            >
+              Nuevo tipo
             </button>
           ) : null}
           {tab === 'pasos' ? (
@@ -537,6 +638,7 @@ export default function ConfiguracionPage() {
         {[
           ['productos', 'Productos'],
           ['promociones', 'Promociones'],
+          ['tipos-galeria', 'Tipos de galería'],
           ['pasos', 'Pasos'],
           ['flujos', 'Flujos'],
           ...(can('api.view_plantillacontrato') || can('api.change_plantillacontrato')
@@ -591,6 +693,19 @@ export default function ConfiguracionPage() {
       </section>
       ) : null}
 
+      {tab === 'tipos-galeria' ? (
+      <section className="bo-card p-4 sm:p-5">
+        <DataTable
+          tableKey="tipos-galeria-table"
+          columns={tipoGaleriaColumns}
+          data={tiposGaleria}
+          emptyLabel="Aún no hay tipos. Agrega Galería, Centro comercial u otros."
+          getRowId={(row) => String(row.id)}
+          isPending={tiposGaleriaQuery.isPending}
+        />
+      </section>
+      ) : null}
+
       {tab === 'pasos' ? (
       <section className="bo-card p-4 sm:p-5">
         <DataTable
@@ -636,7 +751,8 @@ export default function ConfiguracionPage() {
             deletePasoMutation.isPending ||
             deleteFlujoMutation.isPending ||
             deleteProductoMutation.isPending ||
-            deletePromocionMutation.isPending
+            deletePromocionMutation.isPending ||
+            deleteTipoGaleriaMutation.isPending
           }
           onCancel={() => setConfirm(null)}
           onConfirm={() => confirm.run()}
@@ -690,6 +806,33 @@ export default function ConfiguracionPage() {
           onSave={(form) => updatePromocionMutation.mutate({ id: selectedPromocion.id, payload: form })}
           pending={updatePromocionMutation.isPending}
           promocion={selectedPromocion}
+        />
+      ) : null}
+
+      {modal?.type === 'create-tipo-galeria' ? (
+        <TipoGaleriaFormModal
+          onClose={close}
+          onSave={(form) => createTipoGaleriaMutation.mutate(form)}
+          pending={createTipoGaleriaMutation.isPending}
+        />
+      ) : null}
+
+      {modal?.type === 'tipo-galeria' && selectedTipoGaleria ? (
+        <TipoGaleriaFormModal
+          editing={modal.editing}
+          onClose={close}
+          onDelete={() =>
+            setConfirm({
+              title: 'Eliminar tipo',
+              message: `¿Eliminar el tipo “${selectedTipoGaleria.nombre}”? Si una dirección lo usa, no se podrá borrar.`,
+              run: () => deleteTipoGaleriaMutation.mutate(selectedTipoGaleria.id),
+            })
+          }
+          onSave={(form) =>
+            updateTipoGaleriaMutation.mutate({ id: selectedTipoGaleria.id, payload: form })
+          }
+          pending={updateTipoGaleriaMutation.isPending}
+          tipo={selectedTipoGaleria}
         />
       ) : null}
 
@@ -958,6 +1101,64 @@ function PromocionFormModal({ promocion, editing = true, onClose, onSave, onDele
           </label>
         )}
       </div>
+    </Modal>
+  )
+}
+
+function TipoGaleriaFormModal({ tipo, editing = true, onClose, onSave, onDelete, pending }) {
+  const isCreate = !tipo
+  const form = useForm({
+    defaultValues: { nombre: tipo?.nombre ?? '' },
+    validators: withSchema(tipoGaleriaFormSchema),
+    onSubmit: ({ value }) => onSave({ nombre: value.nombre.trim() }),
+  })
+
+  useEffect(() => {
+    form.reset({ nombre: tipo?.nombre ?? '' })
+  }, [form, tipo])
+
+  return (
+    <Modal
+      open
+      title={isCreate ? 'Nuevo tipo' : editing ? 'Editar tipo' : `Tipo: ${tipo.nombre}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Cerrar
+          </button>
+          {editing && onDelete ? (
+            <button type="button" className="btn btn-ghost text-rose-600" onClick={onDelete}>
+              Eliminar
+            </button>
+          ) : null}
+          {editing ? (
+            <form.Subscribe selector={(state) => [state.values.nombre, state.isSubmitting]}>
+              {([nombre, isSubmitting]) => (
+                <button
+                  type="button"
+                  className="btn border-none bg-blue-600 text-white"
+                  disabled={!nombre.trim() || pending || isSubmitting}
+                  onClick={() => form.handleSubmit()}
+                >
+                  {isCreate ? 'Crear' : 'Guardar'}
+                </button>
+              )}
+            </form.Subscribe>
+          ) : null}
+        </>
+      }
+    >
+      {editing ? (
+        <Field form={form} name="nombre">
+          {(field) => <TextField field={field} label="Nombre" normalize="upper" />}
+        </Field>
+      ) : (
+        <label className="text-sm">
+          <span className="mb-1 block text-slate-500">Nombre</span>
+          <p className="font-medium">{tipo.nombre}</p>
+        </label>
+      )}
     </Modal>
   )
 }

@@ -206,6 +206,30 @@ export function deletePromocion(id) {
   });
 }
 
+export function getTiposGaleria() {
+  return request("/tipos-galeria/");
+}
+
+export function createTipoGaleria(payload) {
+  return request("/tipos-galeria/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateTipoGaleria(id, payload) {
+  return request(`/tipos-galeria/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteTipoGaleria(id) {
+  return request(`/tipos-galeria/${id}/`, {
+    method: "DELETE",
+  });
+}
+
 export function getFlujos() {
   return request("/flujos/");
 }

@@ -21,6 +21,7 @@ from .views import (
     ProductoViewSet,
     PromocionVentaViewSet,
     PromocionViewSet,
+    TipoGaleriaViewSet,
     VentaComentarioViewSet,
     VentaPasoViewSet,
     VentaViewSet,
@@ -35,6 +36,7 @@ router.register("empresas", EmpresaViewSet)
 router.register("direcciones", DireccionViewSet)
 router.register("productos", ProductoViewSet)
 router.register("promociones", PromocionViewSet)
+router.register("tipos-galeria", TipoGaleriaViewSet)
 router.register("pasos", PasoViewSet)
 router.register("flujos", FlujoViewSet)
 router.register("flujo-pasos", FlujoPasoViewSet)

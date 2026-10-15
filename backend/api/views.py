@@ -1,6 +1,6 @@
 from django.contrib.auth.models import Permission, User
 from django.db import transaction
-from django.db.models import F, Q
+from django.db.models import F, Prefetch, Q
 from django.db.models.deletion import ProtectedError
 from django.http import HttpResponse
 from django.utils.http import content_disposition_header
@@ -22,6 +22,7 @@ from .models import (
     Promocion,
     PromocionVenta,
     TipoCliente,
+    TipoGaleria,
     Venta,
     VentaComentario,
     VentaPaso,
@@ -42,6 +43,7 @@ from .serializers import (
     ProductoSerializer,
     PromocionSerializer,
     PromocionVentaSerializer,
+    TipoGaleriaSerializer,
     VENTA_CODIGO_FIELDS,
     VentaComentarioSerializer,
     VentaPasoSerializer,
@@ -86,7 +88,9 @@ class AuthenticatedModelViewSet(ModelViewSet):
 class ClienteViewSet(AuthenticatedModelViewSet):
     queryset = Cliente.objects.select_related(
         "persona", "empresa", "empresa__representante_legal"
-    ).prefetch_related("direccion_set")
+    ).prefetch_related(
+        Prefetch("direccion_set", queryset=Direccion.objects.select_related("tipo_galeria"))
+    )
     serializer_class = ClienteSerializer
 
 
@@ -103,8 +107,18 @@ class EmpresaViewSet(AuthenticatedModelViewSet):
 
 
 class DireccionViewSet(AuthenticatedModelViewSet):
-    queryset = Direccion.objects.select_related("cliente").all()
+    queryset = Direccion.objects.select_related("cliente", "tipo_galeria").all()
     serializer_class = DireccionSerializer
+
+
+class TipoGaleriaViewSet(AuthenticatedModelViewSet):
+    queryset = TipoGaleria.objects.all()
+    serializer_class = TipoGaleriaSerializer
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [IsAuthenticated()]
+        return super().get_permissions()
 
 
 class ProductoViewSet(AuthenticatedModelViewSet):
@@ -189,6 +203,7 @@ class VentaViewSet(AuthenticatedModelViewSet):
             "flujo",
             "creado_por",
             "direccion",
+            "direccion__tipo_galeria",
         )
         .prefetch_related(
             "promociones",

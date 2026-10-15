@@ -20,6 +20,7 @@ from .models import (
     TipoCliente,
     TipoDireccion,
     TipoDocumento,
+    TipoGaleria,
     Venta,
     VentaComentario,
     VentaPaso,
@@ -74,7 +75,22 @@ def cliente_con_correo(validated_data, tipo):
     return validated_data
 
 
+class TipoGaleriaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TipoGaleria
+        fields = ["id", "nombre"]
+
+    def validate(self, attrs):
+        uppercase_fields(attrs, ["nombre"])
+        return attrs
+
+
 class DireccionSerializer(serializers.ModelSerializer):
+    tipo_galeria = serializers.PrimaryKeyRelatedField(
+        queryset=TipoGaleria.objects.all(), allow_null=True, required=False
+    )
+    tipo_galeria_nombre = serializers.SerializerMethodField()
+
     class Meta:
         model = Direccion
         fields = [
@@ -88,10 +104,22 @@ class DireccionSerializer(serializers.ModelSerializer):
             "interior",
             "tienda",
             "piso",
+            "tipo_galeria",
+            "tipo_galeria_nombre",
             "galeria",
             "referencia",
         ]
         validators = []
+
+    def get_tipo_galeria_nombre(self, obj):
+        return obj.tipo_galeria.nombre if obj.tipo_galeria_id else ""
+
+    def to_internal_value(self, data):
+        if hasattr(data, "copy"):
+            data = data.copy()
+            if data.get("tipo_galeria") in ("", None):
+                data["tipo_galeria"] = None
+        return super().to_internal_value(data)
 
     def validate(self, attrs):
         uppercase_fields(
@@ -108,6 +136,14 @@ class DireccionSerializer(serializers.ModelSerializer):
                 "referencia",
             ],
         )
+        tipo = attrs.get("tipo_galeria", getattr(self.instance, "tipo_galeria", None))
+        nombre = attrs.get("galeria", getattr(self.instance, "galeria", "") if self.instance else "")
+        if nombre and not tipo:
+            raise serializers.ValidationError(
+                {"tipo_galeria": "Selecciona el tipo de galería o centro comercial."}
+            )
+        if tipo and not nombre:
+            raise serializers.ValidationError({"galeria": "Indica el nombre."})
         return attrs
 
     def create(self, validated_data):
@@ -124,10 +160,15 @@ class DireccionSerializer(serializers.ModelSerializer):
             "galeria": validated_data.get("galeria") or "",
             "referencia": validated_data.get("referencia") or "",
         }
+        defaults = {"tipo_galeria": validated_data.get("tipo_galeria")}
         try:
-            direccion, _created = Direccion.objects.get_or_create(**lookup)
+            direccion, created = Direccion.objects.get_or_create(**lookup, defaults=defaults)
         except IntegrityError:
             direccion = Direccion.objects.get(**lookup)
+            created = False
+        if not created and defaults["tipo_galeria"] and direccion.tipo_galeria_id is None:
+            direccion.tipo_galeria = defaults["tipo_galeria"]
+            direccion.save(update_fields=["tipo_galeria"])
         return direccion
 
 

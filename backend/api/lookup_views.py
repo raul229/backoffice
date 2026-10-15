@@ -35,6 +35,8 @@ def _direccion_form(direccion):
         "interior": direccion.interior,
         "tienda": direccion.tienda,
         "piso": direccion.piso,
+        "tipo_galeria": str(direccion.tipo_galeria_id) if direccion.tipo_galeria_id else "",
+        "tipo_galeria_nombre": direccion.tipo_galeria.nombre if direccion.tipo_galeria_id else "",
         "galeria": direccion.galeria,
         "referencia": direccion.referencia,
     }
@@ -113,7 +115,7 @@ def lookup_ruc(request):
             .order_by("-fecha", "-id")
             .first()
         )
-        direccion = cliente.direccion_set.order_by("-id").first()
+        direccion = cliente.direccion_set.select_related("tipo_galeria").order_by("-id").first()
         payload = _payload(
             "cliente",
             ruc,
@@ -162,7 +164,7 @@ def lookup_direccion(request):
         Direccion.objects.filter(direccion__icontains=query)
         | Direccion.objects.filter(distrito__icontains=query)
         | Direccion.objects.filter(numero__icontains=query)
-    )
+    ).select_related("tipo_galeria")
     seen = set()
     items = []
     for row in rows.order_by("-id")[:30]:
@@ -175,6 +177,7 @@ def lookup_direccion(request):
             row.interior,
             row.tienda,
             row.piso,
+            row.tipo_galeria_id,
             row.galeria,
             row.referencia,
         )
@@ -183,7 +186,7 @@ def lookup_direccion(request):
         seen.add(key)
         items.append(
             {
-                "tipo_direccion": row.tipo,
+                **_direccion_form(row),
                 "direccion": normalize_upper(row.direccion),
                 "numero": normalize_upper(row.numero),
                 "distrito": normalize_upper(row.distrito),

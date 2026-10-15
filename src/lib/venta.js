@@ -54,13 +54,19 @@ export function documentoCliente(cliente) {
   return cliente.persona?.numero_documento ?? ''
 }
 
+export function textoGaleria(direccion) {
+  if (!direccion?.galeria) return ''
+  const tipo = direccion.tipo_galeria_nombre || ''
+  return tipo ? `${tipo} ${direccion.galeria}` : direccion.galeria
+}
+
 export function formatDireccion(direccion) {
   if (!direccion) return 'Sin dirección'
   const extras = [
     direccion.piso && `PISO ${direccion.piso}`,
     direccion.interior && `INT. ${direccion.interior}`,
     direccion.tienda && `TIENDA ${direccion.tienda}`,
-    direccion.galeria && `GAL. ${direccion.galeria}`,
+    textoGaleria(direccion),
     direccion.urbanizacion && `URB. ${direccion.urbanizacion}`,
     direccion.referencia,
   ].filter(Boolean)

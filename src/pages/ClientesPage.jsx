@@ -9,6 +9,7 @@ import {
   deleteDireccion,
   getChoices,
   getClientes,
+  getTiposGaleria,
   updateDireccion,
   updateEmpresa,
   updatePersona,
@@ -20,6 +21,7 @@ import {
   documentoCliente,
   formatDireccion,
   nombreCliente,
+  textoGaleria,
   tipoClienteLabel,
 } from '../lib/venta.js'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -40,6 +42,7 @@ export default function ClientesPage({ search }) {
     queryFn: getClientes,
   })
   const choicesQuery = useQuery({ queryKey: ['choices'], queryFn: getChoices })
+  const tiposGaleriaQuery = useQuery({ queryKey: ['tipos-galeria'], queryFn: getTiposGaleria })
   const canDeleteCliente = can('api.delete_cliente')
   const canAddDireccion = can('api.add_direccion')
   const canChangeDireccion = can('api.change_direccion')
@@ -48,6 +51,10 @@ export default function ClientesPage({ search }) {
   const canChangeEmpresa = can('api.change_empresa')
   const tiposDireccion = choicesQuery.data?.tipos_direccion ?? [{ value: 'CALLE', label: 'Calle' }]
   const tiposDocumento = choicesQuery.data?.tipos_documento ?? [{ value: 'DNI', label: 'DNI' }]
+  const tiposGaleria = (tiposGaleriaQuery.data ?? []).map((item) => ({
+    value: String(item.id),
+    label: item.nombre,
+  }))
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['clientes'] })
@@ -377,6 +384,7 @@ export default function ClientesPage({ search }) {
           pending={createDireccionMutation.isPending}
           stacked={Boolean(selectedCliente)}
           tiposDireccion={tiposDireccion}
+          tiposGaleria={tiposGaleria}
         />
       ) : null}
 
@@ -398,6 +406,7 @@ export default function ClientesPage({ search }) {
           pending={updateDireccionMutation.isPending}
           stacked={Boolean(selectedCliente)}
           tiposDireccion={tiposDireccion}
+          tiposGaleria={tiposGaleria}
         />
       ) : null}
 
@@ -756,6 +765,7 @@ function emptyDireccion(clienteId = '') {
     interior: '',
     tienda: '',
     piso: '',
+    tipo_galeria: '',
     galeria: '',
     referencia: '',
   }
@@ -772,6 +782,7 @@ function direccionValues(direccion) {
     interior: direccion.interior ?? '',
     tienda: direccion.tienda ?? '',
     piso: direccion.piso ?? '',
+    tipo_galeria: direccion.tipo_galeria ? String(direccion.tipo_galeria) : '',
     galeria: direccion.galeria ?? '',
     referencia: direccion.referencia ?? '',
   }
@@ -782,6 +793,7 @@ function DireccionFormModal({
   clientes = [],
   lockedClienteId,
   tiposDireccion,
+  tiposGaleria = [],
   editing = true,
   stacked = false,
   onClose,
@@ -804,6 +816,7 @@ function DireccionFormModal({
         interior: value.interior.trim(),
         tienda: value.tienda.trim(),
         piso: value.piso.trim(),
+        tipo_galeria: value.tipo_galeria ? Number(value.tipo_galeria) : null,
         galeria: value.galeria.trim(),
         referencia: value.referencia.trim(),
       }),
@@ -925,16 +938,6 @@ function DireccionFormModal({
           </label>
         ) : null}
         {editing ? (
-          <Field form={form} name="galeria">
-            {(field) => <TextField field={field} label="Galería o centro comercial" normalize="upper" />}
-          </Field>
-        ) : direccion.galeria ? (
-          <label className="text-sm">
-            <span className="mb-1 block text-slate-500">Galería o centro comercial</span>
-            <p>{direccion.galeria}</p>
-          </label>
-        ) : null}
-        {editing ? (
           <Field form={form} name="urbanizacion">
             {(field) => <TextField field={field} label="Urbanización" normalize="upper" />}
           </Field>
@@ -942,6 +945,33 @@ function DireccionFormModal({
           <label className="text-sm">
             <span className="mb-1 block text-slate-500">Urbanización</span>
             <p>{direccion.urbanizacion}</p>
+          </label>
+        ) : null}
+        {editing ? (
+          <Field form={form} name="tipo_galeria">
+            {(field) => (
+              <SelectField
+                field={field}
+                label="Tipo"
+                options={tiposGaleria}
+                placeholder={tiposGaleria.length ? 'Selecciona' : 'Configura tipos primero'}
+              />
+            )}
+          </Field>
+        ) : textoGaleria(direccion) ? (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">Tipo</span>
+            <p>{direccion.tipo_galeria_nombre || '—'}</p>
+          </label>
+        ) : null}
+        {editing ? (
+          <Field form={form} name="galeria">
+            {(field) => <TextField field={field} label="Nombre" normalize="upper" />}
+          </Field>
+        ) : textoGaleria(direccion) ? (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">Nombre</span>
+            <p>{direccion.galeria}</p>
           </label>
         ) : null}
         {editing ? (

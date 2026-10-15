@@ -14,6 +14,7 @@ import {
   getFlujos,
   getProductos,
   getPromociones,
+  getTiposGaleria,
   lookupDireccion,
   lookupRuc,
   updateCliente,
@@ -43,6 +44,7 @@ const defaultValues = {
   interior: '',
   tienda: '',
   piso: '',
+  tipo_galeria: '',
   galeria: '',
   referencia: '',
   producto: '',
@@ -76,6 +78,7 @@ function direccionPayload(value, clienteId) {
     interior: value.interior,
     tienda: value.tienda,
     piso: value.piso,
+    tipo_galeria: value.tipo_galeria ? Number(value.tipo_galeria) : null,
     galeria: value.galeria,
     referencia: value.referencia,
   }
@@ -113,6 +116,7 @@ const LOOKUP_FIELDS = [
   'interior',
   'tienda',
   'piso',
+  'tipo_galeria',
   'galeria',
   'referencia',
   'producto',
@@ -137,7 +141,7 @@ function cambiarTipoCliente(form, tipo, { lastRucLookup, lookupRequestId, setLoo
 }
 
 function applyDireccion(form, data) {
-  for (const name of ['tipo_direccion', 'direccion', 'numero', 'distrito', 'urbanizacion', 'interior', 'tienda', 'piso', 'galeria', 'referencia']) {
+  for (const name of ['tipo_direccion', 'direccion', 'numero', 'distrito', 'urbanizacion', 'interior', 'tienda', 'piso', 'tipo_galeria', 'galeria', 'referencia']) {
     if (data[name] !== undefined) form.setFieldValue(name, data[name] ?? '')
   }
 }
@@ -169,6 +173,7 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
   const productosQuery = useQuery({ queryKey: ['productos'], queryFn: getProductos })
   const flujosQuery = useQuery({ queryKey: ['flujos'], queryFn: getFlujos })
   const promocionesQuery = useQuery({ queryKey: ['promociones'], queryFn: getPromociones })
+  const tiposGaleriaQuery = useQuery({ queryKey: ['tipos-galeria'], queryFn: getTiposGaleria })
 
   const mutation = useMutation({
     mutationFn: async (value) => {
@@ -220,6 +225,10 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
   const promociones = promocionesQuery.data ?? []
   const tiposDocumento = choicesQuery.data?.tipos_documento ?? [{ value: 'DNI', label: 'DNI' }]
   const tiposDireccion = choicesQuery.data?.tipos_direccion ?? [{ value: 'CALLE', label: 'Calle' }]
+  const tiposGaleria = (tiposGaleriaQuery.data ?? []).map((item) => ({
+    value: String(item.id),
+    label: item.nombre,
+  }))
 
   const buscarDireccion = (query) => {
     window.clearTimeout(direccionTimer.current)
@@ -592,7 +601,7 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                     {direccionSugerencias.length > 0 ? (
                       <ul className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
                         {direccionSugerencias.map((item) => (
-                          <li key={`${item.tipo_direccion}-${item.direccion}-${item.numero}-${item.distrito}-${item.tienda}-${item.piso}-${item.galeria}-${item.interior}`}>
+                          <li key={`${item.tipo_direccion}-${item.direccion}-${item.numero}-${item.distrito}-${item.tienda}-${item.piso}-${item.tipo_galeria}-${item.galeria}-${item.interior}`}>
                             <button
                               type="button"
                               className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
@@ -626,13 +635,21 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
               <Field form={form} name="tienda">
                 {(field) => <TextField field={field} label="Tienda" normalize="upper" />}
               </Field>
-              <Field form={form} name="galeria">
-                {(field) => (
-                  <TextField field={field} label="Galería o centro comercial" normalize="upper" />
-                )}
-              </Field>
               <Field form={form} name="urbanizacion">
                 {(field) => <TextField field={field} label="Urbanización" normalize="upper" />}
+              </Field>
+              <Field form={form} name="tipo_galeria">
+                {(field) => (
+                  <SelectField
+                    field={field}
+                    label="Tipo"
+                    options={tiposGaleria}
+                    placeholder={tiposGaleria.length ? 'Selecciona' : 'Configura tipos primero'}
+                  />
+                )}
+              </Field>
+              <Field form={form} name="galeria">
+                {(field) => <TextField field={field} label="Nombre" normalize="upper" />}
               </Field>
               <Field form={form} name="referencia">
                 {(field) => <TextAreaField className="sm:col-span-2" field={field} label="Referencia" normalize="upper" rows={2} />}
