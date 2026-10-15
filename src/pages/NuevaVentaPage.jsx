@@ -19,7 +19,7 @@ import {
   updateCliente,
 } from '../service/api.js'
 import { parseDireccion } from '../lib/address.js'
-import { DOCUMENT_LENGTH, digitCode, nuevaVentaClienteSchema, nuevaVentaSchema, requiredText, validateDocumentNumber } from '../lib/schemas.js'
+import { DOCUMENT_LENGTH, digitCode, nuevaVentaClienteSchema, nuevaVentaDireccionSchema, nuevaVentaSchema, requiredText, validateDocumentNumber } from '../lib/schemas.js'
 import { flujosPorTipo, formatDireccion, productosPorTipo } from '../lib/venta.js'
 
 const defaultValues = {
@@ -81,8 +81,8 @@ function direccionPayload(value, clienteId) {
   }
 }
 
-function step0Fields(tipoCliente) {
-  const fields = ['ruc', 'numero_documento', 'nombres', 'apellidos', 'celular', 'correo', 'direccion', 'numero', 'distrito']
+function stepClienteFields(tipoCliente) {
+  const fields = ['ruc', 'numero_documento', 'nombres', 'apellidos', 'celular', 'correo']
   if (tipoCliente === 'EMPRESA') {
     fields.splice(1, 0, 'razon_social')
   } else {
@@ -90,6 +90,8 @@ function step0Fields(tipoCliente) {
   }
   return fields
 }
+
+const stepDireccionFields = ['direccion', 'numero', 'distrito']
 
 const LOOKUP_FIELDS = [
   'tipo_cliente',
@@ -307,7 +309,8 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
       <section className="bo-card p-4 sm:p-6">
         <ul className="steps steps-vertical mb-6 w-full sm:steps-horizontal">
           <li className={`step ${step >= 0 ? 'step-primary' : ''}`}>Cliente</li>
-          <li className={`step ${step >= 1 ? 'step-primary' : ''}`}>Producto y flujo</li>
+          <li className={`step ${step >= 1 ? 'step-primary' : ''}`}>Dirección</li>
+          <li className={`step ${step >= 2 ? 'step-primary' : ''}`}>Producto y flujo</li>
         </ul>
 
         {lookupStatus ? (
@@ -446,7 +449,7 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                         )}
                       </Field>
                     </div>
-                  <div className={`grid gap-4 md:grid-cols-2 ${step !== 1 ? 'hidden' : ''}`}>
+                  <div className={`grid gap-4 md:grid-cols-2 ${step !== 2 ? 'hidden' : ''}`}>
                       <Field form={form} name="producto" validators={requiredText('Selecciona un producto')}>
                         {(field) => (
                           <SelectField
@@ -516,6 +519,7 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
 
           <form.Subscribe selector={(state) => state.values.tipo_cliente}>
             {(tipoCliente) => (
+          <>
           <div className={`mt-4 grid gap-4 md:grid-cols-2 ${step !== 0 ? 'hidden' : ''}`}>
               <Field form={form} name="nombres" validators={requiredText()}>
                 {(field) => <TextField field={field} label="Nombres" normalize="upper" />}
@@ -559,6 +563,8 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                   </Field>
                 </>
               ) : null}
+            </div>
+          <div className={`mt-4 grid gap-4 md:grid-cols-2 ${step !== 1 ? 'hidden' : ''}`}>
               <Field form={form} name="tipo_direccion">
                 {(field) => (
                   <SelectField
@@ -632,12 +638,13 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                 {(field) => <TextAreaField className="sm:col-span-2" field={field} label="Referencia" normalize="upper" rows={2} />}
               </Field>
             </div>
+          </>
             )}
           </form.Subscribe>
 
           <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            {step === 1 ? (
-              <button type="button" className="btn btn-ghost rounded-full" onClick={() => setStep(0)}>
+            {step > 0 ? (
+              <button type="button" className="btn btn-ghost rounded-full" onClick={() => setStep(step - 1)}>
                 Atrás
               </button>
             ) : null}
@@ -648,11 +655,27 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                 onClick={async () => {
                   const values = form.state.values
                   const parsed = nuevaVentaClienteSchema.safeParse(values)
-                  const tipo = values.tipo_cliente
                   const results = await Promise.all(
-                    step0Fields(tipo).map((name) => form.validateField(name, 'submit')),
+                    stepClienteFields(values.tipo_cliente).map((name) => form.validateField(name, 'submit')),
                   )
                   if (!parsed.success || results.some((errors) => errors?.length)) return
+                  setStep(1)
+                }}
+              >
+                Siguiente
+              </button>
+            ) : step === 1 ? (
+              <button
+                type="button"
+                className="btn rounded-full border-none bg-blue-600 text-white hover:bg-blue-700"
+                onClick={async () => {
+                  const values = form.state.values
+                  const parsed = nuevaVentaDireccionSchema.safeParse(values)
+                  const results = await Promise.all(
+                    stepDireccionFields.map((name) => form.validateField(name, 'submit')),
+                  )
+                  if (!parsed.success || results.some((errors) => errors?.length)) return
+                  const tipo = values.tipo_cliente
                   const flujos = flujosPorTipo(flujosQuery.data, tipo)
                   const productosTipo = productosPorTipo(productos, tipo)
                   if (!form.getFieldValue('flujo') && flujos.length === 1) {
@@ -668,7 +691,7 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                   if (!form.getFieldValue('producto') && productosTipo.length === 1) {
                     form.setFieldValue('producto', String(productosTipo[0].id))
                   }
-                  setStep(1)
+                  setStep(2)
                 }}
               >
                 Siguiente

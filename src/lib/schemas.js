@@ -146,7 +146,7 @@ function requireNuevaVentaCliente(value, ctx) {
   }
 }
 
-const nuevaVentaBase = {
+const nuevaVentaClienteBase = {
   tipo_cliente: z.enum(['PERSONA', 'EMPRESA']),
   tipo_documento: requiredText(),
   numero_documento: z.string(),
@@ -159,6 +159,9 @@ const nuevaVentaBase = {
   madre: z.string(),
   ruc: z.string(),
   razon_social: z.string(),
+}
+
+const nuevaVentaDireccionBase = {
   tipo_direccion: requiredText(),
   direccion: requiredText(),
   numero: requiredText(),
@@ -171,6 +174,11 @@ const nuevaVentaBase = {
   referencia: z.string(),
 }
 
+const nuevaVentaBase = {
+  ...nuevaVentaClienteBase,
+  ...nuevaVentaDireccionBase,
+}
+
 export const nuevaVentaSchema = z
   .object({
     ...nuevaVentaBase,
@@ -180,7 +188,11 @@ export const nuevaVentaSchema = z
   })
   .superRefine(requireNuevaVentaCliente)
 
-export const nuevaVentaClienteSchema = z.object(nuevaVentaBase).superRefine(requireNuevaVentaCliente)
+export const nuevaVentaClienteSchema = z
+  .object(nuevaVentaClienteBase)
+  .superRefine(requireNuevaVentaCliente)
+
+export const nuevaVentaDireccionSchema = z.object(nuevaVentaDireccionBase)
 
 export const personaEditSchema = z
   .object({
