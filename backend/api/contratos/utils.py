@@ -40,6 +40,41 @@ def dividir_texto(texto, max_caracteres):
     return resultado, numero_lineas
 
 
+def partir_en_lineas(texto, limites):
+    """Reparte el texto entre varios pines. El último puede seguir envolviendo."""
+    palabras = str(texto or "").split()
+    lineas = []
+    indice = 0
+    total = len(limites)
+    for posicion, limite in enumerate(limites):
+        if indice >= len(palabras):
+            lineas.append("")
+            continue
+        tope = int(limite or 0)
+        if tope <= 0:
+            lineas.append(" ".join(palabras[indice:]))
+            indice = len(palabras)
+            continue
+        actual = palabras[indice]
+        indice += 1
+        longitud = len(actual)
+        ultimo = posicion == total - 1
+        while indice < len(palabras):
+            palabra = palabras[indice]
+            if longitud + 1 + len(palabra) <= tope:
+                actual += f" {palabra}"
+                longitud += 1 + len(palabra)
+                indice += 1
+            elif ultimo:
+                actual += f"\n{palabra}"
+                longitud = len(palabra)
+                indice += 1
+            else:
+                break
+        lineas.append(actual)
+    return lineas
+
+
 def completar_fechas(contexto: dict) -> dict:
     meses = {
         "01": "Enero",

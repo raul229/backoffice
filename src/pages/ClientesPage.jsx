@@ -460,6 +460,7 @@ function empresaFormValues(cliente) {
   return {
     ruc: empresa.ruc ?? '',
     razon_social: empresa.razon_social ?? '',
+    domicilio_fiscal: empresa.domicilio_fiscal ?? '',
     correo: cliente.correo ?? '',
   }
 }
@@ -509,6 +510,7 @@ function ClienteModal({
       onSave({
         ruc: value.ruc.trim(),
         razon_social: value.razon_social.trim(),
+        domicilio_fiscal: value.domicilio_fiscal.trim(),
         correo: value.correo.trim().toLowerCase(),
       })
     },
@@ -613,6 +615,17 @@ function ClienteModal({
               <Field form={form} name="razon_social">
                 {(field) => <TextField field={field} label="Razón social" normalize="upper" />}
               </Field>
+              <Field form={form} name="domicilio_fiscal">
+                {(field) => (
+                  <TextAreaField
+                    className="sm:col-span-2"
+                    field={field}
+                    label="Domicilio fiscal"
+                    normalize="upper"
+                    rows={2}
+                  />
+                )}
+              </Field>
               <Field form={form} name="correo">
                 {(field) => <TextField className="sm:col-span-2" field={field} label="Correo de facturación" type="email" />}
               </Field>
@@ -690,6 +703,12 @@ function ClienteModal({
               <dt className="text-slate-400">Razón social</dt>
               <dd>{empresa.razon_social}</dd>
             </div>
+            {empresa.domicilio_fiscal ? (
+              <div className="sm:col-span-2">
+                <dt className="text-slate-400">Domicilio fiscal</dt>
+                <dd>{empresa.domicilio_fiscal}</dd>
+              </div>
+            ) : null}
           </>
         ) : null}
           {representante ? (

@@ -49,6 +49,7 @@ class Empresa(models.Model):
     cliente = models.OneToOneField(Cliente, on_delete=models.CASCADE)
     ruc = models.CharField(max_length=11)
     razon_social = models.CharField(max_length=100)
+    domicilio_fiscal = models.CharField(max_length=400, blank=True)
     representante_legal = models.ForeignKey(Persona, on_delete=models.PROTECT)
     
 class TipoDireccion(models.TextChoices):
@@ -109,12 +110,23 @@ class Direccion(models.Model):
             )
         ]
     
+class TipoBonoVelocidad(models.TextChoices):
+    NINGUNO = "NINGUNO", "Sin bono"
+    DUPLICA = "DUPLICA", "Duplica la velocidad"
+    FIJO = "FIJO", "Mbps adicionales fijos"
+
+
 class Promocion(models.Model):
     nombre = models.CharField(max_length=100)
-    #descuento = models.DecimalField(max_digits=5, decimal_places=2, default=0.30)
     descripcion = models.TextField()
-    #bono = models.PositiveIntegerField(default=0)
-    
+    descuento_porcentaje = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    bono_velocidad = models.CharField(
+        max_length=20,
+        choices=TipoBonoVelocidad.choices,
+        default=TipoBonoVelocidad.NINGUNO,
+    )
+    bono_mbps = models.PositiveIntegerField(default=0)
+
     def __str__(self):
         return self.nombre
     
@@ -125,10 +137,37 @@ class Producto(models.Model):
     tipo_cliente = models.CharField(
         max_length=20, choices=TipoCliente.choices, default=TipoCliente.PERSONA
     )
+    promociones = models.ManyToManyField(
+        Promocion,
+        blank=True,
+        related_name="productos",
+    )
     
     def __str__(self):
         return self.nombre + " - " + str(self.velocidad) + " Mbps - S/." + str(self.precio)
-    
+
+
+class Documento(models.Model):
+    clave = models.CharField(max_length=40, unique=True)
+    etiqueta = models.CharField(max_length=120)
+    descripcion = models.TextField(blank=True)
+    grupo = models.CharField(max_length=60, blank=True)
+    archivo = models.CharField(max_length=200, blank=True)
+    acepta = models.JSONField(default=list, blank=True)
+    hojas = models.JSONField(default=list, blank=True)
+    requerida = models.BooleanField(default=False)
+    mapa = models.JSONField(default=dict, blank=True)
+    productos = models.ManyToManyField(
+        Producto, blank=True, related_name="documentos"
+    )
+    promociones = models.ManyToManyField(
+        Promocion, blank=True, related_name="documentos"
+    )
+
+    def __str__(self):
+        return self.etiqueta or self.clave
+
+
 class EstadoPaso(models.TextChoices):
     PENDIENTE = "PENDIENTE", "Pendiente"
     EN_PROCESO = "EN_PROCESO", "En proceso"

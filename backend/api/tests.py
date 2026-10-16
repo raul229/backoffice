@@ -7,6 +7,7 @@ from pathlib import Path
 from .models import (
     Cliente,
     Direccion,
+    Documento,
     Empresa,
     Flujo,
     FlujoPaso,
@@ -329,6 +330,37 @@ class ApiEndpointsTests(APITestCase):
         cliente = Cliente.objects.get(id=response.data["cliente"])
         self.assertEqual(cliente.tipo, TipoCliente.EMPRESA)
         self.assertEqual(cliente.correo, "facturacion@empresa.com")
+        self.assertEqual(response.data.get("domicilio_fiscal") or "", "")
+
+    def test_create_empresa_guarda_domicilio_fiscal(self):
+        persona = self.client.post(
+            "/api/personas/",
+            {
+                "tipo_documento": "DNI",
+                "numero_documento": "87654321",
+                "nombres": "Luis",
+                "apellidos": "Rojas",
+                "celular": "999888777",
+                "correo": "luis.rojas@example.com",
+            },
+            format="json",
+        )
+        response = self.client.post(
+            "/api/empresas/",
+            {
+                "ruc": "20123456789",
+                "razon_social": "Empresa SAC",
+                "domicilio_fiscal": "cal. luiggi barsato nro. 167 san borja",
+                "representante_legal": persona.data["id"],
+                "correo": "facturacion@empresa.com",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            response.data["domicilio_fiscal"],
+            "CAL. LUIGGI BARSATO NRO. 167 SAN BORJA",
+        )
 
     def test_venta_rejects_flujo_of_other_client_type(self):
         cliente = Cliente.objects.create(tipo=TipoCliente.EMPRESA)
@@ -633,6 +665,125 @@ class ApiEndpointsTests(APITestCase):
         deleted = self.client.delete(f"/api/promociones/{promo.data['id']}/")
         self.assertEqual(deleted.status_code, status.HTTP_204_NO_CONTENT)
 
+        creada = self.client.post(
+            "/api/promociones/",
+            {
+                "nombre": "Bono 300",
+                "descripcion": "plus 300",
+                "descuento_porcentaje": "20",
+                "bono_velocidad": "FIJO",
+                "bono_mbps": 300,
+            },
+            format="json",
+        )
+        self.assertEqual(creada.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(creada.data["descuento_porcentaje"], "20.00")
+        self.assertEqual(creada.data["bono_velocidad"], "FIJO")
+        self.assertEqual(creada.data["bono_mbps"], 300)
+
+        invalid = self.client.post(
+            "/api/promociones/",
+            {
+                "nombre": "Bono sin mbps",
+                "descripcion": "falla",
+                "bono_velocidad": "FIJO",
+                "bono_mbps": 0,
+            },
+            format="json",
+        )
+        self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_producto_vincula_promociones(self):
+        promo_a = self.client.post(
+            "/api/promociones/",
+            {"nombre": "Bono velocidad", "descripcion": "bono"},
+            format="json",
+        )
+        promo_b = self.client.post(
+            "/api/promociones/",
+            {"nombre": "Solo 30", "descripcion": "30"},
+            format="json",
+        )
+        self.assertEqual(promo_a.status_code, status.HTTP_201_CREATED)
+        created = self.client.post(
+            "/api/productos/",
+            {
+                "nombre": "Internet Empresas",
+                "velocidad": 200,
+                "precio": "90.00",
+                "tipo_cliente": TipoCliente.EMPRESA,
+                "promociones": [promo_a.data["id"], promo_b.data["id"]],
+            },
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        self.assertCountEqual(created.data["promociones"], [promo_a.data["id"], promo_b.data["id"]])
+        self.assertNotIn("plantillas", created.data)
+
+    def test_venta_solo_acepta_promociones_del_producto(self):
+        permitida = Promocion.objects.create(nombre="Bono", descripcion="ok")
+        ajena = Promocion.objects.create(nombre="Otra", descripcion="no")
+        producto = Producto.objects.create(
+            nombre="Internet Empresas",
+            velocidad=200,
+            precio=90,
+            tipo_cliente=TipoCliente.EMPRESA,
+        )
+        producto.promociones.set([permitida])
+        cliente = Cliente.objects.create(tipo=TipoCliente.EMPRESA)
+        flujo = Flujo.objects.create(nombre="Empresa", tipo_cliente=TipoCliente.EMPRESA)
+        FlujoPaso.objects.create(
+            flujo=flujo,
+            paso=Paso.objects.create(nombre="Uno", descripcion="Uno"),
+            orden=1,
+        )
+        forbidden = self.client.post(
+            "/api/ventas/",
+            {
+                "cliente": cliente.id,
+                "producto": producto.id,
+                "flujo": flujo.id,
+                "promociones": [ajena.id],
+            },
+            format="json",
+        )
+        self.assertEqual(forbidden.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("promociones", forbidden.data)
+
+        allowed = self.client.post(
+            "/api/ventas/",
+            {
+                "cliente": cliente.id,
+                "producto": producto.id,
+                "flujo": flujo.id,
+                "promociones": [permitida.id],
+            },
+            format="json",
+        )
+        self.assertEqual(allowed.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(allowed.data["promociones"], [permitida.id])
+
+    def test_generar_contrato_usa_documentos_asignados(self):
+        import zipfile
+        from io import BytesIO
+
+        self._cargar_plantillas_en_bd()
+        venta_id = self._venta_empresa_entel(
+            nombre_producto="Internet Empresas",
+            velocidad=200,
+            promo="bono de velocidad por 6m",
+        )
+        venta = Venta.objects.get(id=venta_id)
+        Documento.objects.get(clave="internet-empresas").productos.add(venta.producto)
+        Documento.objects.get(clave="promocion-30").promociones.add(venta.promociones.first())
+        response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        with zipfile.ZipFile(BytesIO(response.content)) as archivo:
+            nombres = set(archivo.namelist())
+        self.assertIn("internet empresas.pdf", nombres)
+        self.assertIn("promocion 30 x 6 meses.pdf", nombres)
+        self.assertNotIn("bono duplica.pdf", nombres)
+
     def test_venta_rejects_producto_of_other_client_type(self):
         cliente = Cliente.objects.create(tipo=TipoCliente.EMPRESA)
         producto = Producto.objects.create(
@@ -765,6 +916,122 @@ class ApiEndpointsTests(APITestCase):
         self.assertIn("bono duplica.pdf", nombres)
         self.assertIn("firma_pagina_3.png", nombres)
         self.assertIn("firma_pagina_5.png", nombres)
+
+    def test_contexto_usa_domicilio_fiscal_de_empresa(self):
+        from api.contratos.mapeo import contexto_desde_venta
+
+        venta_id = self._venta_empresa_entel()
+        venta = Venta.objects.select_related("cliente__empresa", "direccion", "producto").get(id=venta_id)
+        venta.cliente.empresa.domicilio_fiscal = "CAL. LUIGGI BARSATO NRO. 167 SAN BORJA"
+        venta.cliente.empresa.save(update_fields=["domicilio_fiscal"])
+        contexto, *_ = contexto_desde_venta(venta)
+        self.assertEqual(contexto["DOMICILIO_FISCAL"], "CAL. LUIGGI BARSATO NRO. 167 SAN BORJA")
+        self.assertIn("LUIGGI", contexto["DOMICILIO_INSTALACION"].upper())
+        self.assertNotIn("DOMICILIO_INSTALACION_2", contexto)
+
+    def test_contexto_usa_nombres_de_producto_y_promocion(self):
+        from api.contratos.mapeo import contexto_desde_venta
+
+        venta_id = self._venta_empresa_entel(nombre_producto="INT EMPRESA", promo="Bono velocidad 6m")
+        venta = Venta.objects.select_related("cliente__empresa", "direccion", "producto").prefetch_related(
+            "promociones"
+        ).get(id=venta_id)
+        contexto, plan, _velocidad, promocion_entel = contexto_desde_venta(venta)
+        self.assertEqual(contexto["NOMBRE_PLAN"], "INT EMPRESA")
+        self.assertEqual(contexto["PROMOCION"], "Bono velocidad 6m")
+        self.assertEqual(plan, "Internet Empresas")
+        self.assertEqual(promocion_entel, "bono de velocidad por 6m")
+
+    def test_contexto_usa_descuento_y_bono_de_promocion(self):
+        from api.contratos.mapeo import contexto_desde_venta
+        from api.models import TipoBonoVelocidad
+
+        venta_id = self._venta_empresa_entel(nombre_producto="INT EMPRESA", promo="Promo 20")
+        venta = Venta.objects.select_related("cliente__empresa", "direccion", "producto").prefetch_related(
+            "promociones"
+        ).get(id=venta_id)
+        promo = venta.promociones.get()
+        promo.descuento_porcentaje = 20
+        promo.bono_velocidad = TipoBonoVelocidad.FIJO
+        promo.bono_mbps = 300
+        promo.save()
+        venta = Venta.objects.select_related("cliente__empresa", "direccion", "producto").prefetch_related(
+            "promociones"
+        ).get(id=venta_id)
+        contexto, *_ = contexto_desde_venta(venta)
+        self.assertEqual(contexto["RENTA_FIJA"], "90.00")
+        self.assertEqual(contexto["PRECIO_PRODUCTO"], "90.00")
+        self.assertEqual(contexto["DESCUENTO_PORCENTAJE"], "20")
+        self.assertEqual(contexto["DESCUENTO_CON_IGV"], "18.00")
+        self.assertEqual(contexto["DESCUENTO"], "15.25")
+        self.assertEqual(contexto["VELOCIDAD_CON_BONO"], 500)
+        self.assertEqual(contexto["BONO_MBPS"], 300)
+        self.assertEqual(contexto["TIPO_BONO"], "300 Mbps adicionales")
+
+        promo.descuento_porcentaje = 30
+        promo.bono_velocidad = TipoBonoVelocidad.DUPLICA
+        promo.bono_mbps = 0
+        promo.save()
+        venta = Venta.objects.select_related("cliente__empresa", "direccion", "producto").prefetch_related(
+            "promociones"
+        ).get(id=venta_id)
+        contexto, *_ = contexto_desde_venta(venta)
+        self.assertEqual(contexto["DESCUENTO_PORCENTAJE"], "30")
+        self.assertEqual(contexto["DESCUENTO_CON_IGV"], "27.00")
+        self.assertEqual(contexto["DESCUENTO"], "22.88")
+        self.assertEqual(contexto["VELOCIDAD_CON_BONO"], 400)
+        self.assertEqual(contexto["BONO_MBPS"], 200)
+
+        venta.producto.precio = "125.00"
+        venta.producto.save(update_fields=["precio"])
+        contexto, *_ = contexto_desde_venta(venta)
+        self.assertEqual(contexto["RENTA_FIJA"], "125.00")
+        self.assertEqual(contexto["RENTA_SIN_IGV"], "105.93")
+        self.assertEqual(contexto["DESCUENTO_CON_IGV"], "37.50")
+        self.assertEqual(contexto["DESCUENTO"], "31.78")
+        self.assertEqual(contexto["RENTA_CON_DESCUENTO"], "87.50")
+        self.assertEqual(contexto["RENTA_CON_DESCUENTO_SIN_IGV"], "74.15")
+
+    def test_montos_descuento_con_y_sin_igv(self):
+        from decimal import Decimal
+
+        from api.contratos.mapeo import montos_descuento
+
+        con_igv, sin_igv = montos_descuento("125", 30)
+        self.assertEqual(con_igv, Decimal("37.50"))
+        self.assertEqual(sin_igv, Decimal("31.78"))
+        con_igv, sin_igv = montos_descuento("100", 10)
+        self.assertEqual(con_igv, Decimal("10.00"))
+        self.assertEqual(sin_igv, Decimal("8.47"))
+        con_igv, sin_igv = montos_descuento("125", 20)
+        self.assertEqual(con_igv, Decimal("25.00"))
+        self.assertEqual(sin_igv, Decimal("21.19"))
+
+    def test_textos_pagina_reparte_campo_repetido(self):
+        from api.contratos.generador import textos_pagina
+
+        texto = "CALLE LARGA CON MUCHAS PALABRAS EXTRA AL FINAL"
+        pines = textos_pagina(
+            {
+                "DOMICILIO_INSTALACION": (10, 100, {"max_caracteres": 24, "tamano": 8}),
+                "DOMICILIO_INSTALACION_2": (10, 120, {"max_caracteres": 24, "tamano": 8}),
+            },
+            {"DOMICILIO_INSTALACION": texto},
+            {},
+        )
+        self.assertEqual(len(pines), 2)
+        self.assertNotEqual(pines[0][4], pines[1][4])
+        self.assertEqual(" ".join(pines[0][4].split() + pines[1][4].split()), texto)
+
+        duplicados = textos_pagina(
+            {
+                "RUC": (10, 100, {}),
+                "RUC_2": (10, 200, {"field": "RUC"}),
+            },
+            {"RUC": "20522317285"},
+            {},
+        )
+        self.assertEqual([item[4] for item in duplicados], ["20522317285", "20522317285"])
 
     def test_generar_contrato_internet_firmas_opcionales(self):
         import zipfile
@@ -1036,6 +1303,25 @@ class ApiEndpointsTests(APITestCase):
         claves = [item["clave"] for item in lista.data]
         self.assertIn("internet-empresas", claves)
         self.assertFalse(lista.data[0]["cargada"])
+        internet = next(item for item in lista.data if item["clave"] == "internet-empresas")
+        self.assertEqual(internet["productos"], [])
+        self.assertEqual(internet["promociones"], [])
+
+        producto = Producto.objects.create(
+            nombre="Internet Empresas",
+            velocidad=200,
+            precio=90,
+            tipo_cliente=TipoCliente.EMPRESA,
+        )
+        promo = Promocion.objects.create(nombre="Bono", descripcion="ok")
+        vinculos = self.client.patch(
+            "/api/plantillas-contrato/internet-empresas/",
+            {"productos": [producto.id], "promociones": [promo.id]},
+            format="json",
+        )
+        self.assertEqual(vinculos.status_code, status.HTTP_200_OK)
+        self.assertEqual(vinculos.data["productos"], [producto.id])
+        self.assertEqual(vinculos.data["promociones"], [promo.id])
 
         pdf = pymupdf.open()
         for _ in range(5):
@@ -1061,6 +1347,41 @@ class ApiEndpointsTests(APITestCase):
         descarga = self.client.get("/api/plantillas-contrato/internet-empresas/archivo/")
         self.assertEqual(descarga.status_code, status.HTTP_200_OK)
         self.assertEqual(bytes(descarga.content), contenido)
+
+        creado = self.client.post(
+            "/api/plantillas-contrato/",
+            {
+                "etiqueta": "Anexo portabilidad",
+                "descripcion": "Nuevo anexo",
+                "grupo": "Anexos",
+                "acepta": [".pdf"],
+            },
+            format="json",
+        )
+        self.assertEqual(creado.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(creado.data["etiqueta"], "Anexo portabilidad")
+        self.assertIn(".pdf", creado.data["acepta"])
+        mapa = self.client.patch(
+            f"/api/plantillas-contrato/{creado.data['clave']}/",
+            {
+                "campos": [
+                    {
+                        "pagina": 0,
+                        "nombre": "RUC",
+                        "x": 40,
+                        "y": 80,
+                        "tamano": 10,
+                        "field": "RUC",
+                    }
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(mapa.status_code, status.HTTP_200_OK)
+        self.assertEqual(mapa.data["campos"][0]["nombre"], "RUC")
+        self.assertEqual(mapa.data["mapa"]["0"]["RUC"][0], 40)
+        borrado = self.client.delete(f"/api/plantillas-contrato/{creado.data['clave']}/")
+        self.assertEqual(borrado.status_code, status.HTTP_204_NO_CONTENT)
 
     def test_generar_contrato_usa_plantilla_en_bd(self):
         import zipfile
@@ -1345,6 +1666,67 @@ class AuthAndPermissionsTests(APITestCase):
         )
         self.assertEqual(rejected.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("producto", rejected.data)
+
+    def test_solo_quien_tiene_permiso_puede_cambiar_promociones(self):
+        admin = User.objects.create_superuser("admin_promo_venta", "admin_promo_venta@test.com", "pass")
+        marta = User.objects.create_user("marta_promo_venta", password="secret")
+        marta.groups.add(Group.objects.get(name="Operaciones"))
+        supervisor = User.objects.create_user("super_promo_venta", password="secret")
+        supervisor.groups.add(Group.objects.get(name="Supervisor"))
+
+        permitida = Promocion.objects.create(nombre="Bono 30", descripcion="ok")
+        ajena = Promocion.objects.create(nombre="Otra promo", descripcion="no")
+        cliente = Cliente.objects.create(tipo=TipoCliente.PERSONA)
+        producto = Producto.objects.create(
+            nombre="Fibra 50", velocidad=50, precio=40, tipo_cliente=TipoCliente.PERSONA
+        )
+        producto.promociones.set([permitida])
+        flujo = Flujo.objects.create(nombre="Flujo promo venta", tipo_cliente=TipoCliente.PERSONA)
+        paso = Paso.objects.create(nombre="Uno", descripcion="Uno")
+        FlujoPaso.objects.create(flujo=flujo, paso=paso, orden=1)
+
+        self.client.force_authenticate(admin)
+        created = self.client.post(
+            "/api/ventas/",
+            {"cliente": cliente.id, "producto": producto.id, "flujo": flujo.id},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        venta_id = created.data["id"]
+        Venta.objects.filter(id=venta_id).update(creado_por=marta)
+
+        self.client.force_authenticate(marta)
+        forbidden = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"promociones": [permitida.id]},
+            format="json",
+        )
+        self.assertEqual(forbidden.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.force_authenticate(supervisor)
+        rejected = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"promociones": [ajena.id]},
+            format="json",
+        )
+        self.assertEqual(rejected.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("promociones", rejected.data)
+
+        assigned = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"promociones": [permitida.id]},
+            format="json",
+        )
+        self.assertEqual(assigned.status_code, status.HTTP_200_OK)
+        self.assertEqual(assigned.data["promociones"], [permitida.id])
+
+        cleared = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"promociones": []},
+            format="json",
+        )
+        self.assertEqual(cleared.status_code, status.HTTP_200_OK)
+        self.assertEqual(cleared.data["promociones"], [])
 
     def test_supervisor_sees_owner_and_can_reassign_venta(self):
         ana = User.objects.create_user("ana_reasignar", password="secret", first_name="Ana")
@@ -1733,6 +2115,10 @@ class LookupRucTests(APITestCase):
         self.assertEqual(empresa["distrito"], "SAN BORJA")
         self.assertEqual(empresa["numero"], "167")
         self.assertEqual(empresa["tipo_direccion"], "CALLE")
+        self.assertEqual(
+            empresa["domicilio_fiscal"],
+            "CAL.LUIGGI BARSATO NRO. 167 LIMA - LIMA - SAN BORJA",
+        )
         labels = [item["label"] for item in empresa["ficha"]]
         self.assertIn("Actividad(es) Económica(s)", labels)
         self.assertIn("Comprobantes de Pago c/aut. de impresión (F. 806 u 816)", labels)
@@ -1803,6 +2189,7 @@ class LookupRucTests(APITestCase):
             cliente=empresa_cliente,
             ruc="20522317285",
             razon_social="INDOTECH SAC",
+            domicilio_fiscal="CAL. LUIGGI BARSATO NRO. 167 SAN BORJA",
             representante_legal=representante,
         )
         Direccion.objects.create(
@@ -1837,6 +2224,8 @@ class LookupRucTests(APITestCase):
         self.assertEqual(response.data["source"], "cliente")
         self.assertEqual(response.data["cliente_id"], empresa_cliente.id)
         self.assertEqual(response.data["razon_social"], "INDOTECH SAC")
+        self.assertEqual(response.data["domicilio_fiscal"], "CAL. LUIGGI BARSATO NRO. 167 SAN BORJA")
+        self.assertEqual(response.data["empresa_id"], Empresa.objects.get(ruc="20522317285").id)
         self.assertEqual(response.data["nombres"], "Ana")
         self.assertEqual(response.data["producto"], str(producto.id))
         self.assertEqual(response.data["promociones"], [str(promo.id)])
@@ -1852,6 +2241,7 @@ class LookupRucTests(APITestCase):
                 "direccion": "Luiggi Barsato",
                 "numero": "167",
                 "distrito": "SAN BORJA",
+                "domicilio_fiscal": "CAL.LUIGGI BARSATO NRO. 167 LIMA - LIMA - SAN BORJA",
             },
         ):
             response = self.client.get("/api/lookup/ruc/", {"ruc": "20522317285"})
@@ -1859,6 +2249,10 @@ class LookupRucTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["source"], "sunat")
         self.assertEqual(response.data["razon_social"], "INDOTECH SAC")
+        self.assertEqual(
+            response.data["domicilio_fiscal"],
+            "CAL.LUIGGI BARSATO NRO. 167 LIMA - LIMA - SAN BORJA",
+        )
         self.assertIsNone(response.data.get("cliente_id"))
 
     def test_parse_representantes_html(self):

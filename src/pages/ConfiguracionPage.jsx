@@ -3,6 +3,7 @@ import { useForm } from '@tanstack/react-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Field from '../components/Field.jsx'
 import { SelectField, TextAreaField, TextField } from '../components/FormFields.jsx'
+import MultiCheck from '../components/MultiCheck.jsx'
 import { createFlujoSchema, flujoNombreSchema, pasoFormSchema, productoFormSchema, promocionFormSchema, tipoGaleriaFormSchema, withSchema } from '../lib/schemas.js'
 import {
   createFlujo,
@@ -30,7 +31,7 @@ import {
   updateTipoGaleria,
 } from '../service/api.js'
 import { IconGrip } from '../lib/icons.jsx'
-import { tipoClienteLabel } from '../lib/venta.js'
+import { TIPOS_BONO_VELOCIDAD, resumenPromocion, tipoClienteLabel } from '../lib/venta.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
@@ -282,6 +283,14 @@ export default function ConfiguracionPage() {
         header: 'Precio',
       },
       {
+        id: 'promociones',
+        accessorFn: (row) =>
+          row.promociones_detalle?.length
+            ? row.promociones_detalle.map((promo) => promo.nombre).join(', ')
+            : 'Todas',
+        header: 'Promociones',
+      },
+      {
         id: 'acciones',
         header: '',
         cell: (info) => {
@@ -334,6 +343,14 @@ export default function ConfiguracionPage() {
         accessorKey: 'nombre',
         header: 'Promoción',
         cell: (info) => <span className="font-medium">{info.getValue()}</span>,
+      },
+      {
+        id: 'beneficio',
+        header: 'Beneficio',
+        accessorFn: resumenPromocion,
+        cell: (info) => (
+          <span className="text-sm text-slate-600">{info.getValue() || '—'}</span>
+        ),
       },
       {
         id: 'descripcion',
@@ -581,7 +598,7 @@ export default function ConfiguracionPage() {
         <div>
           <h1 className="text-xl font-bold sm:text-2xl">Configuración</h1>
           <p className="text-sm text-slate-500">
-            Productos, promociones, tipos de galería, flujos, pasos y plantillas de contrato se editan
+            Productos, promociones, tipos de galería, flujos, pasos y documentos se editan
             aquí para evitar cambios accidentales.
           </p>
         </div>
@@ -631,6 +648,15 @@ export default function ConfiguracionPage() {
               Nuevo flujo
             </button>
           ) : null}
+          {tab === 'contratos' && (can('api.add_plantillacontrato') || can('api.change_plantillacontrato')) ? (
+            <button
+              type="button"
+              className="btn btn-sm rounded-full border-none bg-blue-600 text-white"
+              onClick={() => setModal({ type: 'create-documento' })}
+            >
+              Nuevo documento
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -642,7 +668,7 @@ export default function ConfiguracionPage() {
           ['pasos', 'Pasos'],
           ['flujos', 'Flujos'],
           ...(can('api.view_plantillacontrato') || can('api.change_plantillacontrato')
-            ? [['contratos', 'Contratos']]
+            ? [['contratos', 'Documentos']]
             : []),
         ].map(([id, label]) => (
           <button
@@ -734,6 +760,8 @@ export default function ConfiguracionPage() {
 
       {tab === 'contratos' ? (
         <PlantillasContratoTab
+          abrirNuevo={modal?.type === 'create-documento'}
+          onCerrarNuevo={close}
           onError={(message) => {
             setError(message)
             setOk('')
@@ -764,6 +792,7 @@ export default function ConfiguracionPage() {
           onClose={close}
           onSave={(form) => createProductoMutation.mutate(form)}
           pending={createProductoMutation.isPending}
+          promociones={promociones}
         />
       ) : null}
 
@@ -781,6 +810,7 @@ export default function ConfiguracionPage() {
           onSave={(form) => updateProductoMutation.mutate({ id: selectedProducto.id, payload: form })}
           pending={updateProductoMutation.isPending}
           producto={selectedProducto}
+          promociones={promociones}
         />
       ) : null}
 
@@ -913,7 +943,15 @@ export default function ConfiguracionPage() {
   )
 }
 
-function ProductoFormModal({ producto, editing = true, onClose, onSave, onDelete, pending }) {
+function ProductoFormModal({
+  producto,
+  editing = true,
+  onClose,
+  onSave,
+  onDelete,
+  pending,
+  promociones = [],
+}) {
   const isCreate = !producto
   const form = useForm({
     defaultValues: {
@@ -921,6 +959,7 @@ function ProductoFormModal({ producto, editing = true, onClose, onSave, onDelete
       velocidad: producto ? String(producto.velocidad) : '',
       precio: producto ? String(producto.precio) : '',
       tipo_cliente: producto?.tipo_cliente ?? 'PERSONA',
+      promociones: (producto?.promociones ?? []).map(String),
     },
     validators: withSchema(productoFormSchema),
     onSubmit: ({ value }) =>
@@ -929,6 +968,7 @@ function ProductoFormModal({ producto, editing = true, onClose, onSave, onDelete
         velocidad: Number(value.velocidad),
         precio: value.precio.trim(),
         tipo_cliente: value.tipo_cliente,
+        promociones: value.promociones.map(Number),
       }),
   })
 
@@ -938,12 +978,14 @@ function ProductoFormModal({ producto, editing = true, onClose, onSave, onDelete
       velocidad: producto ? String(producto.velocidad) : '',
       precio: producto ? String(producto.precio) : '',
       tipo_cliente: producto?.tipo_cliente ?? 'PERSONA',
+      promociones: (producto?.promociones ?? []).map(String),
     })
   }, [form, producto])
 
   return (
     <Modal
       open
+      wide
       title={isCreate ? 'Nuevo producto' : editing ? 'Editar producto' : `Producto: ${producto.nombre}`}
       onClose={onClose}
       footer={
@@ -1024,27 +1066,77 @@ function ProductoFormModal({ producto, editing = true, onClose, onSave, onDelete
             <p>S/ {producto.precio}</p>
           </label>
         )}
+        <form.Subscribe selector={(state) => state.values.promociones}>
+          {(promoIds) => {
+            const promocionesSel = promociones.filter((promo) => promoIds.includes(String(promo.id)))
+            return editing ? (
+              <>
+                <Field form={form} name="promociones">
+                  {(field) => (
+                    <MultiCheck
+                      label="Promociones de este producto"
+                      options={promociones.map((promo) => ({
+                        value: String(promo.id),
+                        label: promo.nombre,
+                      }))}
+                      selected={field.state.value}
+                      onChange={field.handleChange}
+                    />
+                  )}
+                </Field>
+                <p className="text-xs text-slate-500">
+                  Si no marcas ninguna, en una venta se pueden elegir todas. Los PDFs se asignan en
+                  Documentos, no aquí.
+                </p>
+              </>
+            ) : (
+              <label className="text-sm">
+                <span className="mb-1 block text-slate-500">Promociones</span>
+                <p>
+                  {promocionesSel.length
+                    ? promocionesSel.map((promo) => promo.nombre).join(', ')
+                    : 'Todas'}
+                </p>
+              </label>
+            )
+          }}
+        </form.Subscribe>
       </div>
     </Modal>
   )
 }
 
+function promocionFormValues(promocion) {
+  const pct = Number(promocion?.descuento_porcentaje)
+  return {
+    nombre: promocion?.nombre ?? '',
+    descripcion: promocion?.descripcion ?? '',
+    descuento_porcentaje: pct > 0 ? String(pct) : '',
+    bono_velocidad: promocion?.bono_velocidad || 'NINGUNO',
+    bono_mbps: promocion?.bono_mbps ? String(promocion.bono_mbps) : '300',
+  }
+}
+
+function promocionPayload(value) {
+  return {
+    nombre: value.nombre.trim(),
+    descripcion: value.descripcion.trim(),
+    descuento_porcentaje: value.descuento_porcentaje ? Number(value.descuento_porcentaje) : 0,
+    bono_velocidad: value.bono_velocidad,
+    bono_mbps: value.bono_velocidad === 'FIJO' ? Number(value.bono_mbps) : 0,
+  }
+}
+
 function PromocionFormModal({ promocion, editing = true, onClose, onSave, onDelete, pending }) {
   const isCreate = !promocion
   const form = useForm({
-    defaultValues: {
-      nombre: promocion?.nombre ?? '',
-      descripcion: promocion?.descripcion ?? '',
-    },
+    defaultValues: promocionFormValues(promocion),
     validators: withSchema(promocionFormSchema),
-    onSubmit: ({ value }) => onSave({ nombre: value.nombre.trim(), descripcion: value.descripcion.trim() }),
+    onSubmit: ({ value }) => onSave(promocionPayload(value)),
   })
 
   useEffect(() => {
-    form.reset({
-      nombre: promocion?.nombre ?? '',
-      descripcion: promocion?.descripcion ?? '',
-    })
+    form.reset(promocionFormValues(promocion))
   }, [form, promocion])
 
   return (
@@ -1090,6 +1182,74 @@ function PromocionFormModal({ promocion, editing = true, onClose, onSave, onDele
             <p className="font-medium">{promocion.nombre}</p>
           </label>
         )}
+        {editing ? (
+          <>
+            <Field form={form} name="descuento_porcentaje">
+              {(field) => (
+                <TextField
+                  field={field}
+                  inputMode="decimal"
+                  label="Descuento en tarifa (%)"
+                />
+              )}
+            </Field>
+            <p className="-mt-1 text-xs text-slate-500">Vacío o 0 = sin descuento. Por ejemplo 10, 20 o 12.5.</p>
+          </>
+        ) : (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">Descuento</span>
+            <p>
+              {Number(promocion.descuento_porcentaje) > 0
+                ? `${Number(promocion.descuento_porcentaje)}%`
+                : 'Sin descuento'}
+            </p>
+          </label>
+        )}
+        {editing ? (
+          <Field form={form} name="bono_velocidad">
+            {(field) => (
+              <SelectField
+                field={field}
+                includeEmpty={false}
+                label="Bono de velocidad"
+                options={TIPOS_BONO_VELOCIDAD}
+              />
+            )}
+          </Field>
+        ) : (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">Bono de velocidad</span>
+            <p>
+              {promocion.bono_velocidad === 'DUPLICA'
+                ? 'Duplica la velocidad'
+                : promocion.bono_velocidad === 'FIJO'
+                  ? `+${promocion.bono_mbps} Mbps`
+                  : 'Sin bono'}
+            </p>
+          </label>
+        )}
+        {editing ? (
+          <form.Subscribe selector={(state) => state.values.bono_velocidad}>
+            {(tipoBono) =>
+              tipoBono === 'FIJO' ? (
+                <Field form={form} name="bono_mbps">
+                  {(field) => (
+                    <TextField
+                      field={field}
+                      inputMode="numeric"
+                      label="Mbps adicionales"
+                    />
+                  )}
+                </Field>
+              ) : null
+            }
+          </form.Subscribe>
+        ) : promocion.bono_velocidad === 'FIJO' && promocion.bono_mbps ? (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">Mbps adicionales</span>
+            <p>{promocion.bono_mbps}</p>
+          </label>
+        ) : null}
         {editing ? (
           <Field form={form} name="descripcion">
             {(field) => <TextAreaField field={field} label="Descripción" normalize="upper" />}

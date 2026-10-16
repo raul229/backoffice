@@ -21,6 +21,7 @@ from .models import (
     Producto,
     Promocion,
     PromocionVenta,
+    TipoBonoVelocidad,
     TipoCliente,
     TipoDireccion,
     TipoDocumento,
@@ -295,12 +296,13 @@ class EmpresaSerializer(serializers.ModelSerializer):
             "correo",
             "ruc",
             "razon_social",
+            "domicilio_fiscal",
             "representante_legal",
             "representante_legal_detalle",
         ]
 
     def validate(self, attrs):
-        uppercase_fields(attrs, ["razon_social"])
+        uppercase_fields(attrs, ["razon_social", "domicilio_fiscal"])
         if self.instance is None and not attrs.get("correo"):
             raise serializers.ValidationError(
                 {"correo": "El correo de facturación es obligatorio."}
@@ -345,24 +347,78 @@ class ClienteSerializer(serializers.ModelSerializer):
         return DireccionSerializer(obj.direccion_set.all(), many=True).data
 
 
+class PromocionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Promocion
+        fields = [
+            "id",
+            "nombre",
+            "descripcion",
+            "descuento_porcentaje",
+            "bono_velocidad",
+            "bono_mbps",
+        ]
+
+    def validate(self, attrs):
+        uppercase_fields(attrs, ["nombre", "descripcion"])
+        porcentaje = attrs.get("descuento_porcentaje")
+        if porcentaje is None and self.instance is not None:
+            porcentaje = self.instance.descuento_porcentaje
+        if porcentaje is not None and (porcentaje < 0 or porcentaje > 100):
+            raise serializers.ValidationError(
+                {"descuento_porcentaje": "El descuento debe estar entre 0 y 100."}
+            )
+        bono = attrs.get("bono_velocidad")
+        if bono is None and self.instance is not None:
+            bono = self.instance.bono_velocidad
+        mbps = attrs.get("bono_mbps")
+        if mbps is None and self.instance is not None:
+            mbps = self.instance.bono_mbps
+        if bono == TipoBonoVelocidad.FIJO and not mbps:
+            raise serializers.ValidationError(
+                {"bono_mbps": "Indica cuántos Mbps adicionales da el bono."}
+            )
+        if bono != TipoBonoVelocidad.FIJO:
+            attrs["bono_mbps"] = 0
+        return attrs
+
+
 class ProductoSerializer(serializers.ModelSerializer):
+    promociones = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=Promocion.objects.all(), required=False
+    )
+    promociones_detalle = PromocionSerializer(source="promociones", many=True, read_only=True)
+
     class Meta:
         model = Producto
-        fields = ["id", "nombre", "velocidad", "precio", "tipo_cliente"]
+        fields = [
+            "id",
+            "nombre",
+            "velocidad",
+            "precio",
+            "tipo_cliente",
+            "promociones",
+            "promociones_detalle",
+        ]
 
     def validate(self, attrs):
         uppercase_fields(attrs, ["nombre"])
         return attrs
 
+    @transaction.atomic
+    def create(self, validated_data):
+        promociones = validated_data.pop("promociones", [])
+        producto = Producto.objects.create(**validated_data)
+        producto.promociones.set(promociones)
+        return producto
 
-class PromocionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Promocion
-        fields = ["id", "nombre", "descripcion"]
-
-    def validate(self, attrs):
-        uppercase_fields(attrs, ["nombre", "descripcion"])
-        return attrs
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        promociones = validated_data.pop("promociones", None)
+        producto = super().update(instance, validated_data)
+        if promociones is not None:
+            producto.promociones.set(promociones)
+        return producto
 
 
 class PasoSerializer(serializers.ModelSerializer):
@@ -534,6 +590,13 @@ class VentaSerializer(serializers.ModelSerializer):
                 )
             if not attrs.get("producto"):
                 raise serializers.ValidationError({"producto": "Selecciona un producto."})
+        if self.instance is not None and "promociones" in incoming:
+            if user is None or not (
+                user.is_superuser or user.has_perm("api.change_venta_producto")
+            ):
+                raise serializers.ValidationError(
+                    {"promociones": "No tienes permiso para cambiar las promociones de la venta."}
+                )
         if self.instance is not None and incoming & set(VENTA_FECHA_FIELDS):
             if user is None or not (
                 user.is_superuser or user.has_perm("api.change_venta_fechas")
@@ -561,6 +624,23 @@ class VentaSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"creado_por": "El usuario no puede recibir ventas. Debe poder registrarlas."}
                 )
+        if producto is not None:
+            permitidas = set(producto.promociones.values_list("id", flat=True))
+            if permitidas:
+                if "promociones" in incoming:
+                    candidatas = attrs.get("promociones") or []
+                    if any(promo.id not in permitidas for promo in candidatas):
+                        raise serializers.ValidationError(
+                            {
+                                "promociones": "Elige promociones que correspondan a este producto."
+                            }
+                        )
+                elif self.instance is not None and "producto" in incoming:
+                    attrs["promociones"] = [
+                        promo
+                        for promo in self.instance.promociones.all()
+                        if promo.id in permitidas
+                    ]
         return attrs
 
     def _sync_pasos(self, venta):
@@ -604,6 +684,9 @@ class VentaSerializer(serializers.ModelSerializer):
             persistir_cambio_estado(venta, estado_anterior)
         if promociones is not None:
             venta.promociones.set(promociones)
+            cache = getattr(venta, "_prefetched_objects_cache", None)
+            if cache is not None:
+                cache.pop("promociones", None)
         if flujo_cambio:
             self._sync_pasos(venta)
         return venta

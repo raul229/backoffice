@@ -192,12 +192,14 @@ def parse_sunat_html(html_text):
     if match:
         ruc, razon_social = match.group(1), match.group(2).strip()
 
+    domicilio_fiscal = pairs.get("domicilio fiscal", "")
     data = {
         "ruc": ruc,
         "razon_social": razon_social,
         "tipo_cliente": tipo_cliente_desde_ruc(ruc) if ruc else "",
         "ficha": ficha,
-        **parse_domicilio(pairs.get("domicilio fiscal", "")),
+        "domicilio_fiscal": domicilio_fiscal,
+        **parse_domicilio(domicilio_fiscal),
     }
 
     if data["tipo_cliente"] == "PERSONA" and razon_social:

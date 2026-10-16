@@ -1,4 +1,5 @@
 import io
+import re
 import shutil
 import tempfile
 import zipfile
@@ -11,13 +12,11 @@ from rest_framework.exceptions import ValidationError
 
 from .almacen import bytes_plantilla
 from .datos_entel import (
-    ANEXOS_POR_COMBINACION,
     ARCHIVOS_BASE_POR_PLAN,
     HC_ARCHIVO_POR_PLAN,
     HC_COORDS_POR_PLAN,
     MAPA_ENTEL_POR_ARCHIVO,
     NOMBRE_PNG_POR_PAGINA,
-    PLANES_ENTEL,
     PLANTILLA_CORREO_ENTEL,
     PLANTILLA_CREACION_OIT,
     PLANTILLA_TARIFAS_SERVICIOS,
@@ -29,8 +28,11 @@ from .mapeo import (
     parsear_direccion_contrato,
     parsear_fecha_contrato,
 )
+from .plantillas_venta import archivos_pdf_para_venta
 from .pack_fijo import llenar_creacion_oit, llenar_tarifas_servicios
-from .utils import dividir_texto, generar_eml
+from .utils import dividir_texto, generar_eml, partir_en_lineas
+
+_SUFIJO_CAMPO = re.compile(r"_\d+$")
 
 
 def generar_zip_entel(venta, fecha=None, direccion=None, firmas_paginas=None) -> tuple[bytes, str]:
@@ -39,19 +41,19 @@ def generar_zip_entel(venta, fecha=None, direccion=None, firmas_paginas=None) ->
         fecha=parsear_fecha_contrato(fecha),
         direccion=parsear_direccion_contrato(direccion),
     )
-    tarifas = PLANES_ENTEL[plan][velocidad]
     datos_plan = {
-        "_PROMOCION": promocion,
-        "_RENTA_FIJA": str(tarifas["renta"]),
-        "_DESCUENTO": str(tarifas["descuento"]),
-        "_NOMBRE_PLAN": plan,
+        "_PROMOCION": contexto.get("PROMOCION") or promocion,
+        "_RENTA_FIJA": contexto.get("RENTA_FIJA") or "",
+        "_DESCUENTO": contexto.get("DESCUENTO") or "",
+        "_DESCUENTO_CON_IGV": contexto.get("DESCUENTO_CON_IGV") or "",
+        "_NOMBRE_PLAN": contexto.get("NOMBRE_PLAN") or plan,
         "_VELOCIDAD": velocidad,
-        "PROMOCION": promocion,
-        "RENTA_FIJA": str(tarifas["renta"]),
-        "DESCUENTO": str(tarifas["descuento"]),
-        "NOMBRE_PLAN": plan,
+        "PROMOCION": contexto.get("PROMOCION") or promocion,
+        "RENTA_FIJA": contexto.get("RENTA_FIJA") or "",
+        "DESCUENTO": contexto.get("DESCUENTO") or "",
+        "DESCUENTO_CON_IGV": contexto.get("DESCUENTO_CON_IGV") or "",
+        "NOMBRE_PLAN": contexto.get("NOMBRE_PLAN") or plan,
         "VELOCIDAD": velocidad,
-        **tarifas,
     }
     firmas_png = firmas_a_png(firmas_paginas) if firmas_paginas else None
     with tempfile.TemporaryDirectory() as tmp:
@@ -60,10 +62,17 @@ def generar_zip_entel(venta, fecha=None, direccion=None, firmas_paginas=None) ->
         destino = raiz / "salida"
         origenes.mkdir()
         destino.mkdir()
-        pdfs = _materializar_pdfs(origenes, plan, velocidad, promocion)
+        pdfs, mapas = _materializar_pdfs(origenes, venta, plan, velocidad, promocion)
         for ruta in pdfs:
-            firmas = firmas_png if ruta.name == ARCHIVOS_BASE_POR_PLAN.get(plan) else None
-            _llenar_pdf(ruta, destino / ruta.name, contexto, datos_plan, firmas_paginas=firmas)
+            firmas = firmas_png if ruta.name in ARCHIVOS_BASE_POR_PLAN.values() else None
+            _llenar_pdf(
+                ruta,
+                destino / ruta.name,
+                contexto,
+                datos_plan,
+                firmas_paginas=firmas,
+                mapa=mapas.get(ruta.name),
+            )
         if firmas_png:
             for indice, png in firmas_png.items():
                 nombre = NOMBRE_PNG_POR_PAGINA.get(indice)
@@ -104,14 +113,35 @@ def _materializar_pack_fijo(origenes: Path, destino: Path, contexto: dict) -> No
     llenar_tarifas_servicios(origen, destino / PLANTILLA_TARIFAS_SERVICIOS, contexto)
 
 
-def _materializar_pdfs(origenes: Path, plan: str, velocidad: int, promocion: str) -> list[Path]:
-    nombres = [ARCHIVOS_BASE_POR_PLAN[plan], *ANEXOS_POR_COMBINACION.get((plan, velocidad, promocion), [])]
+def _materializar_pdfs(origenes: Path, venta, plan: str, velocidad: int, promocion: str):
+    pares = archivos_pdf_para_venta(venta, plan, velocidad, promocion)
     rutas = []
-    for nombre in nombres:
+    mapas = {}
+    for nombre, mapa in pares:
         ruta = origenes / nombre
         ruta.write_bytes(bytes_plantilla(nombre))
         rutas.append(ruta)
-    return rutas
+        if mapa:
+            mapas[nombre] = mapa
+    return rutas, mapas
+
+
+def _nombre_fuente(campo: str, opciones: dict, contexto: dict, datos_plan: dict):
+    nombre = opciones.get("field") or campo
+    if nombre in contexto or nombre in datos_plan:
+        return nombre
+    base = _SUFIJO_CAMPO.sub("", str(nombre))
+    if base in contexto or base in datos_plan:
+        return base
+    return nombre
+
+
+def _clave_grupo(campo: str, opciones: dict, contexto: dict, datos_plan: dict):
+    if "value" in opciones:
+        return ("value", campo)
+    if "transform" in opciones:
+        return ("transform", opciones["transform"])
+    return ("ctx", _nombre_fuente(campo, opciones, contexto, datos_plan))
 
 
 def _valor(campo: str, opciones: dict, contexto: dict, datos_plan: dict):
@@ -119,7 +149,7 @@ def _valor(campo: str, opciones: dict, contexto: dict, datos_plan: dict):
         return opciones["value"]
     if "transform" in opciones:
         return _transform(opciones["transform"], contexto, datos_plan)
-    nombre = opciones.get("field", campo)
+    nombre = _nombre_fuente(campo, opciones, contexto, datos_plan)
     if nombre in contexto:
         return contexto[nombre]
     if nombre in datos_plan:
@@ -127,14 +157,54 @@ def _valor(campo: str, opciones: dict, contexto: dict, datos_plan: dict):
     return None
 
 
+def textos_pagina(coords: dict, contexto: dict, datos_plan: dict) -> list[tuple]:
+    """(campo, x, y, tamano, texto) ya partido si el mismo dato está varias veces."""
+    items = []
+    for campo, (x, y, opciones) in (coords or {}).items():
+        items.append((campo, x, y, opciones or {}, _valor(campo, opciones or {}, contexto, datos_plan)))
+
+    grupos = {}
+    for indice, (campo, _x, _y, opciones, valor) in enumerate(items):
+        if valor in (None, "") or not opciones.get("max_caracteres"):
+            continue
+        grupos.setdefault(_clave_grupo(campo, opciones, contexto, datos_plan), []).append(indice)
+
+    asignados = {}
+    resultado = []
+    for indice, (campo, x, y, opciones, valor) in enumerate(items):
+        if valor in (None, ""):
+            continue
+        tamano = opciones.get("tamano", 12)
+        clave = _clave_grupo(campo, opciones, contexto, datos_plan)
+        hermanos = grupos.get(clave, [])
+        if indice in asignados:
+            texto = asignados[indice]
+        elif len(hermanos) > 1:
+            limites = [items[i][3].get("max_caracteres") for i in hermanos]
+            lineas = partir_en_lineas(str(valor), limites)
+            for hermano, linea in zip(hermanos, lineas):
+                asignados[hermano] = linea
+            texto = asignados[indice]
+        elif opciones.get("max_caracteres"):
+            texto, _lineas = dividir_texto(str(valor), opciones["max_caracteres"])
+        else:
+            texto = str(valor)
+        if texto in (None, ""):
+            continue
+        y_inicial = y - (tamano * str(texto).count("\n"))
+        resultado.append((campo, x, y_inicial, tamano, texto))
+    return resultado
+
+
 def _transform(nombre: str, contexto: dict, datos_plan: dict) -> str | None:
     if nombre == "doc_y_dni":
         return f"{contexto.get('TIPO_DOCUMENTO_RRLL', '')} {contexto.get('DNI', '')}".strip()
     if nombre == "velocidades":
-        v = int(datos_plan.get("_VELOCIDAD") or 0)
-        return f"{v}                {int(v * 0.7)}               {v}             {int(v * 0.7)}"
+        v = int(contexto.get("VELOCIDAD") or datos_plan.get("_VELOCIDAD") or 0)
+        con_bono = int(contexto.get("VELOCIDAD_CON_BONO") or v)
+        return f"{v}                {con_bono}               {v}             {con_bono}"
     if nombre == "nombre_plan":
-        return f"{datos_plan.get('_NOMBRE_PLAN')} {datos_plan.get('_VELOCIDAD')}"
+        return f"{contexto.get('NOMBRE_PLAN') or datos_plan.get('_NOMBRE_PLAN')} {datos_plan.get('_VELOCIDAD')}"
     if nombre == "dia_mes_anio":
         return (
             f"{contexto.get('DIA', '')}                                    "
@@ -142,9 +212,12 @@ def _transform(nombre: str, contexto: dict, datos_plan: dict) -> str | None:
             f"{contexto.get('ANIO', '')}"
         )
     if nombre == "descuento":
-        return f"S/. {datos_plan.get('_DESCUENTO')}"
+        return f"S/. {contexto.get('DESCUENTO') or datos_plan.get('_DESCUENTO')}"
+    if nombre == "descuento_con_igv":
+        return f"S/. {contexto.get('DESCUENTO_CON_IGV') or datos_plan.get('_DESCUENTO_CON_IGV')}"
     if nombre == "precio_int_solo":
-        renta = float(str(datos_plan.get("_RENTA_FIJA", "0")).replace("S/.", "").strip())
+        bruto = str(contexto.get("RENTA_FIJA") or datos_plan.get("_RENTA_FIJA") or "0")
+        renta = float(bruto.replace("S/.", "").strip() or "0")
         return f"S/. {renta - 9.9:.2f}"
     return None
 
@@ -155,10 +228,11 @@ def _llenar_pdf(
     contexto: dict,
     datos_plan: dict,
     firmas_paginas: dict[int, bytes] | None = None,
+    mapa: dict | None = None,
 ) -> None:
     pdf = pymupdf.open(origen)
     try:
-        paginas = MAPA_ENTEL_POR_ARCHIVO.get(origen.name, {})
+        paginas = mapa if mapa else MAPA_ENTEL_POR_ARCHIVO.get(origen.name, {})
         for num_pagina, coords in paginas.items():
             if num_pagina >= len(pdf):
                 raise ValidationError(
@@ -170,19 +244,8 @@ def _llenar_pdf(
                     }
                 )
             pagina = pdf[num_pagina]
-            for campo, (x, y, opciones) in coords.items():
-                valor = _valor(campo, opciones, contexto, datos_plan)
-                if valor in (None, ""):
-                    continue
-                tamano = opciones.get("tamano", 12)
-                max_caracteres = opciones.get("max_caracteres")
-                if max_caracteres:
-                    texto, lineas = dividir_texto(str(valor), max_caracteres)
-                    y_inicial = y - (tamano * lineas)
-                else:
-                    texto = str(valor)
-                    y_inicial = y
-                pagina.insert_text((x, y_inicial), texto, fontsize=tamano)
+            for _campo, x, y, tamano, texto in textos_pagina(coords, contexto, datos_plan):
+                pagina.insert_text((x, y), texto, fontsize=tamano)
         # Firmas manuscritas encima del texto, en la zona de firma (no reemplazan la hoja).
         if firmas_paginas:
             insertar_firmas_en_pdf(pdf, firmas_paginas)

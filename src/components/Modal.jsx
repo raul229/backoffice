@@ -1,6 +1,15 @@
 import { useEffect } from 'react'
 
-export default function Modal({ open, title, onClose, children, footer, wide = false, stacked = false }) {
+export default function Modal({
+  open,
+  title,
+  onClose,
+  children,
+  footer,
+  wide = false,
+  full = false,
+  stacked = false,
+}) {
   useEffect(() => {
     if (!open) return undefined
     const onKey = (event) => {
@@ -33,8 +42,10 @@ export default function Modal({ open, title, onClose, children, footer, wide = f
   return (
     <dialog className={`modal modal-open ${stacked ? 'z-[1100]' : ''}`} aria-label={title}>
       <div
-        className={`modal-box w-[calc(100%-1.5rem)] max-h-[min(90dvh,40rem)] overflow-y-auto p-4 sm:p-6 ${
-          wide ? 'sm:max-w-4xl' : 'sm:max-w-xl'
+        className={`modal-box w-[calc(100%-1.5rem)] overflow-y-auto p-4 sm:p-6 ${
+          full
+            ? 'max-h-[min(96dvh,74rem)] sm:max-w-[88rem]'
+            : `max-h-[min(90dvh,40rem)] ${wide ? 'sm:max-w-4xl' : 'sm:max-w-xl'}`
         }`}
       >
         <div className="mb-3 flex items-start justify-between gap-3">

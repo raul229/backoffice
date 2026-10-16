@@ -70,15 +70,51 @@ export const productoFormSchema = z.object({
     .refine((value) => Number(value) > 0, 'La velocidad debe ser mayor a 0'),
   precio: requiredText().regex(/^\d+(?:\.\d{1,2})?$/, 'Usa un precio válido, por ejemplo 99.90'),
   tipo_cliente: z.enum(['PERSONA', 'EMPRESA']),
+  promociones: z.array(z.string()),
 })
 
-export const promocionFormSchema = z.object({
-  nombre: requiredText(),
-  descripcion: z.string(),
-})
+export const promocionFormSchema = z
+  .object({
+    nombre: requiredText(),
+    descripcion: z.string(),
+    descuento_porcentaje: z.string(),
+    bono_velocidad: z.enum(['NINGUNO', 'DUPLICA', 'FIJO']),
+    bono_mbps: z.string(),
+  })
+  .superRefine((value, ctx) => {
+    const pct = value.descuento_porcentaje.trim()
+    if (pct && !/^\d+(?:\.\d{1,2})?$/.test(pct)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['descuento_porcentaje'],
+        message: 'Usa un porcentaje, por ejemplo 20 o 12.5.',
+      })
+    } else if (pct && (Number(pct) < 0 || Number(pct) > 100)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['descuento_porcentaje'],
+        message: 'El descuento debe estar entre 0 y 100.',
+      })
+    }
+    if (value.bono_velocidad !== 'FIJO') return
+    if (!/^\d+$/.test(value.bono_mbps) || Number(value.bono_mbps) <= 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['bono_mbps'],
+        message: 'Indica cuántos Mbps adicionales da el bono.',
+      })
+    }
+  })
 
 export const tipoGaleriaFormSchema = z.object({
   nombre: requiredText(),
+})
+
+export const documentoFormSchema = z.object({
+  etiqueta: requiredText(),
+  descripcion: z.string(),
+  grupo: requiredText(),
+  acepta: z.enum(['.pdf', '.xlsx', '.xlsm', '.eml']),
 })
 
 export function requireGaleriaPair(value, ctx) {
@@ -177,6 +213,8 @@ const nuevaVentaClienteBase = {
   madre: z.string(),
   ruc: z.string(),
   razon_social: z.string(),
+  domicilio_fiscal: z.string(),
+  empresa_id: z.string(),
 }
 
 const nuevaVentaDireccionBase = {
@@ -241,4 +279,5 @@ export const empresaEditSchema = z.object({
   ruc: digitCode(11, 'El RUC debe tener 11 dígitos'),
   razon_social: requiredText(),
   correo: requiredText('El correo de facturación es obligatorio').email('Usa un correo válido'),
+  domicilio_fiscal: z.string(),
 })

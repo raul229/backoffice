@@ -18,10 +18,11 @@ import {
   lookupDireccion,
   lookupRuc,
   updateCliente,
+  updateEmpresa,
 } from '../service/api.js'
 import { parseDireccion } from '../lib/address.js'
 import { DOCUMENT_LENGTH, digitCode, nuevaVentaClienteSchema, nuevaVentaDireccionSchema, nuevaVentaSchema, requiredText, validateDocumentNumber } from '../lib/schemas.js'
-import { flujosPorTipo, formatDireccion, productosPorTipo } from '../lib/venta.js'
+import { flujosPorTipo, formatDireccion, productosPorTipo, promocionesPorProducto } from '../lib/venta.js'
 
 const defaultValues = {
   tipo_cliente: 'PERSONA',
@@ -36,6 +37,8 @@ const defaultValues = {
   madre: '',
   ruc: '',
   razon_social: '',
+  domicilio_fiscal: '',
+  empresa_id: '',
   tipo_direccion: 'CALLE',
   direccion: '',
   numero: '',
@@ -99,6 +102,7 @@ const stepDireccionFields = ['direccion', 'numero', 'distrito']
 const LOOKUP_FIELDS = [
   'tipo_cliente',
   'razon_social',
+  'domicilio_fiscal',
   'tipo_documento',
   'numero_documento',
   'nombres',
@@ -130,6 +134,8 @@ function cambiarTipoCliente(form, tipo, { lastRucLookup, lookupRequestId, setLoo
   form.setFieldValue('tipo_cliente', tipo)
   form.setFieldValue('ruc', ruc)
   form.setFieldValue('cliente_id', '')
+  form.setFieldValue('empresa_id', '')
+  form.setFieldValue('domicilio_fiscal', '')
   form.setFieldValue('flujo', '')
   form.setFieldValue('producto', '')
   form.setFieldValue('promociones', [])
@@ -156,6 +162,18 @@ function applyLookup(form, data) {
     form.setFieldValue(name, value)
   }
   form.setFieldValue('cliente_id', data.cliente_id ? String(data.cliente_id) : '')
+  form.setFieldValue('empresa_id', data.empresa_id ? String(data.empresa_id) : '')
+  if (!data.domicilio_fiscal && data.source === 'sunat' && data.direccion) {
+    form.setFieldValue(
+      'domicilio_fiscal',
+      formatDireccion({
+        tipo: data.tipo_direccion || 'CALLE',
+        direccion: data.direccion,
+        numero: data.numero,
+        distrito: data.distrito,
+      }),
+    )
+  }
 }
 
 export default function NuevaVentaPage({ onCancel, onCreated }) {
@@ -184,6 +202,7 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
           const empresa = await createEmpresa({
             ruc: value.ruc,
             razon_social: value.razon_social,
+            domicilio_fiscal: value.domicilio_fiscal.trim(),
             representante_legal: representante.id,
             correo: value.correo.trim().toLowerCase(),
           })
@@ -194,6 +213,11 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
         }
       } else {
         await updateCliente(clienteId, { correo: value.correo.trim().toLowerCase() })
+        if (value.empresa_id) {
+          await updateEmpresa(Number(value.empresa_id), {
+            domicilio_fiscal: value.domicilio_fiscal.trim(),
+          })
+        }
       }
       const direccion = await createDireccion(direccionPayload(value, clienteId))
       return createVenta({
@@ -339,6 +363,16 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
             {(values) => {
               const flujos = flujosPorTipo(flujosQuery.data, values.tipo_cliente)
               const productosTipo = productosPorTipo(productos, values.tipo_cliente)
+              const productoSeleccionado = productosTipo.find(
+                (producto) => String(producto.id) === String(values.producto),
+              )
+              const promocionesProducto = promocionesPorProducto(promociones, productoSeleccionado)
+              const promocionesValidas = (values.promociones ?? []).filter((id) =>
+                promocionesProducto.some((promo) => String(promo.id) === String(id)),
+              )
+              if (promocionesValidas.length !== (values.promociones ?? []).length) {
+                form.setFieldValue('promociones', promocionesValidas)
+              }
               const flujoSeleccionado = flujos.find((flujo) => String(flujo.id) === String(values.flujo))
               const pasosFlujo = [...(flujoSeleccionado?.pasos_detalle ?? [])].sort(
                 (a, b) => a.orden - b.orden,
@@ -513,13 +547,18 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                             field={field}
                             label="Promociones"
                             multiple
-                            options={promociones.map((promo) => ({
+                            options={promocionesProducto.map((promo) => ({
                               value: String(promo.id),
                               label: promo.nombre,
                             }))}
                           />
                         )}
                       </Field>
+                      {values.producto && promocionesProducto.length === 0 ? (
+                        <p className="text-xs text-slate-500 md:col-span-2">
+                          No hay promociones disponibles para este producto.
+                        </p>
+                      ) : null}
                     </div>
                 </>
               )
@@ -574,6 +613,23 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
               ) : null}
             </div>
           <div className={`mt-4 grid gap-4 md:grid-cols-2 ${step !== 1 ? 'hidden' : ''}`}>
+              {tipoCliente === 'EMPRESA' ? (
+                <div className="md:col-span-2">
+                  <Field form={form} name="domicilio_fiscal">
+                    {(field) => (
+                      <TextAreaField
+                        field={field}
+                        label="Domicilio fiscal"
+                        normalize="upper"
+                        rows={2}
+                      />
+                    )}
+                  </Field>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Se completa con SUNAT y se usa en el contrato. Abajo va la dirección de instalación.
+                  </p>
+                </div>
+              ) : null}
               <Field form={form} name="tipo_direccion">
                 {(field) => (
                   <SelectField

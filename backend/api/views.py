@@ -80,7 +80,7 @@ class VentaModelPermissions(DjangoModelPermissions):
                 )
             ):
                 return True
-            if keys == {"producto"} and (
+            if keys and keys <= {"producto", "promociones"} and (
                 request.user.is_superuser or request.user.has_perm("api.change_venta_producto")
             ):
                 return True
@@ -136,7 +136,7 @@ class TipoGaleriaViewSet(AuthenticatedModelViewSet):
 
 
 class ProductoViewSet(AuthenticatedModelViewSet):
-    queryset = Producto.objects.order_by("nombre")
+    queryset = Producto.objects.prefetch_related("promociones").order_by("nombre")
     serializer_class = ProductoSerializer
 
 
@@ -221,6 +221,7 @@ class VentaViewSet(AuthenticatedModelViewSet):
         )
         .prefetch_related(
             "promociones",
+            "producto__promociones",
             "ventapaso_set__flujo_paso__paso",
             "comentarios__creado_por",
         )

@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
+import MultiCheck from '../components/MultiCheck.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 import FirmasContratoScan from '../components/FirmasContratoScan.jsx'
 import StatusBadge, { PasoEstadoBadge } from '../components/StatusBadge.jsx'
-import { getVenta, getFlujos, getProductos, getAsesores, updateVenta, updateVentaPaso, deleteVenta, createVentaComentario, generarContrato, generarCorreoCuentaPlanner } from '../service/api.js'
+import { getVenta, getFlujos, getProductos, getPromociones, getAsesores, updateVenta, updateVentaPaso, deleteVenta, createVentaComentario, generarContrato, generarCorreoCuentaPlanner } from '../service/api.js'
 import { displayName } from '../lib/auth.js'
 import {
   celularCliente,
@@ -21,6 +22,7 @@ import {
   numeroVenta,
   pasoActual,
   productosPorTipo,
+  promocionesPorProducto,
   tipoClienteLabel,
   VENTA_CODIGOS,
 } from '../lib/venta.js'
@@ -147,6 +149,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   }, [comentarios.length, ultimoComentarioId])
   const flujosQuery = useQuery({ queryKey: ['flujos'], queryFn: getFlujos })
   const productosQuery = useQuery({ queryKey: ['productos'], queryFn: getProductos })
+  const promocionesQuery = useQuery({ queryKey: ['promociones'], queryFn: getPromociones })
   const canReasignar = can('api.reasignar_venta')
   const asesoresQuery = useQuery({
     queryKey: ['asesores'],
@@ -243,6 +246,10 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
     venta.producto_detalle && !productos.some((item) => item.id === venta.producto)
       ? [venta.producto_detalle, ...productos]
       : productos
+  const productoActual =
+    productosOpciones.find((item) => item.id === venta.producto) || venta.producto_detalle
+  const promocionesProducto = promocionesPorProducto(promocionesQuery.data, productoActual)
+  const promocionesSeleccionadas = (venta.promociones ?? []).map(String)
   const canChangeVenta = can('api.change_venta')
   const canChangePaso = can('api.change_ventapaso')
   const canDeleteVenta = can('api.delete_venta')
@@ -560,11 +567,36 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
               </dd>
             </div>
             <div className="col-span-2">
-              <dt className="text-slate-400">Promociones</dt>
+              <dt className="mb-1 text-slate-400">Promociones</dt>
               <dd>
-                {venta.promociones_detalle?.length
-                  ? venta.promociones_detalle.map((promo) => promo.nombre).join(', ')
-                  : 'Sin promoción'}
+                {showProducto ? (
+                  promocionesProducto.length ? (
+                    <MultiCheck
+                      disabled={saving}
+                      options={promocionesProducto.map((promo) => ({
+                        value: String(promo.id),
+                        label: promo.nombre,
+                      }))}
+                      selected={promocionesSeleccionadas}
+                      onChange={(ids) => {
+                        const actual = [...promocionesSeleccionadas].sort()
+                        const siguiente = [...ids].sort()
+                        if (actual.join() === siguiente.join()) return
+                        ventaMutation.mutate({ promociones: ids.map(Number) })
+                      }}
+                    />
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      {promocionesQuery.isPending
+                        ? 'Cargando promociones…'
+                        : 'No hay promociones disponibles para este producto.'}
+                    </p>
+                  )
+                ) : venta.promociones_detalle?.length ? (
+                  venta.promociones_detalle.map((promo) => promo.nombre).join(', ')
+                ) : (
+                  'Sin promoción'
+                )}
               </dd>
             </div>
           </dl>

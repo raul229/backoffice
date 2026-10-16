@@ -546,6 +546,24 @@ export function getPlantillasContrato() {
   return request("/plantillas-contrato/")
 }
 
+export function createDocumento(payload) {
+  return request("/plantillas-contrato/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateDocumento(clave, payload) {
+  return request(`/plantillas-contrato/${clave}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteDocumento(clave) {
+  return request(`/plantillas-contrato/${clave}/`, { method: "DELETE" })
+}
+
 export async function uploadPlantillaContrato(clave, file) {
   const headers = {}
   const token = csrfToken()

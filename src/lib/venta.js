@@ -1,3 +1,19 @@
+export const TIPOS_BONO_VELOCIDAD = [
+  { value: 'NINGUNO', label: 'Sin bono de velocidad' },
+  { value: 'DUPLICA', label: 'Duplica la velocidad' },
+  { value: 'FIJO', label: 'Mbps adicionales fijos' },
+]
+
+export function resumenPromocion(promo) {
+  if (!promo) return ''
+  const partes = []
+  const pct = Number(promo.descuento_porcentaje)
+  if (pct > 0) partes.push(`${pct}% de descuento`)
+  if (promo.bono_velocidad === 'DUPLICA') partes.push('Duplica velocidad')
+  if (promo.bono_velocidad === 'FIJO' && promo.bono_mbps) partes.push(`+${promo.bono_mbps} Mbps`)
+  return partes.join(' · ')
+}
+
 export function nombreCliente(cliente) {
   if (!cliente) return 'Sin cliente'
   if (cliente.tipo === 'PERSONA' && cliente.persona) {
@@ -16,6 +32,13 @@ export function flujosPorTipo(flujos, tipo) {
 
 export function productosPorTipo(productos, tipo) {
   return (productos ?? []).filter((producto) => producto.tipo_cliente === tipo)
+}
+
+export function promocionesPorProducto(promociones, producto) {
+  const permitidas = producto?.promociones
+  if (!permitidas?.length) return promociones ?? []
+  const ids = new Set(permitidas.map(Number))
+  return (promociones ?? []).filter((promo) => ids.has(Number(promo.id)))
 }
 
 export const VENTA_CODIGOS = [
