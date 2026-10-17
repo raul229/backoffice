@@ -80,9 +80,12 @@ class VentaModelPermissions(DjangoModelPermissions):
                 )
             ):
                 return True
-            if keys and keys <= {"producto", "promociones"} and (
-                request.user.is_superuser or request.user.has_perm("api.change_venta_producto")
-            ):
+            permitidos = set()
+            if request.user.is_superuser or request.user.has_perm("api.change_venta_producto"):
+                permitidos.add("producto")
+            if request.user.is_superuser or request.user.has_perm("api.change_venta_promociones"):
+                permitidos.add("promociones")
+            if keys and keys <= {"producto", "promociones"} and keys <= permitidos:
                 return True
         return super().has_permission(request, view)
 

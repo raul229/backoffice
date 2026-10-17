@@ -256,6 +256,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
   const canEditCodigos = can('api.change_venta_codigos')
   const canEditFechas = can('api.change_venta_fechas')
   const canEditProducto = can('api.change_venta_producto')
+  const canEditPromociones = can('api.change_venta_promociones')
   const canAddComentario = can('api.add_ventacomentario')
   const canGenerarContrato = can('api.generar_contrato')
   const esEmpresa = cliente?.tipo === 'EMPRESA'
@@ -272,12 +273,14 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
     canChangePaso ||
     canEditFechas ||
     canEditProducto ||
+    canEditPromociones ||
     canEditCodigos ||
     canReasignar
   const showVentaSelects = editing && canChangeVenta
   const showPasoSelects = editing && canChangePaso
   const showFechas = editing && canEditFechas
   const showProducto = editing && canEditProducto
+  const showPromociones = editing && canEditPromociones
   const showCodigos = editing && canEditCodigos
   const showReasignar = editing && canReasignar
 
@@ -569,7 +572,7 @@ export default function VentaDetailPage({ ventaId, onBack, onDeleted }) {
             <div className="col-span-2">
               <dt className="mb-1 text-slate-400">Promociones</dt>
               <dd>
-                {showProducto ? (
+                {showPromociones ? (
                   promocionesProducto.length ? (
                     <MultiCheck
                       disabled={saving}

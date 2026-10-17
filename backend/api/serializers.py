@@ -592,7 +592,7 @@ class VentaSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"producto": "Selecciona un producto."})
         if self.instance is not None and "promociones" in incoming:
             if user is None or not (
-                user.is_superuser or user.has_perm("api.change_venta_producto")
+                user.is_superuser or user.has_perm("api.change_venta_promociones")
             ):
                 raise serializers.ValidationError(
                     {"promociones": "No tienes permiso para cambiar las promociones de la venta."}

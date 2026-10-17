@@ -1,4 +1,4 @@
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import Group, Permission, User
 from rest_framework import status
 from rest_framework.test import APITestCase
 from unittest.mock import patch
@@ -1860,6 +1860,33 @@ class AuthAndPermissionsTests(APITestCase):
         )
         self.assertEqual(forbidden.status_code, status.HTTP_403_FORBIDDEN)
 
+        ana = User.objects.create_user("ana_promo_venta", password="secret")
+        ana.groups.add(Group.objects.get(name="Asesor"))
+        Venta.objects.filter(id=venta_id).update(creado_por=ana)
+        self.client.force_authenticate(ana)
+        asesor = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"promociones": [permitida.id]},
+            format="json",
+        )
+        self.assertEqual(asesor.status_code, status.HTTP_403_FORBIDDEN)
+
+        solo_producto = User.objects.create_user("solo_prod_promo", password="secret")
+        solo_producto.user_permissions.add(
+            Permission.objects.get(content_type__app_label="api", codename="view_venta"),
+            Permission.objects.get(
+                content_type__app_label="api", codename="change_venta_producto"
+            ),
+        )
+        Venta.objects.filter(id=venta_id).update(creado_por=solo_producto)
+        self.client.force_authenticate(solo_producto)
+        sin_promo = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {"promociones": [permitida.id]},
+            format="json",
+        )
+        self.assertEqual(sin_promo.status_code, status.HTTP_403_FORBIDDEN)
+
         self.client.force_authenticate(supervisor)
         rejected = self.client.patch(
             f"/api/ventas/{venta_id}/",
@@ -2053,6 +2080,9 @@ class AuthAndPermissionsTests(APITestCase):
         catalog = self.client.get("/api/auth/permissions/")
         self.assertEqual(catalog.status_code, status.HTTP_200_OK)
         self.assertTrue(catalog.data)
+        permisos = [item[0] for grupo in catalog.data for item in grupo["items"]]
+        self.assertIn("api.change_venta_promociones", permisos)
+        self.assertIn("api.change_venta_producto", permisos)
 
         created = self.client.post(
             "/api/auth/roles/",
