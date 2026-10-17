@@ -598,6 +598,10 @@ export async function uploadPlantillaContrato(clave, file) {
   return response.json()
 }
 
+export function getVistaExcel(clave) {
+  return request(`/plantillas-contrato/${clave}/vista-excel/`)
+}
+
 export async function downloadPlantillaContrato(clave, fallbackName) {
   const headers = {}
   const token = csrfToken()

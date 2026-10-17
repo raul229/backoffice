@@ -20,12 +20,12 @@ export const CAMPOS_CONTRATO_GRUPOS = [
     campos: [
       { value: 'RAZON_SOCIAL', label: 'Razón social', ejemplo: 'EMPRESA DEMO S.A.C.' },
       { value: 'RUC', label: 'RUC', ejemplo: '20123456789' },
-      { value: 'NOMBRE_PLAN', label: 'Plan', ejemplo: 'INT EMPRESA' },
+      { value: 'NOMBRE_PLAN', label: 'Nombre Producto', ejemplo: 'INTERNET EMPRESAS 1000M' },
       { value: 'VELOCIDAD', label: 'Velocidad', ejemplo: '200' },
       { value: 'VELOCIDAD_CON_BONO', label: 'Velocidad con bono', ejemplo: '400' },
       { value: 'BONO_MBPS', label: 'Bono (Mbps)', ejemplo: '200' },
       { value: 'TIPO_BONO', label: 'Tipo de bono', ejemplo: 'Duplica la velocidad' },
-      { value: 'PROMOCION', label: 'Promoción', ejemplo: 'Bono de velocidad por 6m' },
+      { value: 'PROMOCION', label: 'Promoción', ejemplo: 'DESCUENTO 30% EN EL CARGO FIJO INDEFINIDO' },
       { value: 'RENTA_FIJA', label: 'Renta fija (con IGV)', ejemplo: '125.00' },
       { value: 'RENTA_SIN_IGV', label: 'Renta fija (sin IGV)', ejemplo: '105.93' },
       { value: 'DESCUENTO_PORCENTAJE', label: 'Descuento %', ejemplo: '30' },
@@ -40,7 +40,7 @@ export const CAMPOS_CONTRATO_GRUPOS = [
   {
     grupo: 'Representante',
     campos: [
-      { value: 'RRLL', label: 'Representante legal', ejemplo: 'ANA PEREZ' },
+      { value: 'RRLL', label: 'Representante legal', ejemplo: 'JULIO MANUEL PICHIULE CASTAÑEDA' },
       { value: 'TIPO_DOCUMENTO_RRLL', label: 'Tipo de documento', ejemplo: 'DNI' },
       { value: 'DNI', label: 'N° documento', ejemplo: '12345678' },
       { value: 'CORREO_RRLL', label: 'Correo', ejemplo: 'ana@empresa.com' },
@@ -50,7 +50,7 @@ export const CAMPOS_CONTRATO_GRUPOS = [
   {
     grupo: 'Dirección',
     campos: [
-      { value: 'DOMICILIO_INSTALACION', label: 'Domicilio de instalación', ejemplo: 'AV. AREQUIPA 123, MIRAFLORES PISO 3 INT. 12' },
+      { value: 'DOMICILIO_INSTALACION', label: 'Domicilio de instalación', ejemplo: 'Jiron LUIS GIRIBALDI NRO. 738 Piso 2 INT 215 Galeria GOLDEN PLAZA GIRIBALDI URB. GAMARRA (La Victoria - Lima - Lima) (REF: -12.067108,-77.016333)' },
       { value: 'DOMICILIO_FISCAL', label: 'Domicilio fiscal', ejemplo: 'CAL. LUIGGI BARSATO NRO. 167 SAN BORJA' },
       { value: 'DISTRITO', label: 'Distrito', ejemplo: 'MIRAFLORES' },
       { value: 'PROVINCIA', label: 'Provincia', ejemplo: 'LIMA' },
@@ -100,17 +100,30 @@ const CAMPOS_POR_CLAVE = Object.fromEntries(
   CAMPOS_CONTRATO_GRUPOS.flatMap((grupo) => grupo.campos.map((campo) => [campo.value, campo])),
 )
 
+export function esPdf(item) {
+  return (item?.acepta ?? []).includes('.pdf')
+}
+
+export function esExcel(item) {
+  const acepta = item?.acepta ?? []
+  return acepta.includes('.xlsx') || acepta.includes('.xlsm')
+}
+
+export const TAMANO_LETRA_PDF = 10
+
 export function campoVacio() {
   return {
     pagina: 0,
     nombre: '',
     x: 0,
     y: 0,
-    tamano: 12,
+    tamano: TAMANO_LETRA_PDF,
     max_caracteres: '',
     field: '',
     value: '',
     transform: '',
+    hoja: '',
+    celda: '',
   }
 }
 
@@ -192,6 +205,13 @@ export function dividirTexto(texto, maxCaracteres) {
 }
 
 /** Igual que `partir_en_lineas` del generador. */
+export function repartirORepetir(texto, limites) {
+  const lineas = partirEnLineas(texto, limites)
+  if (limites.length <= 1) return lineas
+  if (lineas.slice(1).some(Boolean)) return lineas
+  return limites.map(() => String(texto ?? ''))
+}
+
 export function partirEnLineas(texto, limites) {
   const palabras = String(texto ?? '').split(/\s+/).filter(Boolean)
   const lineas = []
@@ -230,8 +250,17 @@ export function partirEnLineas(texto, limites) {
   return lineas
 }
 
+/** Solo domicilio se parte entre pines; nombre, RUC, etc. se copian enteros. */
+const CAMPOS_REPARTIR = new Set(['DOMICILIO_INSTALACION', 'DOMICILIO_FISCAL'])
+
+export function campoSeReparte(campo) {
+  const clave = typeof campo === 'string' ? campo : campo?.field || campo?.nombre
+  return CAMPOS_REPARTIR.has(baseCampo(clave))
+}
+
 export function textoVistaMultilinea(campo, campos = [], index = 0) {
   const crudo = textoVistaCampo(campo)
+  if (!campoSeReparte(campo)) return dividirTexto(crudo, campo?.max_caracteres).texto
   const lista = campos.length ? campos : [campo]
   const indice = campos.length ? index : 0
   const fuente = claveFuente(campo)
@@ -247,7 +276,7 @@ export function textoVistaMultilinea(campo, campos = [], index = 0) {
   if (hermanos.length <= 1) return dividirTexto(crudo, campo?.max_caracteres).texto
   const limites = hermanos.map((i) => Number(lista[i].max_caracteres))
   const posicion = Math.max(hermanos.indexOf(indice), 0)
-  return partirEnLineas(crudo, limites)[posicion] || ''
+  return repartirORepetir(crudo, limites)[posicion] || ''
 }
 
 const ANCHO_POR_DEFECTO = {
@@ -263,17 +292,89 @@ export function anchoPorDefecto(nombre) {
   return ANCHO_POR_DEFECTO[baseCampo(nombre)] || ''
 }
 
-/** Ancho aproximado en puntos PDF (Helvetica ~ 0.5 × tamaño). */
-export function anchoCampoPdf(campo) {
-  const tamano = Number(campo?.tamano) || 12
+/** Ancho medio de una letra en Helvetica (mayúsculas de contratos ~ 0.6 × tamaño). */
+export const ANCHO_LETRA_HELVETICA = 0.6
+
+/** Métricas de Helvetica WinAnsi, iguales a `page.insert_text(..., fontname="helv")`. */
+export const HELVETICA_ASCENDER = 1.075
+export const HELVETICA_DESCENDER = 0.299
+export const HELVETICA_INTERLINEADO = HELVETICA_ASCENDER + HELVETICA_DESCENDER
+
+const HELVETICA_ASCII = [
+  278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556,
+  556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667,
+  611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667,
+  667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500,
+  222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
+]
+
+const HELVETICA_LATIN = [
+  278, 333, 556, 556, 556, 556, 260, 556, 333, 737, 370, 556, 584, 333, 737, 333, 400, 584, 333,
+  333, 333, 556, 537, 278, 333, 333, 365, 556, 834, 834, 834, 611, 667, 667, 667, 667, 667, 667,
+  1000, 722, 667, 667, 667, 667, 278, 278, 278, 278, 722, 722, 778, 778, 778, 778, 778, 584, 778,
+  722, 722, 722, 722, 667, 667, 611, 556, 556, 556, 556, 556, 556, 889, 500, 556, 556, 556, 556,
+  278, 278, 278, 278, 556, 556, 556, 556, 556, 556, 556, 584, 611, 556, 556, 556, 556, 500, 556,
+  500,
+]
+
+function avanceHelvetica(codigo) {
+  if (codigo >= 32 && codigo <= 126) return HELVETICA_ASCII[codigo - 32] / 1000
+  if (codigo >= 160 && codigo <= 255) return HELVETICA_LATIN[codigo - 160] / 1000
+  return ANCHO_LETRA_HELVETICA
+}
+
+export function anchoTextoHelvetica(texto, tamano = TAMANO_LETRA_PDF) {
+  const size = Math.max(Number(tamano) || TAMANO_LETRA_PDF, 1)
+  let ancho = 0
+  for (const ch of String(texto ?? '')) {
+    if (ch === '\n') continue
+    ancho += avanceHelvetica(ch.codePointAt(0)) * size
+  }
+  return ancho
+}
+
+export function anchoLineaHelvetica(texto, tamano = TAMANO_LETRA_PDF) {
+  let maximo = 0
+  for (const linea of String(texto ?? '').split('\n')) {
+    maximo = Math.max(maximo, anchoTextoHelvetica(linea, tamano))
+  }
+  return maximo
+}
+
+function tamanoCampo(campo) {
+  return Math.max(Number(campo?.tamano) || TAMANO_LETRA_PDF, 1)
+}
+
+export function anchoTopeCampo(campo) {
+  const tamano = tamanoCampo(campo)
   const max = Number(campo?.max_caracteres)
-  if (max > 0) return max * tamano * 0.5
-  const letras = String(textoVistaCampo(campo)).length || 8
-  return Math.min(letras, 24) * tamano * 0.5
+  if (!(max > 0)) return 0
+  return max * tamano * ANCHO_LETRA_HELVETICA
+}
+
+/** Ancho pintado en puntos PDF (Helvetica real). */
+export function anchoCampoPdf(campo, texto) {
+  const tamano = tamanoCampo(campo)
+  const pintado = anchoLineaHelvetica(texto ?? textoVistaCampo(campo), tamano)
+  return Math.max(pintado, tamano)
+}
+
+/** Recuadro del glifo, mismo origen que `insert_text` (baseline en y, y crece hacia abajo). */
+export function cajaCampoPdf(campo, texto, { incluirTope = false } = {}) {
+  const tamano = tamanoCampo(campo)
+  const contenido = texto ?? textoVistaCampo(campo)
+  const lineas = Math.max(String(contenido ?? '').split('\n').length, 1)
+  return {
+    left: Number(campo?.x) || 0,
+    top: (Number(campo?.y) || 0) - HELVETICA_ASCENDER * tamano,
+    width: Math.max(anchoCampoPdf(campo, contenido), incluirTope ? anchoTopeCampo(campo) : 0),
+    height: lineas * HELVETICA_INTERLINEADO * tamano,
+    tamano,
+  }
 }
 
 export function caracteresDesdeAncho(anchoPdf, tamano) {
-  const letra = Math.max(Number(tamano) || 12, 1) * 0.5
+  const letra = Math.max(Number(tamano) || TAMANO_LETRA_PDF, 1) * ANCHO_LETRA_HELVETICA
   return Math.max(8, Math.round(Number(anchoPdf) / letra))
 }
 

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   CAMPOS_CONTRATO_GRUPOS,
+  HELVETICA_INTERLINEADO,
+  TAMANO_LETRA_PDF,
   TRANSFORMACIONES,
-  anchoCampoPdf,
   anchoPorDefecto,
+  cajaCampoPdf,
   caracteresDesdeAncho,
   campoVacio,
   etiquetaCampo,
@@ -68,6 +70,7 @@ export default function MapaDocumentoEditor({
   const [numPages, setNumPages] = useState(0)
   const [pageIndex, setPageIndex] = useState(0)
   const [pageSize, setPageSize] = useState({ width: 595, height: 842 })
+  const [vistaScale, setVistaScale] = useState(1)
   const [pending, setPending] = useState(null)
   const [selected, setSelected] = useState(null)
   const [busqueda, setBusqueda] = useState('')
@@ -148,17 +151,20 @@ export default function MapaDocumentoEditor({
         const dpr = window.devicePixelRatio || 1
         const ctx = canvas.getContext('2d')
         if (!ctx) return
-        canvas.width = Math.floor(viewport.width * dpr)
-        canvas.height = Math.floor(viewport.height * dpr)
-        canvas.style.width = `${Math.floor(viewport.width)}px`
-        canvas.style.height = `${Math.floor(viewport.height)}px`
+        canvas.width = Math.round(viewport.width * dpr)
+        canvas.height = Math.round(viewport.height * dpr)
+        canvas.style.width = `${viewport.width}px`
+        canvas.style.height = `${viewport.height}px`
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
         ctx.clearRect(0, 0, viewport.width, viewport.height)
         const tarea = page.render({ canvasContext: ctx, canvas, viewport })
         renderRef.current = tarea
         tarea.promise.catch(() => {})
         await tarea.promise
-        if (!cancelado) setPageSize({ width: base.width, height: base.height })
+        if (!cancelado) {
+          setPageSize({ width: base.width, height: base.height })
+          setVistaScale(viewport.width / base.width)
+        }
       } catch (err) {
         const nombre = err?.name || ''
         if (cancelado || nombre === 'RenderingCancelledException' || /destroy/i.test(String(err?.message))) {
@@ -173,6 +179,19 @@ export default function MapaDocumentoEditor({
       renderRef.current = null
     }
   }, [pageIndex, numPages, pdfBlob])
+
+  useEffect(() => {
+    const el = pageRef.current
+    if (!el || !pageSize.width) return undefined
+    const sync = () => {
+      const ancho = el.getBoundingClientRect().width
+      if (ancho) setVistaScale(ancho / pageSize.width)
+    }
+    sync()
+    const observer = new ResizeObserver(sync)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [pageSize.width, pageIndex, numPages, pdfBlob])
 
   const deEstaPagina = campos
     .map((campo, index) => ({ campo, index }))
@@ -193,7 +212,7 @@ export default function MapaDocumentoEditor({
         field: spec.field || (nombre === base ? '' : base),
         value: spec.value || '',
         transform: spec.transform || '',
-        tamano: spec.tamano || 12,
+        tamano: spec.tamano || TAMANO_LETRA_PDF,
         max_caracteres: spec.max_caracteres ?? anchoPorDefecto(base),
       },
     ])
@@ -257,8 +276,9 @@ export default function MapaDocumentoEditor({
       <div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm text-slate-500">
-            Clic en el recuadro y elige el dato. Puedes colocarlo otra vez: si tiene letras/línea, la
-            siguiente etiqueta continúa el texto que no cupo. El tirador derecho define el ancho.
+            Clic en el recuadro y elige el dato. El nombre (solicitante y representante) se copia
+            entero en cada etiqueta. Solo el domicilio continúa en el siguiente recuadro si no
+            cabe. El tirador derecho define el ancho.
           </p>
           <div className="flex items-center gap-1">
             <button
@@ -325,31 +345,41 @@ export default function MapaDocumentoEditor({
               setPending({ ...punto, pagina: pageIndex })
             }}
           >
-            <canvas ref={canvasRef} className="block max-w-full" />
+            <canvas ref={canvasRef} className="block" />
             {deEstaPagina.map(({ campo, index }) => {
-              const ancho = anchoCampoPdf(campo)
+              const texto = textoVistaMultilinea(campo, campos, index)
               const seleccionado = selected === index
+              const caja = cajaCampoPdf(campo, texto, { incluirTope: seleccionado })
               return (
                 <div
                   key={`${campo.nombre}-${index}`}
-                  className={`absolute rounded px-1 py-0.5 text-left leading-tight shadow ${
+                  className={`absolute overflow-visible text-left shadow-sm ${
                     seleccionado
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-blue-100/90 text-blue-900 ring-1 ring-blue-300'
+                      ? 'bg-blue-600/80 text-white'
+                      : 'bg-blue-100/70 text-blue-950 ring-1 ring-blue-300'
                   }`}
                   style={{
-                    left: `${(Number(campo.x) / pageSize.width) * 100}%`,
-                    top: `${(Number(campo.y) / pageSize.height) * 100}%`,
-                    width: `${(ancho / pageSize.width) * 100}%`,
-                    fontSize: `${Math.max(8, Number(campo.tamano) || 12)}px`,
-                    transform: 'translateY(-100%)',
-                    whiteSpace: 'pre-wrap',
-                    overflowWrap: 'anywhere',
+                    left: `${caja.left * vistaScale}px`,
+                    top: `${caja.top * vistaScale}px`,
+                    width: `${caja.width * vistaScale}px`,
+                    height: `${caja.height * vistaScale}px`,
+                    fontSize: `${caja.tamano * vistaScale}px`,
+                    fontFamily: 'Helvetica, Arial, sans-serif',
+                    lineHeight: HELVETICA_INTERLINEADO,
+                    whiteSpace: 'pre',
+                    overflowWrap: 'normal',
+                    wordBreak: 'keep-all',
                   }}
                   onPointerDown={(event) => {
                     event.stopPropagation()
                     event.currentTarget.setPointerCapture(event.pointerId)
-                    dragRef.current = { index, modo: 'mover' }
+                    const punto = coordsDesdeEvento(event, pageRef.current, pageSize)
+                    dragRef.current = {
+                      index,
+                      modo: 'mover',
+                      dx: punto.x - Number(campo.x),
+                      dy: punto.y - Number(campo.y),
+                    }
                     setSelected(index)
                     setPending(null)
                   }}
@@ -357,13 +387,13 @@ export default function MapaDocumentoEditor({
                     if (!dragRef.current || dragRef.current.index !== index || !pageRef.current) return
                     if (dragRef.current.modo !== 'mover') return
                     const punto = coordsDesdeEvento(event, pageRef.current, pageSize)
-                    mover(index, punto.x, punto.y)
+                    mover(index, punto.x - dragRef.current.dx, punto.y - dragRef.current.dy)
                   }}
                   onPointerUp={() => {
                     dragRef.current = null
                   }}
                 >
-                  {textoVistaMultilinea(campo, campos, index)}
+                  {texto}
                   {seleccionado ? (
                     <span
                       className="absolute top-0 right-0 h-full w-2 cursor-ew-resize bg-white/50"
@@ -393,8 +423,8 @@ export default function MapaDocumentoEditor({
               <span
                 className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-rose-500 ring-2 ring-white"
                 style={{
-                  left: `${(pending.x / pageSize.width) * 100}%`,
-                  top: `${(pending.y / pageSize.height) * 100}%`,
+                  left: `${pending.x * vistaScale}px`,
+                  top: `${pending.y * vistaScale}px`,
                 }}
               />
             ) : null}

@@ -1,3 +1,6 @@
+from .utils import TAMANO_LETRA_PDF
+
+
 def mapa_a_json(mapa: dict) -> dict:
     resultado = {}
     for pagina, campos in (mapa or {}).items():
@@ -38,11 +41,13 @@ def mapa_a_campos(data: dict) -> list[dict]:
                     "nombre": nombre,
                     "x": spec[0],
                     "y": spec[1],
-                    "tamano": opciones.get("tamano", 12),
+                    "tamano": opciones.get("tamano", TAMANO_LETRA_PDF),
                     "max_caracteres": opciones.get("max_caracteres") or "",
                     "field": opciones.get("field") or "",
                     "value": "" if "value" not in opciones else opciones.get("value"),
                     "transform": opciones.get("transform") or "",
+                    "hoja": opciones.get("hoja") or "",
+                    "celda": opciones.get("celda") or "",
                 }
             )
     campos.sort(key=lambda item: (item["pagina"], item["nombre"]))
@@ -84,6 +89,12 @@ def campos_a_mapa(campos) -> dict:
         transform = str(item.get("transform") or "").strip()
         if transform:
             opciones["transform"] = transform
+        hoja = str(item.get("hoja") or "").strip()
+        if hoja:
+            opciones["hoja"] = hoja
+        celda = str(item.get("celda") or "").strip().upper().replace("$", "")
+        if celda:
+            opciones["celda"] = celda
         mapa.setdefault(pagina, {})[nombre] = [
             _numero(item.get("x")),
             _numero(item.get("y")),

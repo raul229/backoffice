@@ -8,6 +8,7 @@ from .plantillas_views import (
     descargar_plantilla_contrato,
     plantillas_contrato,
     subir_plantilla_contrato,
+    vista_excel_plantilla,
 )
 from .reportes_views import reporte_ventas
 from .views import (
@@ -60,6 +61,11 @@ urlpatterns = [
         "plantillas-contrato/<slug:clave>/archivo/",
         descargar_plantilla_contrato,
         name="api-plantillas-contrato-archivo",
+    ),
+    path(
+        "plantillas-contrato/<slug:clave>/vista-excel/",
+        vista_excel_plantilla,
+        name="api-plantillas-contrato-vista-excel",
     ),
     path("lookup/ruc/", lookup_ruc, name="api-lookup-ruc"),
     path("lookup/direccion/", lookup_direccion, name="api-lookup-direccion"),

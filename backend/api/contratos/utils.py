@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from email.message import EmailMessage
 from email.policy import EmailPolicy
@@ -12,6 +13,12 @@ from .correo_contrato import cuerpo_html_contrato
 # que algunos clientes muestran como texto o rompen etiquetas HTML.
 EML_POLICY = EmailPolicy(utf8=True, cte_type="8bit")
 
+# Helvetica (`helv`) en PyMuPDF: baseline en y, siguiente línea a interlineado × tamaño.
+TAMANO_LETRA_PDF = 10
+HELVETICA_ASCENDER = 1.075
+HELVETICA_DESCENDER = 0.299
+HELVETICA_INTERLINEADO = HELVETICA_ASCENDER + HELVETICA_DESCENDER
+
 
 def nuevo_mensaje_eml() -> EmailMessage:
     return EmailMessage(policy=EML_POLICY)
@@ -19,6 +26,10 @@ def nuevo_mensaje_eml() -> EmailMessage:
 
 def serializar_eml(msg: EmailMessage) -> bytes:
     return msg.as_bytes(policy=EML_POLICY)
+
+
+# Solo domicilio se reparte entre pines; el resto (RRLL, RUC, etc.) se copia entero.
+CAMPOS_REPARTIR = {"DOMICILIO_INSTALACION", "DOMICILIO_FISCAL"}
 
 
 def dividir_texto(texto, max_caracteres):
@@ -38,6 +49,22 @@ def dividir_texto(texto, max_caracteres):
             longitud_actual = len(palabra)
             numero_lineas += 1
     return resultado, numero_lineas
+
+
+def campo_se_reparte(nombre) -> bool:
+    base = re.sub(r"_\d+$", "", str(nombre or ""))
+    return base in CAMPOS_REPARTIR
+
+
+def repartir_o_repetir(texto, limites):
+    """Domicilio: si cabe en el primer pin se copia; si no, continúa en el siguiente."""
+    lineas = partir_en_lineas(texto, limites)
+    if len(limites) <= 1:
+        return lineas
+    if any(lineas[1:]):
+        return lineas
+    crudo = str(texto or "")
+    return [crudo] * len(limites)
 
 
 def partir_en_lineas(texto, limites):

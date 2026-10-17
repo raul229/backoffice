@@ -11,6 +11,7 @@ from rest_framework.exceptions import NotFound, PermissionDenied, ValidationErro
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from .contratos.excel import CELDA_RE, campos_excel, es_excel, nombres_hojas, vista_excel
 from .contratos.mapas import campos_a_mapa, mapa_a_campos, json_a_mapa
 from .models import Documento, PlantillaContrato, Producto, Promocion
 
@@ -173,13 +174,15 @@ def _registro(clave: str) -> PlantillaContrato | None:
 
 
 def _paginas_necesarias(documento: Documento) -> int:
+    if es_excel(documento):
+        return 1
     mapa = json_a_mapa(documento.mapa) if documento.mapa else {}
     if not mapa:
         return 1
     return max(mapa) + 1
 
 
-def _validar_archivo(documento: Documento, nombre: str, contenido: bytes) -> None:
+def _validar_archivo(documento: Documento, nombre: str, contenido: bytes) -> list[str] | None:
     extension = Path(nombre).suffix.lower()
     acepta = documento.acepta or [".pdf"]
     if extension not in acepta:
@@ -212,21 +215,13 @@ def _validar_archivo(documento: Documento, nombre: str, contenido: bytes) -> Non
         if contenido[:2] != b"PK":
             raise ValidationError({"archivo": "El archivo no es un Excel válido."})
         try:
-            wb = load_workbook(
-                BytesIO(contenido),
-                keep_vba=extension == ".xlsm",
-                read_only=True,
-                data_only=True,
-            )
+            hojas = nombres_hojas(contenido, keep_vba=extension == ".xlsm")
         except Exception as exc:
             raise ValidationError({"archivo": "No se pudo leer el Excel."}) from exc
-        try:
-            for hoja in documento.hojas or []:
-                if hoja not in wb.sheetnames:
-                    raise ValidationError({"archivo": f'Falta la hoja "{hoja}" en el Excel.'})
-        finally:
-            wb.close()
-        return
+        for hoja in documento.hojas or []:
+            if hoja not in hojas:
+                raise ValidationError({"archivo": f'Falta la hoja "{hoja}" en el Excel.'})
+        return hojas
 
     if extension == ".eml":
         try:
@@ -305,6 +300,9 @@ def _actualizar_documento(request, clave):
                 raise ValidationError(
                     {"campos": f"Fórmula no válida: {transform}."}
                 )
+            celda = str(item.get("celda") or "").strip().upper().replace("$", "")
+            if celda and not CELDA_RE.match(celda):
+                raise ValidationError({"campos": f"Celda no válida: {item.get('celda')}."})
         documento.mapa = mapa
     documento.save()
     _asignar(documento, data)
@@ -359,7 +357,7 @@ def subir_plantilla_contrato(request, clave):
     if archivo is None:
         raise ValidationError({"archivo": "Selecciona un archivo."})
     contenido = archivo.read()
-    _validar_archivo(documento, archivo.name, contenido)
+    hojas = _validar_archivo(documento, archivo.name, contenido)
     nombre = Path(archivo.name).name[:200]
     registro, _created = PlantillaContrato.objects.update_or_create(
         clave=clave,
@@ -371,10 +369,36 @@ def subir_plantilla_contrato(request, clave):
             "actualizado_por": request.user,
         },
     )
+    extra = []
     if not documento.archivo:
         documento.archivo = nombre
-        documento.save(update_fields=["archivo"])
+        extra.append("archivo")
+    if hojas and not documento.hojas:
+        documento.hojas = hojas
+        extra.append("hojas")
+    if extra:
+        documento.save(update_fields=extra)
     return Response(_serialize(_documento(clave), registro))
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def vista_excel_plantilla(request, clave):
+    _require_perm(
+        request.user,
+        "api.view_plantillacontrato",
+        "No tienes permiso para ver las plantillas de contrato.",
+    )
+    documento = _documento(clave)
+    if not es_excel(documento):
+        raise ValidationError({"detail": "Este documento no es un Excel."})
+    registro = PlantillaContrato.objects.filter(clave=clave).first()
+    if registro is None:
+        raise NotFound("Aún no hay un archivo cargado para esta plantilla.")
+    try:
+        return Response(vista_excel(bytes(registro.contenido), campos_excel(documento)))
+    except Exception as exc:
+        raise ValidationError({"detail": "No se pudo leer el Excel."}) from exc
 
 
 @api_view(["GET"])

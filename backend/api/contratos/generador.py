@@ -11,6 +11,7 @@ from openpyxl import load_workbook
 from rest_framework.exceptions import ValidationError
 
 from .almacen import bytes_plantilla
+from .excel import campos_excel, es_excel, normalizar_celda
 from .datos_entel import (
     ARCHIVOS_BASE_POR_PLAN,
     HC_ARCHIVO_POR_PLAN,
@@ -28,9 +29,15 @@ from .mapeo import (
     parsear_direccion_contrato,
     parsear_fecha_contrato,
 )
-from .plantillas_venta import archivos_pdf_para_venta
+from .plantillas_venta import archivos_pdf_para_venta, documentos_para_venta
 from .pack_fijo import llenar_creacion_oit, llenar_tarifas_servicios
-from .utils import dividir_texto, generar_eml, partir_en_lineas
+from .utils import (
+    TAMANO_LETRA_PDF,
+    campo_se_reparte,
+    dividir_texto,
+    generar_eml,
+    repartir_o_repetir,
+)
 
 _SUFIJO_CAMPO = re.compile(r"_\d+$")
 
@@ -78,12 +85,14 @@ def generar_zip_entel(venta, fecha=None, direccion=None, firmas_paginas=None) ->
                 nombre = NOMBRE_PNG_POR_PAGINA.get(indice)
                 if nombre:
                     (destino / nombre).write_bytes(png)
+        excel_llenos = _materializar_excels(origenes, destino, venta, contexto, datos_plan)
         hc_nombre = HC_ARCHIVO_POR_PLAN[plan]
-        hc_bytes = bytes_plantilla(hc_nombre, requerida=False)
-        if hc_bytes:
-            origen_hc = origenes / hc_nombre
-            origen_hc.write_bytes(hc_bytes)
-            _llenar_hc(origen_hc, destino / hc_nombre, contexto, HC_COORDS_POR_PLAN.get(plan, {}))
+        if hc_nombre not in excel_llenos:
+            hc_bytes = bytes_plantilla(hc_nombre, requerida=False)
+            if hc_bytes:
+                origen_hc = origenes / hc_nombre
+                origen_hc.write_bytes(hc_bytes)
+                _llenar_hc(origen_hc, destino / hc_nombre, contexto, HC_COORDS_POR_PLAN.get(plan, {}))
         if plan == "Pack Empresas" and str(contexto.get("NUMERO_FIJO") or "").strip():
             _materializar_pack_fijo(origenes, destino, contexto)
         eml_bytes = bytes_plantilla(PLANTILLA_CORREO_ENTEL, requerida=False)
@@ -167,6 +176,9 @@ def textos_pagina(coords: dict, contexto: dict, datos_plan: dict) -> list[tuple]
     for indice, (campo, _x, _y, opciones, valor) in enumerate(items):
         if valor in (None, "") or not opciones.get("max_caracteres"):
             continue
+        fuente = opciones.get("field") or campo
+        if not campo_se_reparte(fuente):
+            continue
         grupos.setdefault(_clave_grupo(campo, opciones, contexto, datos_plan), []).append(indice)
 
     asignados = {}
@@ -174,14 +186,14 @@ def textos_pagina(coords: dict, contexto: dict, datos_plan: dict) -> list[tuple]
     for indice, (campo, x, y, opciones, valor) in enumerate(items):
         if valor in (None, ""):
             continue
-        tamano = opciones.get("tamano", 12)
+        tamano = opciones.get("tamano", TAMANO_LETRA_PDF)
         clave = _clave_grupo(campo, opciones, contexto, datos_plan)
         hermanos = grupos.get(clave, [])
         if indice in asignados:
             texto = asignados[indice]
         elif len(hermanos) > 1:
             limites = [items[i][3].get("max_caracteres") for i in hermanos]
-            lineas = partir_en_lineas(str(valor), limites)
+            lineas = repartir_o_repetir(str(valor), limites)
             for hermano, linea in zip(hermanos, lineas):
                 asignados[hermano] = linea
             texto = asignados[indice]
@@ -191,8 +203,7 @@ def textos_pagina(coords: dict, contexto: dict, datos_plan: dict) -> list[tuple]
             texto = str(valor)
         if texto in (None, ""):
             continue
-        y_inicial = y - (tamano * str(texto).count("\n"))
-        resultado.append((campo, x, y_inicial, tamano, texto))
+        resultado.append((campo, x, y, tamano, texto))
     return resultado
 
 
@@ -245,7 +256,7 @@ def _llenar_pdf(
                 )
             pagina = pdf[num_pagina]
             for _campo, x, y, tamano, texto in textos_pagina(coords, contexto, datos_plan):
-                pagina.insert_text((x, y), texto, fontsize=tamano)
+                pagina.insert_text((x, y), texto, fontsize=tamano, fontname="helv")
         # Firmas manuscritas encima del texto, en la zona de firma (no reemplazan la hoja).
         if firmas_paginas:
             insertar_firmas_en_pdf(pdf, firmas_paginas)
@@ -254,17 +265,87 @@ def _llenar_pdf(
         pdf.close()
 
 
-def _llenar_hc(origen: Path, destino: Path, contexto: dict, coords: dict) -> None:
-    shutil.copy(origen, destino)
-    wb = load_workbook(destino, keep_vba=True)
-    for campo, (hoja, celda) in coords.items():
-        valor = contexto.get(campo)
-        if valor in (None, ""):
+def _materializar_excels(origenes: Path, destino: Path, venta, contexto: dict, datos_plan: dict) -> set[str]:
+    llenos = set()
+    for documento in documentos_para_venta(venta):
+        if not es_excel(documento):
             continue
-        wb[hoja][celda] = valor
-    for nombre in wb.sheetnames:
-        wb[nombre].sheet_state = "visible" if nombre == "Formulario" else "hidden"
-    wb.save(destino)
+        nombre = (documento.archivo or "").strip()
+        if not nombre or nombre in (PLANTILLA_CREACION_OIT, PLANTILLA_TARIFAS_SERVICIOS):
+            continue
+        contenido = bytes_plantilla(nombre, requerida=False)
+        if not contenido:
+            continue
+        campos = campos_excel(documento)
+        origen = origenes / nombre
+        origen.write_bytes(contenido)
+        _llenar_excel(
+            origen,
+            destino / nombre,
+            contexto,
+            datos_plan,
+            campos,
+            keep_vba=nombre.lower().endswith(".xlsm"),
+            hojas_visibles=documento.hojas,
+        )
+        llenos.add(nombre)
+    return llenos
+
+
+def _llenar_excel(
+    origen: Path,
+    destino: Path,
+    contexto: dict,
+    datos_plan: dict,
+    campos: list[dict],
+    keep_vba: bool = False,
+    hojas_visibles: list | None = None,
+) -> None:
+    shutil.copy(origen, destino)
+    wb = load_workbook(destino, keep_vba=keep_vba)
+    try:
+        for item in campos or []:
+            celda = normalizar_celda(item.get("celda"))
+            if not celda:
+                continue
+            hoja = str(item.get("hoja") or "").strip() or (wb.sheetnames[0] if wb.sheetnames else "")
+            if hoja not in wb.sheetnames:
+                continue
+            opciones = {}
+            if item.get("field"):
+                opciones["field"] = item["field"]
+            if item.get("transform"):
+                opciones["transform"] = item["transform"]
+            if item.get("value") not in (None, ""):
+                opciones["value"] = item["value"]
+            valor = _valor(item.get("nombre") or "", opciones, contexto, datos_plan)
+            if valor in (None, ""):
+                continue
+            wb[hoja][celda].value = valor
+        visibles = [str(item) for item in (hojas_visibles or []) if item]
+        if len(visibles) == 1 and visibles[0] in wb.sheetnames:
+            unica = visibles[0]
+            for nombre in wb.sheetnames:
+                wb[nombre].sheet_state = "visible" if nombre == unica else "hidden"
+        wb.save(destino)
+    finally:
+        wb.close()
+
+
+def _llenar_hc(origen: Path, destino: Path, contexto: dict, coords: dict) -> None:
+    campos = [
+        {"nombre": campo, "hoja": hoja, "celda": celda, "field": campo}
+        for campo, (hoja, celda) in (coords or {}).items()
+    ]
+    _llenar_excel(
+        origen,
+        destino,
+        contexto,
+        {},
+        campos,
+        keep_vba=True,
+        hojas_visibles=["Formulario"],
+    )
 
 
 def _zip_carpeta(carpeta: Path) -> bytes:

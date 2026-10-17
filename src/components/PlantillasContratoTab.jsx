@@ -12,7 +12,7 @@ import {
   uploadPlantillaContrato,
 } from '../service/api.js'
 import { displayName } from '../lib/auth.js'
-import { camposDesdeDocumento, FORMATOS_DOCUMENTO, GRUPOS_DOCUMENTO } from '../lib/documento.js'
+import { camposDesdeDocumento, esExcel, esPdf, FORMATOS_DOCUMENTO, GRUPOS_DOCUMENTO } from '../lib/documento.js'
 import { documentoFormSchema, withSchema } from '../lib/schemas.js'
 import { formatFecha } from '../lib/venta.js'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -23,6 +23,7 @@ import Modal from './Modal.jsx'
 import MultiCheck from './MultiCheck.jsx'
 import ConfirmModal from './ConfirmModal.jsx'
 import MapaDocumentoEditor from './MapaDocumentoEditor.jsx'
+import MapaExcelEditor from './MapaExcelEditor.jsx'
 
 function formatBytes(n) {
   if (!n) return ''
@@ -44,10 +45,6 @@ function etiquetaUso(item) {
   if (productos.length && promociones.length) return `${prods} · solo con ${promos}`
   if (productos.length) return `Siempre en ${prods}`
   return `Si la venta tiene ${promos}`
-}
-
-function esPdf(item) {
-  return (item?.acepta ?? []).includes('.pdf')
 }
 
 export default function PlantillasContratoTab({ onError, onOk, abrirNuevo = false, onCerrarNuevo }) {
@@ -112,7 +109,9 @@ export default function PlantillasContratoTab({ onError, onOk, abrirNuevo = fals
       abrirEdicion(item)
       onOk(
         item.cargada
-          ? `Se creó “${item.etiqueta}”. Haz clic en el PDF para colocar los datos.`
+          ? esExcel(item)
+            ? `Se creó “${item.etiqueta}”. Haz clic en una celda o escribe su id para colocar los datos.`
+            : `Se creó “${item.etiqueta}”. Haz clic en el PDF para colocar los datos.`
           : `Se creó “${item.etiqueta}”. Carga el archivo y coloca los datos sobre la hoja.`,
       )
     },
@@ -126,6 +125,7 @@ export default function PlantillasContratoTab({ onError, onOk, abrirNuevo = fals
         descripcion: item.descripcion || '',
         grupo: item.grupo,
         acepta: item.acepta,
+        hojas: item.hojas || [],
         campos: item.campos || [],
         productos: item.productos || [],
         promociones: item.promociones || [],
@@ -188,7 +188,7 @@ export default function PlantillasContratoTab({ onError, onOk, abrirNuevo = fals
         grupo: draft.grupo.trim(),
         productos: draft.productos.map(Number),
         promociones: draft.promociones.map(Number),
-        campos: esPdf(editing) ? draft.campos : undefined,
+        campos: esPdf(editing) || esExcel(editing) ? draft.campos : undefined,
       },
     })
   }
@@ -471,9 +471,19 @@ export default function PlantillasContratoTab({ onError, onOk, abrirNuevo = fals
                 onError={onError}
                 onUpload={(file) => uploadMutation.mutate({ clave: editing.clave, file })}
               />
+            ) : esExcel(editing) ? (
+              <MapaExcelEditor
+                key={editing.clave}
+                campos={draft.campos}
+                documento={editing}
+                uploading={uploading === editing.clave}
+                onChange={(campos) => setDraft({ ...draft, campos })}
+                onError={onError}
+                onUpload={(file) => uploadMutation.mutate({ clave: editing.clave, file })}
+              />
             ) : (
               <p className="text-sm text-slate-500">
-                Este formato no se llena sobre un PDF. Reemplaza el archivo si la plantilla cambia.
+                Este formato no se llena celda a celda. Reemplaza el archivo si la plantilla cambia.
               </p>
             )}
           </div>

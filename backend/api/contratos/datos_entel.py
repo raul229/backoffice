@@ -14,7 +14,7 @@ Opciones disponibles:
     - 'value'          texto fijo que se imprime literalmente
     - 'field'          nombre real del dato (default: el nombre del campo)
     - 'transform'      función nombrada que produce el texto
-    - 'tamano'         tamaño de fuente (default 12)
+    - 'tamano'         tamaño de fuente (default 10)
     - 'max_caracteres' si está presente, divide el texto en varias líneas
 
 Resolución de un valor (en `GeneradorEntel._resolver_valor`):

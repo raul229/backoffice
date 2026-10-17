@@ -1033,6 +1033,58 @@ class ApiEndpointsTests(APITestCase):
         )
         self.assertEqual([item[4] for item in duplicados], ["20522317285", "20522317285"])
 
+        nombres = textos_pagina(
+            {
+                "RRLL": (10, 100, {"max_caracteres": 40}),
+                "RRLL_2": (10, 200, {"field": "RRLL", "max_caracteres": 40}),
+            },
+            {"RRLL": "ANA PEREZ"},
+            {},
+        )
+        self.assertEqual([item[4] for item in nombres], ["ANA PEREZ", "ANA PEREZ"])
+
+        largo = "JULIO MANUEL PICHIULE CASTAÑEDA"
+        repetidos = textos_pagina(
+            {
+                "RRLL": (10, 100, {"max_caracteres": 20, "tamano": 10}),
+                "RRLL_2": (10, 200, {"field": "RRLL", "max_caracteres": 20, "tamano": 10}),
+            },
+            {"RRLL": largo},
+            {},
+        )
+        self.assertEqual(len(repetidos), 2)
+        self.assertEqual(repetidos[0][4].replace("\n", " "), largo)
+        self.assertEqual(repetidos[1][4].replace("\n", " "), largo)
+        self.assertEqual(repetidos[0][4], repetidos[1][4])
+
+    def test_textos_pagina_primera_linea_en_y(self):
+        from api.contratos.generador import textos_pagina
+        from api.contratos.utils import HELVETICA_ASCENDER, HELVETICA_INTERLINEADO
+
+        pines = textos_pagina(
+            {"RAZON_SOCIAL": (40, 200, {"max_caracteres": 8, "tamano": 10})},
+            {"RAZON_SOCIAL": "EMPRESA DEMO SAC"},
+            {},
+        )
+        self.assertEqual(len(pines), 1)
+        _campo, x, y, tamano, texto = pines[0]
+        self.assertEqual((x, y, tamano), (40, 200, 10))
+        self.assertIn("\n", texto)
+
+        import pymupdf
+
+        pagina = pymupdf.open().new_page(width=400, height=400)
+        pagina.insert_text((x, y), texto, fontsize=tamano, fontname="helv")
+        lineas = [
+            span["bbox"]
+            for bloque in pagina.get_text("dict")["blocks"]
+            for linea in bloque.get("lines", [])
+            for span in linea.get("spans", [])
+        ]
+        self.assertGreaterEqual(len(lineas), 2)
+        self.assertAlmostEqual(lineas[0][1], y - HELVETICA_ASCENDER * tamano, places=1)
+        self.assertAlmostEqual(lineas[1][1] - lineas[0][1], HELVETICA_INTERLINEADO * tamano, places=1)
+
     def test_generar_contrato_internet_firmas_opcionales(self):
         import zipfile
         from io import BytesIO
@@ -1382,6 +1434,111 @@ class ApiEndpointsTests(APITestCase):
         self.assertEqual(mapa.data["mapa"]["0"]["RUC"][0], 40)
         borrado = self.client.delete(f"/api/plantillas-contrato/{creado.data['clave']}/")
         self.assertEqual(borrado.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_documento_excel_mapa_vista_y_llenado(self):
+        from io import BytesIO
+        import zipfile
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from openpyxl import Workbook, load_workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
+
+        wb = Workbook()
+        hoja = wb.active
+        hoja.title = "Formulario"
+        hoja["A1"] = "etiqueta ruc"
+        hoja["A1"].font = Font(bold=True, color="FFFFFF")
+        hoja["A1"].fill = PatternFill("solid", fgColor="1F497D")
+        hoja.merge_cells("C2:F2")
+        hoja["C2"] = "titulo seccion"
+        hoja["C2"].alignment = Alignment(horizontal="center")
+        hoja["F7"] = "vacio"
+        hoja["F7"].fill = PatternFill("solid", fgColor="FFF2CC")
+        hoja["B40"] = "tipo de servicio"
+        raw = BytesIO()
+        wb.save(raw)
+        contenido = raw.getvalue()
+
+        creado = self.client.post(
+            "/api/plantillas-contrato/",
+            {
+                "etiqueta": "Hoja calificación demo",
+                "grupo": "Hojas de calificación",
+                "acepta": [".xlsx"],
+            },
+            format="json",
+        )
+        self.assertEqual(creado.status_code, status.HTTP_201_CREATED)
+        clave = creado.data["clave"]
+        subida = self.client.post(
+            f"/api/plantillas-contrato/{clave}/",
+            {
+                "archivo": SimpleUploadedFile(
+                    "hc-demo.xlsx",
+                    contenido,
+                    content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+            format="multipart",
+        )
+        self.assertEqual(subida.status_code, status.HTTP_200_OK)
+        self.assertEqual(subida.data["hojas"], ["Formulario"])
+
+        vista = self.client.get(f"/api/plantillas-contrato/{clave}/vista-excel/")
+        self.assertEqual(vista.status_code, status.HTTP_200_OK)
+        self.assertEqual(vista.data["hojas"][0]["nombre"], "Formulario")
+        self.assertEqual(vista.data["hojas"][0]["valores"]["A1"], "etiqueta ruc")
+        self.assertEqual(vista.data["hojas"][0]["valores"]["B40"], "tipo de servicio")
+        self.assertGreaterEqual(vista.data["hojas"][0]["max_fila"], 40)
+        self.assertEqual(vista.data["hojas"][0]["min_col"], 1)
+        self.assertTrue(vista.data["hojas"][0]["estilos"]["A1"]["negrita"])
+        self.assertTrue(vista.data["hojas"][0]["estilos"]["A1"]["fondo"].upper().endswith("1F497D"))
+        self.assertTrue(
+            any(item["celda"] == "C2" and item["cols"] >= 4 for item in vista.data["hojas"][0]["combinadas"])
+        )
+
+        mala = self.client.patch(
+            f"/api/plantillas-contrato/{clave}/",
+            {"campos": [{"pagina": 0, "nombre": "RUC", "celda": "99", "hoja": "Formulario"}]},
+            format="json",
+        )
+        self.assertEqual(mala.status_code, status.HTTP_400_BAD_REQUEST)
+
+        mapa = self.client.patch(
+            f"/api/plantillas-contrato/{clave}/",
+            {
+                "campos": [
+                    {
+                        "pagina": 0,
+                        "nombre": "RUC",
+                        "hoja": "Formulario",
+                        "celda": "F7",
+                        "field": "RUC",
+                    }
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(mapa.status_code, status.HTTP_200_OK)
+        self.assertEqual(mapa.data["campos"][0]["celda"], "F7")
+        self.assertEqual(mapa.data["mapa"]["0"]["RUC"][2]["celda"], "F7")
+        vista_con_mapa = self.client.get(f"/api/plantillas-contrato/{clave}/vista-excel/")
+        self.assertEqual(vista_con_mapa.status_code, status.HTTP_200_OK)
+        self.assertEqual(vista_con_mapa.data["hojas"][0]["valores"]["B40"], "tipo de servicio")
+        self.assertGreaterEqual(vista_con_mapa.data["hojas"][0]["max_fila"], 40)
+
+        self._cargar_plantillas_en_bd()
+        venta_id = self._venta_empresa_entel()
+        venta = Venta.objects.get(id=venta_id)
+        Documento.objects.get(clave=clave).productos.add(venta.producto)
+        response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        with zipfile.ZipFile(BytesIO(response.content)) as archivo:
+            self.assertIn("hc-demo.xlsx", archivo.namelist())
+            lleno = load_workbook(BytesIO(archivo.read("hc-demo.xlsx")))["Formulario"]
+        self.assertEqual(str(lleno["F7"].value), "20522317285")
+        self.assertTrue(str(lleno["F7"].fill.fgColor.rgb).upper().endswith("FFF2CC"))
+        self.assertTrue(lleno["A1"].font.bold)
+        self.assertEqual(str(lleno["C2"].value), "titulo seccion")
 
     def test_generar_contrato_usa_plantilla_en_bd(self):
         import zipfile
