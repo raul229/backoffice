@@ -1435,6 +1435,44 @@ class ApiEndpointsTests(APITestCase):
         borrado = self.client.delete(f"/api/plantillas-contrato/{creado.data['clave']}/")
         self.assertEqual(borrado.status_code, status.HTTP_204_NO_CONTENT)
 
+    def test_borrar_documento_quita_el_archivo_cargado(self):
+        import pymupdf
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        creado = self.client.post(
+            "/api/plantillas-contrato/",
+            {
+                "etiqueta": "Anexo a borrar",
+                "descripcion": "Con archivo",
+                "grupo": "Anexos",
+                "acepta": [".pdf"],
+            },
+            format="json",
+        )
+        self.assertEqual(creado.status_code, status.HTTP_201_CREATED)
+        clave = creado.data["clave"]
+        pdf = pymupdf.open()
+        pdf.new_page()
+        contenido = pdf.tobytes()
+        pdf.close()
+        subida = self.client.post(
+            f"/api/plantillas-contrato/{clave}/",
+            {"archivo": SimpleUploadedFile("anexo.pdf", contenido, content_type="application/pdf")},
+            format="multipart",
+        )
+        self.assertEqual(subida.status_code, status.HTTP_200_OK)
+        self.assertTrue(subida.data["cargada"])
+        self.assertTrue(PlantillaContrato.objects.filter(clave=clave).exists())
+
+        borrado = self.client.delete(f"/api/plantillas-contrato/{clave}/")
+        self.assertEqual(borrado.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Documento.objects.filter(clave=clave).exists())
+        self.assertFalse(PlantillaContrato.objects.filter(clave=clave).exists())
+        self.assertEqual(
+            self.client.get(f"/api/plantillas-contrato/{clave}/archivo/").status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
     def test_documento_excel_mapa_vista_y_llenado(self):
         from io import BytesIO
         import zipfile

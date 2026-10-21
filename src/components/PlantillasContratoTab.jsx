@@ -321,12 +321,27 @@ export default function PlantillasContratoTab({ onError, onOk, abrirNuevo = fals
                   </button>
                 </>
               ) : null}
+              {canDelete ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs text-rose-600"
+                  onClick={() =>
+                    setConfirm({
+                      clave: item.clave,
+                      title: 'Eliminar documento',
+                      message: `¿Eliminar “${item.etiqueta}” y el archivo cargado? Esta acción no se puede deshacer.`,
+                    })
+                  }
+                >
+                  Eliminar
+                </button>
+              ) : null}
             </ActionsCell>
           )
         },
       },
     ],
-    [canChange, downloadMutation, duplicateMutation, uploadMutation, uploading],
+    [canChange, canDelete, downloadMutation, duplicateMutation, uploadMutation, uploading],
   )
 
   if (query.isError) {
@@ -377,8 +392,9 @@ export default function PlantillasContratoTab({ onError, onOk, abrirNuevo = fals
                   className="btn btn-ghost mr-auto text-rose-600"
                   onClick={() =>
                     setConfirm({
+                      clave: editing.clave,
                       title: 'Eliminar documento',
-                      message: `¿Eliminar “${editing.etiqueta}”? Las ventas volverán al mapa Entel si no queda otro documento asignado.`,
+                      message: `¿Eliminar “${editing.etiqueta}” y el archivo cargado? Esta acción no se puede deshacer.`,
                     })
                   }
                 >
@@ -496,7 +512,7 @@ export default function PlantillasContratoTab({ onError, onOk, abrirNuevo = fals
           message={confirm.message}
           pending={deleteMutation.isPending}
           onCancel={() => setConfirm(null)}
-          onConfirm={() => deleteMutation.mutate(editing.clave)}
+          onConfirm={() => deleteMutation.mutate(confirm.clave)}
         />
       ) : null}
     </section>
