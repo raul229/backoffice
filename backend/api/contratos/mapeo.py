@@ -4,9 +4,15 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from rest_framework.exceptions import ValidationError
 
-from .datos_entel import PROMOCIONES_ENTEL, VELOCIDADES_SIN_BONO
 from .utils import completar_fechas
 from ..models import TipoBonoVelocidad, TipoCliente
+
+PROMOCIONES_RECONOCIDAS = (
+    "bono de velocidad por 6m",
+    "Solo 30% por 6m.",
+    "30% y bono de velocidad por 6m",
+)
+VELOCIDADES_SIN_BONO = {1000}
 
 IGV = Decimal("1.18")
 
@@ -191,7 +197,7 @@ def contexto_desde_venta(venta, fecha=None, direccion=None) -> tuple[dict, str, 
     promos = list(venta.promociones.all())
     nombres_promo = [item.nombre for item in promos if item.nombre]
     promocion = inferir_promocion(promos, velocidad)
-    if promocion not in PROMOCIONES_ENTEL:
+    if promocion not in PROMOCIONES_RECONOCIDAS:
         raise ValidationError({"detail": f"Promoción no reconocida: {promocion}"})
 
     beneficios = beneficios_promociones(promos, velocidad)

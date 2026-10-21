@@ -6,7 +6,6 @@ from openpyxl.styles.colors import COLOR_INDEX
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.cell import coordinate_from_string, column_index_from_string
 
-from .datos_entel import HC_ARCHIVO_POR_PLAN, HC_COORDS_POR_PLAN
 from .mapas import mapa_a_campos
 
 CELDA_RE = re.compile(r"^[A-Z]{1,3}[1-9]\d{0,6}$")
@@ -57,24 +56,7 @@ def campos_excel(documento) -> list[dict]:
         }
         for item in mapa_a_campos(documento.mapa or {})
     ]
-    campos = [item for item in campos if item["celda"]]
-    if campos:
-        return campos
-    for plan, archivo in HC_ARCHIVO_POR_PLAN.items():
-        if archivo != (documento.archivo or ""):
-            continue
-        return [
-            {
-                "nombre": campo,
-                "hoja": hoja,
-                "celda": celda,
-                "field": campo,
-                "value": "",
-                "transform": "",
-            }
-            for campo, (hoja, celda) in HC_COORDS_POR_PLAN.get(plan, {}).items()
-        ]
-    return []
+    return [item for item in campos if item["celda"]]
 
 
 def vista_excel(contenido: bytes, campos=None) -> dict:

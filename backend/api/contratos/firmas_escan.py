@@ -1,4 +1,4 @@
-"""Firmas manuscritas: overlay en zona de firma (coords en datos_entel)."""
+"""Firmas manuscritas: overlay en la zona de firma del PDF base."""
 
 from __future__ import annotations
 
@@ -9,12 +9,17 @@ import pymupdf
 from PIL import Image, ImageChops, ImageFilter, ImageOps
 from rest_framework.exceptions import ValidationError
 
-from .datos_entel import (
-    NOMBRE_PNG_POR_PAGINA,
-    PAGINA_FIRMA_3,
-    PAGINA_FIRMA_5,
-    RECT_FIRMA_POR_PAGINA,
-)
+PAGINA_FIRMA_3 = 2
+PAGINA_FIRMA_5 = 4
+RECT_FIRMA_POR_PAGINA = {
+    PAGINA_FIRMA_3: (80, 148, 525, 400),
+    PAGINA_FIRMA_5: (95, 745, 290, 825),
+}
+NOMBRE_PNG_POR_PAGINA = {
+    PAGINA_FIRMA_3: "firma_pagina_3.png",
+    PAGINA_FIRMA_5: "firma_pagina_5.png",
+}
+PDF_CON_FIRMA = {"internet empresas.pdf", "pack empresas.pdf"}
 
 MAX_FIRMA_BYTES = 8 * 1024 * 1024
 MAX_PROCESAR_EDGE = 1400

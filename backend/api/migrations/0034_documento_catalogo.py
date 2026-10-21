@@ -1,11 +1,97 @@
 from django.db import migrations, models
 
+CATALOGO_INICIAL = [
+    {
+        "clave": "internet-empresas",
+        "archivo": "internet empresas.pdf",
+        "etiqueta": "Contrato Internet Empresas",
+        "descripcion": "PDF base del plan Internet Empresas.",
+        "grupo": "Contratos",
+        "acepta": [".pdf"],
+        "requerida": True,
+    },
+    {
+        "clave": "pack-empresas",
+        "archivo": "pack empresas.pdf",
+        "etiqueta": "Contrato Pack Empresas",
+        "descripcion": "PDF base del plan Pack Empresas.",
+        "grupo": "Contratos",
+        "acepta": [".pdf"],
+        "requerida": True,
+    },
+    {
+        "clave": "bono-duplica",
+        "archivo": "bono duplica.pdf",
+        "etiqueta": "Anexo bono duplica velocidad",
+        "descripcion": "Anexo de promoción por bono de velocidad.",
+        "grupo": "Anexos",
+        "acepta": [".pdf"],
+        "requerida": True,
+    },
+    {
+        "clave": "promocion-30",
+        "archivo": "promocion 30 x 6 meses.pdf",
+        "etiqueta": "Anexo 30% por 6 meses",
+        "descripcion": "Anexo de descuento del 30% por 6 meses.",
+        "grupo": "Anexos",
+        "acepta": [".pdf"],
+        "requerida": True,
+    },
+    {
+        "clave": "hc-empresas",
+        "archivo": "HC-EMPRESAS.xlsm",
+        "etiqueta": "Hoja de calificación Internet Empresas",
+        "descripcion": "Excel macro (.xlsm) de calificación para Internet Empresas.",
+        "grupo": "Hojas de calificación",
+        "acepta": [".xlsm"],
+        "hojas": ["Formulario"],
+        "requerida": False,
+    },
+    {
+        "clave": "hc-pack",
+        "archivo": "HC-PACK.xlsm",
+        "etiqueta": "Hoja de calificación Pack Empresas",
+        "descripcion": "Excel macro (.xlsm) de calificación para Pack Empresas.",
+        "grupo": "Hojas de calificación",
+        "acepta": [".xlsm"],
+        "hojas": ["Formulario"],
+        "requerida": False,
+    },
+    {
+        "clave": "creacion-oit",
+        "archivo": "plantilla_creacion_oit.xlsx",
+        "etiqueta": "Creación OIT (Pack + fijo)",
+        "descripcion": "Excel de creación de OIT cuando Pack Empresas incluye teléfono fijo.",
+        "grupo": "Pack con fijo",
+        "acepta": [".xlsx"],
+        "hojas": ["CREACIÓN OIT"],
+        "requerida": False,
+    },
+    {
+        "clave": "tarifas-servicios",
+        "archivo": "plantilla_tarifas_y_servicios.xlsm",
+        "etiqueta": "Tarifas y servicios (Pack + fijo)",
+        "descripcion": "Excel de tarifas y servicios para Pack Empresas con teléfono fijo.",
+        "grupo": "Pack con fijo",
+        "acepta": [".xlsm"],
+        "hojas": ["SOLICITUD T Y S"],
+        "requerida": False,
+    },
+    {
+        "clave": "correo-entel",
+        "archivo": "correo_contrato.eml",
+        "etiqueta": "Plantilla de correo",
+        "descripcion": "Correo .eml que se incluye en el ZIP con los PDFs adjuntos.",
+        "grupo": "Correo",
+        "acepta": [".eml"],
+        "requerida": False,
+    },
+]
+
 
 def fill_metadata(apps, schema_editor):
-    from api.contratos.datos_entel import CATALOGO_PLANTILLAS_ENTEL
-
     Documento = apps.get_model("api", "Documento")
-    por_clave = {item["clave"]: item for item in CATALOGO_PLANTILLAS_ENTEL}
+    por_clave = {item["clave"]: item for item in CATALOGO_INICIAL}
     for documento in Documento.objects.all():
         item = por_clave.get(documento.clave)
         if item is None:

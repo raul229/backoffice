@@ -12,17 +12,7 @@ from rest_framework.exceptions import ValidationError
 
 from .almacen import bytes_plantilla
 from .excel import campos_excel, es_excel, normalizar_celda
-from .datos_entel import (
-    ARCHIVOS_BASE_POR_PLAN,
-    HC_ARCHIVO_POR_PLAN,
-    HC_COORDS_POR_PLAN,
-    MAPA_ENTEL_POR_ARCHIVO,
-    NOMBRE_PNG_POR_PAGINA,
-    PLANTILLA_CORREO_ENTEL,
-    PLANTILLA_CREACION_OIT,
-    PLANTILLA_TARIFAS_SERVICIOS,
-)
-from .firmas_escan import firmas_a_png, insertar_firmas_en_pdf
+from .firmas_escan import PDF_CON_FIRMA, NOMBRE_PNG_POR_PAGINA, firmas_a_png, insertar_firmas_en_pdf
 from .mapeo import (
     contexto_desde_venta,
     nombre_zip_contrato,
@@ -62,6 +52,15 @@ def generar_zip_entel(venta, fecha=None, direccion=None, firmas_paginas=None) ->
         "NOMBRE_PLAN": contexto.get("NOMBRE_PLAN") or plan,
         "VELOCIDAD": velocidad,
     }
+    if not documentos_para_venta(venta):
+        raise ValidationError(
+            {
+                "detail": (
+                    "No hay documentos asignados a este producto o sus promociones. "
+                    "Asígnalos en Configuración → Documentos."
+                )
+            }
+        )
     firmas_png = firmas_a_png(firmas_paginas) if firmas_paginas else None
     with tempfile.TemporaryDirectory() as tmp:
         raiz = Path(tmp)
@@ -71,7 +70,7 @@ def generar_zip_entel(venta, fecha=None, direccion=None, firmas_paginas=None) ->
         destino.mkdir()
         pdfs, mapas = _materializar_pdfs(origenes, venta, plan, velocidad, promocion)
         for ruta in pdfs:
-            firmas = firmas_png if ruta.name in ARCHIVOS_BASE_POR_PLAN.values() else None
+            firmas = firmas_png if ruta.name in PDF_CON_FIRMA else None
             _llenar_pdf(
                 ruta,
                 destino / ruta.name,
@@ -85,41 +84,18 @@ def generar_zip_entel(venta, fecha=None, direccion=None, firmas_paginas=None) ->
                 nombre = NOMBRE_PNG_POR_PAGINA.get(indice)
                 if nombre:
                     (destino / nombre).write_bytes(png)
-        excel_llenos = _materializar_excels(origenes, destino, venta, contexto, datos_plan)
-        hc_nombre = HC_ARCHIVO_POR_PLAN[plan]
-        if hc_nombre not in excel_llenos:
-            hc_bytes = bytes_plantilla(hc_nombre, requerida=False)
-            if hc_bytes:
-                origen_hc = origenes / hc_nombre
-                origen_hc.write_bytes(hc_bytes)
-                _llenar_hc(origen_hc, destino / hc_nombre, contexto, HC_COORDS_POR_PLAN.get(plan, {}))
-        if plan == "Pack Empresas" and str(contexto.get("NUMERO_FIJO") or "").strip():
-            _materializar_pack_fijo(origenes, destino, contexto)
-        eml_bytes = bytes_plantilla(PLANTILLA_CORREO_ENTEL, requerida=False)
-        if eml_bytes:
-            extra = {
-                "CORREO_BACKOFFICE": getattr(settings, "CORREO_BACKOFFICE", "") or "",
-                "CORREO_GERENTE": getattr(settings, "CORREO_GERENTE", "") or "",
-                "CORREOS_ADICIONALES": getattr(settings, "CORREOS_ADICIONALES", "") or "",
-            }
-            origen_eml = origenes / PLANTILLA_CORREO_ENTEL
-            origen_eml.write_bytes(eml_bytes)
-            adjuntos = [destino / ruta.name for ruta in pdfs]
-            generar_eml(origen_eml, {**contexto, **datos_plan, **extra}, adjuntos, destino)
+        _materializar_excels(origenes, destino, venta, contexto, datos_plan)
+        _materializar_emls(
+            origenes,
+            destino,
+            venta,
+            contexto,
+            datos_plan,
+            [destino / ruta.name for ruta in pdfs],
+        )
         return _zip_carpeta(destino), nombre_zip_contrato(
             contexto["RAZON_SOCIAL"], contexto["RUC"]
         )
-
-
-def _materializar_pack_fijo(origenes: Path, destino: Path, contexto: dict) -> None:
-    oit_bytes = bytes_plantilla(PLANTILLA_CREACION_OIT, requerida=True)
-    origen = origenes / PLANTILLA_CREACION_OIT
-    origen.write_bytes(oit_bytes)
-    llenar_creacion_oit(origen, destino / PLANTILLA_CREACION_OIT, contexto)
-    tarifas_bytes = bytes_plantilla(PLANTILLA_TARIFAS_SERVICIOS, requerida=True)
-    origen = origenes / PLANTILLA_TARIFAS_SERVICIOS
-    origen.write_bytes(tarifas_bytes)
-    llenar_tarifas_servicios(origen, destino / PLANTILLA_TARIFAS_SERVICIOS, contexto)
 
 
 def _materializar_pdfs(origenes: Path, venta, plan: str, velocidad: int, promocion: str):
@@ -243,7 +219,7 @@ def _llenar_pdf(
 ) -> None:
     pdf = pymupdf.open(origen)
     try:
-        paginas = mapa if mapa else MAPA_ENTEL_POR_ARCHIVO.get(origen.name, {})
+        paginas = mapa or {}
         for num_pagina, coords in paginas.items():
             if num_pagina >= len(pdf):
                 raise ValidationError(
@@ -265,29 +241,54 @@ def _llenar_pdf(
         pdf.close()
 
 
+def _es_eml(documento) -> bool:
+    return ".eml" in (documento.acepta or [])
+
+
+def _materializar_emls(origenes: Path, destino: Path, venta, contexto: dict, datos_plan: dict, adjuntos: list[Path]) -> None:
+    extra = {
+        "CORREO_BACKOFFICE": getattr(settings, "CORREO_BACKOFFICE", "") or "",
+        "CORREO_GERENTE": getattr(settings, "CORREO_GERENTE", "") or "",
+        "CORREOS_ADICIONALES": getattr(settings, "CORREOS_ADICIONALES", "") or "",
+    }
+    vistos = set()
+    for documento in documentos_para_venta(venta):
+        if not _es_eml(documento):
+            continue
+        nombre = (documento.archivo or "").strip()
+        if not nombre or nombre in vistos:
+            continue
+        vistos.add(nombre)
+        origen = origenes / nombre
+        origen.write_bytes(bytes_plantilla(nombre))
+        generar_eml(origen, {**contexto, **datos_plan, **extra}, adjuntos, destino)
+
+
 def _materializar_excels(origenes: Path, destino: Path, venta, contexto: dict, datos_plan: dict) -> set[str]:
     llenos = set()
     for documento in documentos_para_venta(venta):
         if not es_excel(documento):
             continue
         nombre = (documento.archivo or "").strip()
-        if not nombre or nombre in (PLANTILLA_CREACION_OIT, PLANTILLA_TARIFAS_SERVICIOS):
+        if not nombre or nombre in llenos:
             continue
-        contenido = bytes_plantilla(nombre, requerida=False)
-        if not contenido:
-            continue
-        campos = campos_excel(documento)
+        contenido = bytes_plantilla(nombre)
         origen = origenes / nombre
         origen.write_bytes(contenido)
-        _llenar_excel(
-            origen,
-            destino / nombre,
-            contexto,
-            datos_plan,
-            campos,
-            keep_vba=nombre.lower().endswith(".xlsm"),
-            hojas_visibles=documento.hojas,
-        )
+        if documento.clave == "creacion-oit":
+            llenar_creacion_oit(origen, destino / nombre, contexto)
+        elif documento.clave == "tarifas-servicios":
+            llenar_tarifas_servicios(origen, destino / nombre, contexto)
+        else:
+            _llenar_excel(
+                origen,
+                destino / nombre,
+                contexto,
+                datos_plan,
+                campos_excel(documento),
+                keep_vba=nombre.lower().endswith(".xlsm"),
+                hojas_visibles=documento.hojas,
+            )
         llenos.add(nombre)
     return llenos
 
@@ -330,22 +331,6 @@ def _llenar_excel(
         wb.save(destino)
     finally:
         wb.close()
-
-
-def _llenar_hc(origen: Path, destino: Path, contexto: dict, coords: dict) -> None:
-    campos = [
-        {"nombre": campo, "hoja": hoja, "celda": celda, "field": campo}
-        for campo, (hoja, celda) in (coords or {}).items()
-    ]
-    _llenar_excel(
-        origen,
-        destino,
-        contexto,
-        {},
-        campos,
-        keep_vba=True,
-        hojas_visibles=["Formulario"],
-    )
 
 
 def _zip_carpeta(carpeta: Path) -> bytes:

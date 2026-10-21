@@ -1,4 +1,3 @@
-from .datos_entel import ANEXOS_POR_COMBINACION, ARCHIVOS_BASE_POR_PLAN
 from .mapas import json_a_mapa
 
 
@@ -21,19 +20,10 @@ def documentos_para_venta(venta):
     return elegidos
 
 
-def _archivos_entel(plan: str, velocidad: int, promocion: str) -> list[tuple[str, dict | None]]:
-    nombres = [
-        ARCHIVOS_BASE_POR_PLAN[plan],
-        *ANEXOS_POR_COMBINACION.get((plan, velocidad, promocion), []),
-    ]
-    return [(nombre, None) for nombre in nombres]
-
-
-def archivos_pdf_para_venta(venta, plan: str, velocidad: int, promocion: str) -> list[tuple[str, dict | None]]:
-    docs = documentos_para_venta(venta)
+def archivos_pdf_para_venta(venta, plan: str = "", velocidad: int = 0, promocion: str = "") -> list[tuple[str, dict | None]]:
     archivos = []
     vistos = set()
-    for doc in docs:
+    for doc in documentos_para_venta(venta):
         acepta = doc.acepta or []
         if ".pdf" not in acepta:
             continue
@@ -43,6 +33,4 @@ def archivos_pdf_para_venta(venta, plan: str, velocidad: int, promocion: str) ->
         vistos.add(nombre)
         mapa = json_a_mapa(doc.mapa) if doc.mapa else None
         archivos.append((nombre, mapa))
-    if not archivos:
-        return _archivos_entel(plan, velocidad, promocion)
     return archivos

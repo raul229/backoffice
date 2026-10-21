@@ -33,15 +33,14 @@ class ApiEndpointsTests(APITestCase):
 
     def _cargar_plantillas_en_bd(self, requeridas=None):
         """Siembra PlantillaContrato desde fixtures de prueba (no es runtime)."""
-        from .contratos.datos_entel import CATALOGO_PLANTILLAS_ENTEL
-
         cargadas = 0
-        for item in CATALOGO_PLANTILLAS_ENTEL:
-            if requeridas is not None and item["clave"] not in requeridas:
-                continue
+        documentos = Documento.objects.exclude(archivo="")
+        if requeridas is not None:
+            documentos = documentos.filter(clave__in=requeridas)
+        for documento in documentos:
             ruta = None
             for base in (_FIXTURES_PLANTILLAS, _PLANTILLAS_DISCO_TEST):
-                candidata = base / item["archivo"]
+                candidata = base / documento.archivo
                 if candidata.is_file():
                     ruta = candidata
                     break
@@ -49,9 +48,9 @@ class ApiEndpointsTests(APITestCase):
                 continue
             data = ruta.read_bytes()
             PlantillaContrato.objects.update_or_create(
-                clave=item["clave"],
+                clave=documento.clave,
                 defaults={
-                    "nombre_archivo": item["archivo"],
+                    "nombre_archivo": documento.archivo,
                     "content_type": "application/octet-stream",
                     "tamano": len(data),
                     "contenido": data,
@@ -62,6 +61,14 @@ class ApiEndpointsTests(APITestCase):
         if cargadas == 0:
             self.skipTest("No hay archivos de plantilla para sembrar en BD de prueba")
         return cargadas
+
+    def _asignar_documentos(self, venta, *claves, en="producto"):
+        for clave in claves:
+            doc = Documento.objects.get(clave=clave)
+            if en == "promocion":
+                doc.promociones.add(*venta.promociones.all())
+            else:
+                doc.productos.add(venta.producto)
 
     def test_choices_endpoint_returns_frontend_options(self):
         response = self.client.get("/api/choices/")
@@ -783,6 +790,8 @@ class ApiEndpointsTests(APITestCase):
         self.assertIn("internet empresas.pdf", nombres)
         self.assertIn("promocion 30 x 6 meses.pdf", nombres)
         self.assertNotIn("bono duplica.pdf", nombres)
+        self.assertNotIn("HC-EMPRESAS.xlsm", nombres)
+        self.assertFalse(any(nombre.endswith(".eml") for nombre in nombres))
 
     def test_venta_rejects_producto_of_other_client_type(self):
         cliente = Cliente.objects.create(tipo=TipoCliente.EMPRESA)
@@ -906,6 +915,9 @@ class ApiEndpointsTests(APITestCase):
 
         self._cargar_plantillas_en_bd()
         venta_id = self._venta_empresa_entel()
+        venta = Venta.objects.get(id=venta_id)
+        self._asignar_documentos(venta, "internet-empresas")
+        self._asignar_documentos(venta, "bono-duplica", en="promocion")
         response = self._post_generar_contrato(venta_id)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response["Content-Type"], "application/zip")
@@ -914,6 +926,8 @@ class ApiEndpointsTests(APITestCase):
             nombres = set(archivo.namelist())
         self.assertIn("internet empresas.pdf", nombres)
         self.assertIn("bono duplica.pdf", nombres)
+        self.assertNotIn("HC-EMPRESAS.xlsm", nombres)
+        self.assertFalse(any(nombre.endswith(".eml") for nombre in nombres))
         self.assertIn("firma_pagina_3.png", nombres)
         self.assertIn("firma_pagina_5.png", nombres)
 
@@ -1091,6 +1105,8 @@ class ApiEndpointsTests(APITestCase):
 
         self._cargar_plantillas_en_bd()
         venta_id = self._venta_empresa_entel()
+        venta = Venta.objects.get(id=venta_id)
+        self._asignar_documentos(venta, "internet-empresas")
         response = self._post_generar_contrato(venta_id, con_firmas=False)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         with zipfile.ZipFile(BytesIO(response.content)) as archivo:
@@ -1110,6 +1126,8 @@ class ApiEndpointsTests(APITestCase):
 
         self._cargar_plantillas_en_bd()
         venta_id = self._venta_empresa_entel()
+        venta = Venta.objects.get(id=venta_id)
+        self._asignar_documentos(venta, "internet-empresas")
 
         img = Image.new("RGB", (160, 60), (235, 240, 245))
         draw = ImageDraw.Draw(img)
@@ -1159,6 +1177,8 @@ class ApiEndpointsTests(APITestCase):
 
         self._cargar_plantillas_en_bd()
         venta_id = self._venta_empresa_entel()
+        venta = Venta.objects.get(id=venta_id)
+        self._asignar_documentos(venta, "internet-empresas")
         response = self._post_generar_contrato(venta_id, {"fecha": "2024-03-15"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         with zipfile.ZipFile(BytesIO(response.content)) as archivo:
@@ -1188,6 +1208,8 @@ class ApiEndpointsTests(APITestCase):
 
         self._cargar_plantillas_en_bd()
         venta_id = self._venta_empresa_entel()
+        venta = Venta.objects.get(id=venta_id)
+        self._asignar_documentos(venta, "internet-empresas")
         direccion = "AV JAVIER PRADO ESTE 4450, SAN ISIDRO - PORTAL FACTIBILIDAD"
         response = self._post_generar_contrato(
             venta_id,
@@ -1221,6 +1243,7 @@ class ApiEndpointsTests(APITestCase):
         venta.save(update_fields=["numero_fijo", "saf", "siro", "cotizacion"])
         venta.producto.precio = "129.90"
         venta.producto.save(update_fields=["precio"])
+        self._asignar_documentos(venta, "creacion-oit", "tarifas-servicios")
         response = self.client.post(
             f"/api/ventas/{venta_id}/generar-contrato/",
             {"fecha": "2026-09-21"},
@@ -1258,6 +1281,8 @@ class ApiEndpointsTests(APITestCase):
             velocidad=300,
             promo="Solo 30% por 6m.",
         )
+        venta = Venta.objects.get(id=venta_id)
+        self._asignar_documentos(venta, "pack-empresas")
         response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         with zipfile.ZipFile(BytesIO(response.content)) as archivo:
@@ -1266,15 +1291,60 @@ class ApiEndpointsTests(APITestCase):
         self.assertNotIn("plantilla_tarifas_y_servicios.xlsm", nombres)
 
     def test_generar_contrato_sin_plantilla_en_bd(self):
-        PlantillaContrato.objects.all().delete()
         venta_id = self._venta_empresa_entel(
             nombre_producto="Pack Empresas",
             velocidad=300,
             promo="Solo 30% por 6m.",
         )
+        venta = Venta.objects.get(id=venta_id)
+        self._asignar_documentos(venta, "pack-empresas")
+        PlantillaContrato.objects.all().delete()
         response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("Configuración", response.data["detail"])
+
+    def test_generar_contrato_sin_documentos_asignados(self):
+        self._cargar_plantillas_en_bd()
+        venta_id = self._venta_empresa_entel()
+        response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("documentos asignados", response.data["detail"])
+
+    def test_generar_contrato_incluye_correo_si_esta_asignado(self):
+        import zipfile
+        from io import BytesIO
+
+        self._cargar_plantillas_en_bd()
+        venta_id = self._venta_empresa_entel()
+        venta = Venta.objects.get(id=venta_id)
+        self._asignar_documentos(venta, "internet-empresas", "correo-entel")
+        response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        with zipfile.ZipFile(BytesIO(response.content)) as archivo:
+            nombres = set(archivo.namelist())
+        self.assertIn("internet empresas.pdf", nombres)
+        self.assertIn("correo_20522317285.eml", nombres)
+        self.assertNotIn("HC-EMPRESAS.xlsm", nombres)
+
+    def test_generar_contrato_incluye_hc_si_esta_asignada(self):
+        import zipfile
+        from io import BytesIO
+        from openpyxl import load_workbook
+
+        self._cargar_plantillas_en_bd()
+        venta_id = self._venta_empresa_entel()
+        venta = Venta.objects.get(id=venta_id)
+        self._asignar_documentos(venta, "hc-empresas")
+        response = self.client.post(f"/api/ventas/{venta_id}/generar-contrato/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        with zipfile.ZipFile(BytesIO(response.content)) as archivo:
+            nombres = set(archivo.namelist())
+            self.assertIn("HC-EMPRESAS.xlsm", nombres)
+            self.assertFalse(any(nombre.endswith(".eml") for nombre in nombres))
+            hoja = load_workbook(BytesIO(archivo.read("HC-EMPRESAS.xlsm")), keep_vba=True)[
+                "Formulario"
+            ]
+        self.assertEqual(str(hoja["F7"].value), "20522317285")
 
 
     def test_correo_cuenta_planner_rejects_persona_natural(self):
@@ -1584,6 +1654,9 @@ class ApiEndpointsTests(APITestCase):
 
         self._cargar_plantillas_en_bd()
         venta_id = self._venta_empresa_entel()
+        venta = Venta.objects.get(id=venta_id)
+        self._asignar_documentos(venta, "internet-empresas")
+        self._asignar_documentos(venta, "bono-duplica", en="promocion")
         response = self._post_generar_contrato(venta_id)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         with zipfile.ZipFile(BytesIO(response.content)) as archivo:
