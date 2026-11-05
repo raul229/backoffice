@@ -195,7 +195,7 @@ def _cuerpo_texto_contrato(contexto: dict) -> str:
             "",
             f"Plan contratado: {plan} {velocidad}".strip(),
             f"Nombre de promoción: {contexto.get('PROMOCION') or '—'}",
-            "Plazo de promoción: 6 meses",
+            f"Plazo de promoción: {contexto.get('PLAZO_PROMOCION') or '—'}",
             "Gracias por su compra",
             "",
         ]

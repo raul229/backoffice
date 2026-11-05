@@ -31,7 +31,7 @@ import {
   updateTipoGaleria,
 } from '../service/api.js'
 import { IconGrip } from '../lib/icons.jsx'
-import { TIPOS_BONO_VELOCIDAD, resumenPromocion, tipoClienteLabel } from '../lib/venta.js'
+import { TIPOS_BONO_VELOCIDAD, etiquetaPlazoPromocion, resumenPromocion, tipoClienteLabel } from '../lib/venta.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import Modal from '../components/Modal.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
@@ -351,6 +351,12 @@ export default function ConfiguracionPage() {
         cell: (info) => (
           <span className="text-sm text-slate-600">{info.getValue() || '—'}</span>
         ),
+      },
+      {
+        id: 'plazo',
+        header: 'Plazo',
+        accessorFn: (row) => etiquetaPlazoPromocion(row.plazo_meses),
+        cell: (info) => <span className="text-sm text-slate-600">{info.getValue()}</span>,
       },
       {
         id: 'descripcion',
@@ -1114,6 +1120,7 @@ function promocionFormValues(promocion) {
     descuento_porcentaje: pct > 0 ? String(pct) : '',
     bono_velocidad: promocion?.bono_velocidad || 'NINGUNO',
     bono_mbps: promocion?.bono_mbps ? String(promocion.bono_mbps) : '300',
+    plazo_meses: promocion?.plazo_meses ? String(promocion.plazo_meses) : '',
   }
 }
 
@@ -1124,6 +1131,7 @@ function promocionPayload(value) {
     descuento_porcentaje: value.descuento_porcentaje ? Number(value.descuento_porcentaje) : 0,
     bono_velocidad: value.bono_velocidad,
     bono_mbps: value.bono_velocidad === 'FIJO' ? Number(value.bono_mbps) : 0,
+    plazo_meses: value.plazo_meses.trim() ? Number(value.plazo_meses) : null,
   }
 }
 
@@ -1250,6 +1258,23 @@ function PromocionFormModal({ promocion, editing = true, onClose, onSave, onDele
             <p>{promocion.bono_mbps}</p>
           </label>
         ) : null}
+        {editing ? (
+          <Field form={form} name="plazo_meses">
+            {(field) => (
+              <TextField
+                field={field}
+                inputMode="numeric"
+                label="Plazo (meses)"
+                placeholder="Vacío = indefinido"
+              />
+            )}
+          </Field>
+        ) : (
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-500">Plazo</span>
+            <p>{etiquetaPlazoPromocion(promocion.plazo_meses)}</p>
+          </label>
+        )}
         {editing ? (
           <Field form={form} name="descripcion">
             {(field) => <TextAreaField field={field} label="Descripción" normalize="upper" />}

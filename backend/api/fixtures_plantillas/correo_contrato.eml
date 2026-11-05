@@ -14,5 +14,5 @@ body: |
 
     Plan contratado: {{NOMBRE_PLAN}} {{VELOCIDAD}}
     Nombre de promoción: {{PROMOCION}}
-    Plazo de promoción: 6 meses
+    Plazo de promoción: {{PLAZO_PROMOCION}}
     Gracias por su compra

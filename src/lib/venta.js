@@ -4,6 +4,12 @@ export const TIPOS_BONO_VELOCIDAD = [
   { value: 'FIJO', label: 'Mbps adicionales fijos' },
 ]
 
+export function etiquetaPlazoPromocion(meses) {
+  const cantidad = Number(meses)
+  if (!Number.isFinite(cantidad) || cantidad <= 0) return 'Indefinido'
+  return cantidad === 1 ? '1 mes' : `${cantidad} meses`
+}
+
 export function resumenPromocion(promo) {
   if (!promo) return ''
   const partes = []

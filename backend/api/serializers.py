@@ -357,6 +357,7 @@ class PromocionSerializer(serializers.ModelSerializer):
             "descuento_porcentaje",
             "bono_velocidad",
             "bono_mbps",
+            "plazo_meses",
         ]
 
     def validate(self, attrs):
@@ -380,6 +381,8 @@ class PromocionSerializer(serializers.ModelSerializer):
             )
         if bono != TipoBonoVelocidad.FIJO:
             attrs["bono_mbps"] = 0
+        if attrs.get("plazo_meses") in (0, ""):
+            attrs["plazo_meses"] = None
         return attrs
 
 

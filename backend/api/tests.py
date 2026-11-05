@@ -687,6 +687,35 @@ class ApiEndpointsTests(APITestCase):
         self.assertEqual(creada.data["descuento_porcentaje"], "20.00")
         self.assertEqual(creada.data["bono_velocidad"], "FIJO")
         self.assertEqual(creada.data["bono_mbps"], 300)
+        self.assertIsNone(creada.data["plazo_meses"])
+
+        un_anio = self.client.post(
+            "/api/promociones/",
+            {
+                "nombre": "Promo 12 meses",
+                "descripcion": "anual",
+                "plazo_meses": 12,
+            },
+            format="json",
+        )
+        self.assertEqual(un_anio.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(un_anio.data["plazo_meses"], 12)
+
+        dos_meses = self.client.patch(
+            f"/api/promociones/{un_anio.data['id']}/",
+            {"plazo_meses": 2},
+            format="json",
+        )
+        self.assertEqual(dos_meses.status_code, status.HTTP_200_OK)
+        self.assertEqual(dos_meses.data["plazo_meses"], 2)
+
+        indefinida = self.client.patch(
+            f"/api/promociones/{un_anio.data['id']}/",
+            {"plazo_meses": None},
+            format="json",
+        )
+        self.assertEqual(indefinida.status_code, status.HTTP_200_OK)
+        self.assertIsNone(indefinida.data["plazo_meses"])
 
         invalid = self.client.post(
             "/api/promociones/",
@@ -953,8 +982,29 @@ class ApiEndpointsTests(APITestCase):
         contexto, plan, _velocidad, promocion_entel = contexto_desde_venta(venta)
         self.assertEqual(contexto["NOMBRE_PLAN"], "INT EMPRESA")
         self.assertEqual(contexto["PROMOCION"], "Bono velocidad 6m")
+        self.assertEqual(contexto["PLAZO_PROMOCION"], "Indefinido")
         self.assertEqual(plan, "Internet Empresas")
         self.assertEqual(promocion_entel, "bono de velocidad por 6m")
+
+    def test_correo_contrato_usa_plazo_de_promocion(self):
+        from api.contratos.correo_contrato import cuerpo_html_contrato
+        from api.contratos.mapeo import contexto_desde_venta
+
+        venta_id = self._venta_empresa_entel(nombre_producto="INT EMPRESA")
+        venta = Venta.objects.select_related("cliente__empresa", "direccion", "producto").prefetch_related(
+            "promociones"
+        ).get(id=venta_id)
+        promo = venta.promociones.get()
+        promo.plazo_meses = 12
+        promo.save(update_fields=["plazo_meses"])
+        venta = Venta.objects.select_related("cliente__empresa", "direccion", "producto").prefetch_related(
+            "promociones"
+        ).get(id=venta_id)
+        contexto, *_ = contexto_desde_venta(venta)
+        html = cuerpo_html_contrato(contexto)
+        self.assertEqual(contexto["PLAZO_PROMOCION"], "12 meses")
+        self.assertIn("12 meses", html)
+        self.assertNotIn("6 meses", html)
 
     def test_contexto_usa_descuento_y_bono_de_promocion(self):
         from api.contratos.mapeo import contexto_desde_venta
@@ -968,6 +1018,7 @@ class ApiEndpointsTests(APITestCase):
         promo.descuento_porcentaje = 20
         promo.bono_velocidad = TipoBonoVelocidad.FIJO
         promo.bono_mbps = 300
+        promo.plazo_meses = 3
         promo.save()
         venta = Venta.objects.select_related("cliente__empresa", "direccion", "producto").prefetch_related(
             "promociones"
@@ -981,6 +1032,7 @@ class ApiEndpointsTests(APITestCase):
         self.assertEqual(contexto["VELOCIDAD_CON_BONO"], 500)
         self.assertEqual(contexto["BONO_MBPS"], 300)
         self.assertEqual(contexto["TIPO_BONO"], "300 Mbps adicionales")
+        self.assertEqual(contexto["PLAZO_PROMOCION"], "3 meses")
 
         promo.descuento_porcentaje = 30
         promo.bono_velocidad = TipoBonoVelocidad.DUPLICA

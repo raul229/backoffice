@@ -80,6 +80,7 @@ export const promocionFormSchema = z
     descuento_porcentaje: z.string(),
     bono_velocidad: z.enum(['NINGUNO', 'DUPLICA', 'FIJO']),
     bono_mbps: z.string(),
+    plazo_meses: z.string(),
   })
   .superRefine((value, ctx) => {
     const pct = value.descuento_porcentaje.trim()
@@ -94,6 +95,14 @@ export const promocionFormSchema = z
         code: 'custom',
         path: ['descuento_porcentaje'],
         message: 'El descuento debe estar entre 0 y 100.',
+      })
+    }
+    const meses = value.plazo_meses.trim()
+    if (meses && (!/^\d+$/.test(meses) || Number(meses) < 1)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['plazo_meses'],
+        message: 'Usa un número de meses, o déjalo vacío si es indefinido.',
       })
     }
     if (value.bono_velocidad !== 'FIJO') return

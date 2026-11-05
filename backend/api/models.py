@@ -126,6 +126,7 @@ class Promocion(models.Model):
         default=TipoBonoVelocidad.NINGUNO,
     )
     bono_mbps = models.PositiveIntegerField(default=0)
+    plazo_meses = models.PositiveIntegerField(null=True, blank=True)
 
     def __str__(self):
         return self.nombre

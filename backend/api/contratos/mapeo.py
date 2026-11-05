@@ -17,6 +17,22 @@ VELOCIDADES_SIN_BONO = {1000}
 IGV = Decimal("1.18")
 
 
+def etiqueta_plazo_promocion(meses) -> str:
+    try:
+        cantidad = int(meses)
+    except (TypeError, ValueError):
+        return "Indefinido"
+    if cantidad <= 0:
+        return "Indefinido"
+    return "1 mes" if cantidad == 1 else f"{cantidad} meses"
+
+
+def plazos_de_promociones(promos) -> str:
+    return " · ".join(
+        dict.fromkeys(etiqueta_plazo_promocion(getattr(promo, "plazo_meses", None)) for promo in promos or [])
+    )
+
+
 def dinero(valor) -> str:
     return str(Decimal(str(valor or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
@@ -236,6 +252,7 @@ def contexto_desde_venta(venta, fecha=None, direccion=None) -> tuple[dict, str, 
             "BONO_MBPS": beneficios["bono_mbps"] or "",
             "TIPO_BONO": beneficios["etiqueta_bono"],
             "PROMOCION": " · ".join(nombres_promo),
+            "PLAZO_PROMOCION": plazos_de_promociones(promos),
             "DESCUENTO_PORCENTAJE": str(pct.quantize(Decimal("1")) if pct == pct.to_integral() else pct),
             "PRECIO_PRODUCTO": dinero(renta),
             "RENTA_SIN_IGV": dinero(renta_sin_igv),

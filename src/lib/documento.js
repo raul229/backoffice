@@ -26,6 +26,7 @@ export const CAMPOS_CONTRATO_GRUPOS = [
       { value: 'BONO_MBPS', label: 'Bono (Mbps)', ejemplo: '200' },
       { value: 'TIPO_BONO', label: 'Tipo de bono', ejemplo: 'Duplica la velocidad' },
       { value: 'PROMOCION', label: 'Promoción', ejemplo: 'DESCUENTO 30% EN EL CARGO FIJO INDEFINIDO' },
+      { value: 'PLAZO_PROMOCION', label: 'Plazo de promoción', ejemplo: '6 meses' },
       { value: 'RENTA_FIJA', label: 'Renta fija (con IGV)', ejemplo: '125.00' },
       { value: 'RENTA_SIN_IGV', label: 'Renta fija (sin IGV)', ejemplo: '105.93' },
       { value: 'DESCUENTO_PORCENTAJE', label: 'Descuento %', ejemplo: '30' },

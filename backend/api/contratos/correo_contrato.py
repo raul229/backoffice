@@ -20,8 +20,9 @@ FONT = "Arial, Helvetica, sans-serif"
 def cuerpo_html_contrato(contexto: dict, adjuntos: list[Path] | None = None) -> str:
     rrll = html.escape(str(contexto.get("RRLL") or "cliente"))
     plan = html.escape(str(contexto.get("NOMBRE_PLAN") or "—"))
-    velocidad = html.escape(str(contexto.get("VELOCIDAD") or "—"))
+    #velocidad = html.escape(str(contexto.get("VELOCIDAD") or "—"))
     promocion = html.escape(str(contexto.get("PROMOCION") or "—"))
+    plazo = html.escape(str(contexto.get("PLAZO_PROMOCION") or "—"))
     oportunidad = html.escape(str(contexto.get("NO_OPORTUNIDAD") or "—"))
     domicilio = html.escape(str(contexto.get("DOMICILIO_INSTALACION") or "—"))
 
@@ -29,9 +30,9 @@ def cuerpo_html_contrato(contexto: dict, adjuntos: list[Path] | None = None) -> 
         [
             _fila("Número de oportunidad", oportunidad),
             _fila("Dirección de instalación", domicilio),
-            _fila("Plan contratado", f"{plan} {velocidad}"),
+            _fila("Plan contratado", f"{plan}"),
             _fila("Nombre de promoción", promocion),
-            _fila("Plazo de promoción", "6 meses", ultimo=True),
+            _fila("Plazo de promoción", plazo, ultimo=True),
         ]
     )
     del adjuntos  # los PDFs ya van como attachments MIME
