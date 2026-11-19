@@ -158,6 +158,26 @@ class DireccionSerializer(serializers.ModelSerializer):
             "referencia",
         ]
         validators = []
+        extra_kwargs = {
+            "direccion": {
+                "error_messages": {
+                    "blank": "Indica la dirección.",
+                    "max_length": "La dirección admite hasta 200 caracteres.",
+                }
+            },
+            "numero": {
+                "error_messages": {
+                    "blank": "Indica el número, manzana o lote.",
+                    "max_length": "El número admite hasta 30 caracteres.",
+                }
+            },
+            "distrito": {
+                "error_messages": {
+                    "blank": "Indica el distrito.",
+                    "max_length": "El distrito admite hasta 100 caracteres.",
+                }
+            },
+        }
 
     def get_tipo_galeria_nombre(self, obj):
         return obj.tipo_galeria.nombre if obj.tipo_galeria_id else ""
@@ -266,6 +286,34 @@ class PersonaSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
+        tipo = validated_data.get("tipo_documento")
+        numero = validated_data.get("numero_documento")
+        existing = None
+        if tipo and numero:
+            existing = (
+                Persona.objects.select_related("cliente")
+                .filter(tipo_documento=tipo, numero_documento=numero)
+                .order_by("-id")
+                .first()
+            )
+        if existing:
+            correo = validated_data.get("correo")
+            for field in (
+                "nombres",
+                "apellidos",
+                "distrito_nacimiento",
+                "padre",
+                "madre",
+                "celular",
+            ):
+                value = validated_data.get(field)
+                if value:
+                    setattr(existing, field, value)
+            existing.save()
+            if correo and existing.cliente.correo != correo:
+                existing.cliente.correo = correo
+                existing.cliente.save(update_fields=["correo"])
+            return existing
         cliente_con_correo(validated_data, TipoCliente.PERSONA)
         return super().create(validated_data)
 
@@ -312,6 +360,37 @@ class EmpresaSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
+        ruc = validated_data.get("ruc")
+        existing = None
+        if ruc:
+            existing = (
+                Empresa.objects.select_related("cliente")
+                .filter(ruc=ruc)
+                .order_by("-id")
+                .first()
+            )
+        if existing:
+            update_fields = []
+            domicilio = validated_data.get("domicilio_fiscal")
+            if domicilio and domicilio != existing.domicilio_fiscal:
+                existing.domicilio_fiscal = domicilio
+                update_fields.append("domicilio_fiscal")
+            razon = validated_data.get("razon_social")
+            if razon and razon != existing.razon_social:
+                existing.razon_social = razon
+                update_fields.append("razon_social")
+            representante = validated_data.get("representante_legal")
+            representante_id = getattr(representante, "id", representante)
+            if representante_id and existing.representante_legal_id != representante_id:
+                existing.representante_legal = representante
+                update_fields.append("representante_legal")
+            if update_fields:
+                existing.save(update_fields=update_fields)
+            correo = validated_data.get("correo")
+            if correo and existing.cliente.correo != correo:
+                existing.cliente.correo = correo
+                existing.cliente.save(update_fields=["correo"])
+            return existing
         cliente_con_correo(validated_data, TipoCliente.EMPRESA)
         return super().create(validated_data)
 

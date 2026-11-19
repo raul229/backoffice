@@ -75,7 +75,7 @@ class Direccion(models.Model):
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
     tipo = models.CharField(max_length=20, choices=TipoDireccion.choices)
     direccion = models.CharField(max_length=200)
-    numero = models.CharField(max_length=10)
+    numero = models.CharField(max_length=30)
     distrito = models.CharField(max_length=100)
     urbanizacion = models.CharField(max_length=100, blank=True)
     interior = models.CharField(max_length=20, blank=True)

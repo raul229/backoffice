@@ -96,13 +96,41 @@ def _valor_desde_contenedor(raw: str) -> str:
     return _clean_multiline(raw)
 
 
+def _clip(value, limit):
+    value = re.sub(r"\s+", " ", value or "").strip(" ,.")
+    return value[:limit]
+
+
+def _juntar(izquierda, derecha):
+    return re.sub(r"\s+", " ", f"{izquierda} {derecha}").strip(" ,.")
+
+
 def parse_domicilio(domicilio):
+    """Parte un domicilio SUNAT en los campos de la dirección de instalación.
+
+    SUNAT arma la vía como `CAL.NOMBRE NRO. 123` o, si no hay número de puerta,
+    `CAL.NOMBRE MZA. F LOTE. 21`. El nombre de la calle queda en la dirección y
+    la manzana con el lote van juntos en el número. Cierra con
+    `DEPARTAMENTO - PROVINCIA - DISTRITO`.
+    """
     raw = _clean(domicilio)
     if not raw:
         return {}
     parts = [part.strip() for part in re.split(r"\s+-\s+", raw) if part.strip()]
     distrito = parts[-1] if len(parts) > 1 else ""
     head = parts[0] if parts else raw
+    if len(parts) >= 3:
+        provincia = parts[-2]
+        recortado = re.sub(rf"\s+{re.escape(provincia)}$", "", head, flags=re.IGNORECASE).strip()
+        if recortado:
+            head = recortado
+
+    referencia = ""
+    parentesis = re.search(r"\(([^)]*)\)", head)
+    if parentesis:
+        referencia = parentesis.group(1).strip(" .")
+        head = _juntar(head[: parentesis.start()], head[parentesis.end() :])
+
     tipo = "CALLE"
     resto = head
     for prefix, mapped in VIA_TIPOS:
@@ -110,19 +138,55 @@ def parse_domicilio(domicilio):
             tipo = mapped
             resto = resto[len(prefix) :].lstrip(" .")
             break
+
+    urbanizacion = ""
+    urb = re.search(r"\bURB\.?\s+(.+)$", resto, re.IGNORECASE)
+    if urb:
+        urbanizacion = urb.group(1).strip(" .")
+        resto = resto[: urb.start()].strip(" ,.")
+
     numero = ""
-    match = re.search(r"\bNRO\.?\s*([A-Z0-9]+)", resto, re.IGNORECASE)
-    if match:
-        numero = match.group(1)
-        direccion = resto[: match.start()].strip(" ,.")
+    nro = re.search(r"\bNRO\.?\s*(S/N|[A-Z0-9]+(?:-[A-Z0-9]+)?)", resto, re.IGNORECASE)
+    if nro:
+        numero = nro.group(1)
+        resto = resto[: nro.start()].strip(" ,.")
     else:
-        direccion = resto
-    return {
+        lote = re.search(
+            r"\b(?:MZA|MZ)\.?\s*([A-Z0-9]+)\s+(?:LOTE|LT)\.?\s*([A-Z0-9]+)",
+            resto,
+            re.IGNORECASE,
+        )
+        if lote:
+            manzana, lote_nro = lote.group(1), lote.group(2)
+            numero = f"MZ {manzana} LT {lote_nro}"
+            resto = _juntar(resto[: lote.start()], resto[lote.end() :])
+        else:
+            solo_lote = re.search(r"\b(?:LOTE|LT)\.?\s*([A-Z0-9]+)", resto, re.IGNORECASE)
+            km = re.search(r"\bKM\.?\s*(\d+(?:\.\d+)?)", resto, re.IGNORECASE)
+            sin_numero = re.search(r"\bS/N\b", resto, re.IGNORECASE)
+            if solo_lote:
+                numero = f"LT {solo_lote.group(1)}"
+                resto = _juntar(resto[: solo_lote.start()], resto[solo_lote.end() :])
+            elif km:
+                numero = f"KM {km.group(1)}"
+                resto = _juntar(resto[: km.start()], resto[km.end() :])
+            elif sin_numero:
+                numero = "S/N"
+                resto = _juntar(resto[: sin_numero.start()], resto[sin_numero.end() :])
+
+    data = {
         "tipo_direccion": tipo,
-        "direccion": direccion or raw,
-        "numero": numero,
-        "distrito": distrito,
+        "direccion": _clip(resto or raw, 200),
+        "numero": _clip(numero, 30),
+        "distrito": _clip(distrito, 100),
     }
+    urbanizacion = _clip(urbanizacion, 100)
+    referencia = _clip(referencia, 200)
+    if urbanizacion:
+        data["urbanizacion"] = urbanizacion
+    if referencia:
+        data["referencia"] = referencia
+    return data
 
 
 def tipo_cliente_desde_ruc(ruc):

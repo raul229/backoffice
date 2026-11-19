@@ -116,6 +116,9 @@ def lookup_ruc(request):
             .first()
         )
         direccion = cliente.direccion_set.select_related("tipo_galeria").order_by("-id").first()
+        direccion_fields = _direccion_form(direccion)
+        if not direccion and empresa and empresa.domicilio_fiscal:
+            direccion_fields = parse_domicilio(empresa.domicilio_fiscal)
         payload = _payload(
             "cliente",
             ruc,
@@ -126,10 +129,13 @@ def lookup_ruc(request):
             domicilio_fiscal=empresa.domicilio_fiscal if empresa else "",
             correo=cliente.correo,
             **_persona_form(persona),
-            **_direccion_form(direccion),
+            **direccion_fields,
             **_venta_form(venta),
         )
         return Response(payload)
+
+    if request.query_params.get("local") == "1":
+        return Response(_payload("ninguno", ruc, tipo_cliente_desde_ruc(ruc)))
 
     try:
         sunat = consultar_sunat(ruc)

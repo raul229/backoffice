@@ -369,6 +369,57 @@ class ApiEndpointsTests(APITestCase):
             "CAL. LUIGGI BARSATO NRO. 167 SAN BORJA",
         )
 
+    def test_repetir_documento_o_ruc_no_duplica_el_cliente(self):
+        payload = {
+            "tipo_documento": "DNI",
+            "numero_documento": "44686283",
+            "nombres": "Dean Edgardo",
+            "apellidos": "Valdivia Chimpen",
+            "celular": "999888777",
+            "correo": "dean@example.com",
+        }
+        primera = self.client.post("/api/personas/", payload, format="json")
+        segunda = self.client.post("/api/personas/", payload, format="json")
+        self.assertEqual(primera.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(segunda.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(primera.data["id"], segunda.data["id"])
+        self.assertEqual(Persona.objects.filter(numero_documento="44686283").count(), 1)
+
+        empresa = {
+            "ruc": "20600414233",
+            "razon_social": "Corporacion ED & San S.A.C.",
+            "domicilio_fiscal": (
+                "CAL.SIGMA MZA. F LOTE. 21 URB. JUAN XXIII "
+                "(ENTRE AV. ANGAMOS Y AV. AVIACION) LIMA - LIMA - SAN BORJA"
+            ),
+            "representante_legal": primera.data["id"],
+            "correo": "facturacion@edysan.com",
+        }
+        alta = self.client.post("/api/empresas/", empresa, format="json")
+        repetida = self.client.post("/api/empresas/", empresa, format="json")
+        self.assertEqual(alta.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(repetida.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(alta.data["id"], repetida.data["id"])
+        self.assertEqual(alta.data["cliente"], repetida.data["cliente"])
+        self.assertEqual(Empresa.objects.filter(ruc="20600414233").count(), 1)
+
+        cliente_id = alta.data["cliente"]
+        direccion = self.client.post(
+            "/api/direcciones/",
+            {
+                "cliente": cliente_id,
+                "tipo": "CALLE",
+                "direccion": "SIGMA",
+                "numero": "MZ F LT 21",
+                "distrito": "SAN BORJA",
+                "urbanizacion": "JUAN XXIII",
+                "referencia": "ENTRE AV. ANGAMOS Y AV. AVIACION",
+            },
+            format="json",
+        )
+        self.assertEqual(direccion.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(direccion.data["numero"], "MZ F LT 21")
+
     def test_venta_rejects_flujo_of_other_client_type(self):
         cliente = Cliente.objects.create(tipo=TipoCliente.EMPRESA)
         producto = Producto.objects.create(nombre="Fibra 200", velocidad=200, precio=80)
@@ -2524,6 +2575,70 @@ class LookupRucTests(APITestCase):
         self.assertEqual(encoded["tipo_direccion"], "AVENIDA")
         self.assertEqual(encoded["numero"], "1472")
         self.assertEqual(encoded["distrito"], "LIMA")
+        self.assertEqual(encoded["direccion"], "GARCILASO DE LA VEGA")
+
+    def test_parse_domicilio_manzana_lote_sin_numero_de_puerta(self):
+        from .sunat import parse_domicilio
+
+        parsed = parse_domicilio(
+            "CAL.SIGMA MZA. F LOTE. 21 URB. JUAN XXIII "
+            "(ENTRE AV. ANGAMOS Y AV. AVIACION) LIMA - LIMA - SAN BORJA"
+        )
+        self.assertEqual(parsed["tipo_direccion"], "CALLE")
+        self.assertEqual(parsed["direccion"], "SIGMA")
+        self.assertEqual(parsed["numero"], "MZ F LT 21")
+        self.assertEqual(parsed["distrito"], "SAN BORJA")
+        self.assertEqual(parsed["urbanizacion"], "JUAN XXIII")
+        self.assertEqual(parsed["referencia"], "ENTRE AV. ANGAMOS Y AV. AVIACION")
+        self.assertLessEqual(len(parsed["numero"]), 30)
+
+        con_nro = parse_domicilio("CAL.LUIGGI BARSATO NRO. 167 LIMA - LIMA - SAN BORJA")
+        self.assertEqual(con_nro["direccion"], "LUIGGI BARSATO")
+        self.assertEqual(con_nro["numero"], "167")
+        self.assertEqual(con_nro["distrito"], "SAN BORJA")
+
+    def test_lookup_sin_direccion_completa_desde_el_domicilio_fiscal(self):
+        representante = Persona.objects.create(
+            cliente=Cliente.objects.create(tipo=TipoCliente.PERSONA, correo="dean@example.com"),
+            tipo_documento="DNI",
+            numero_documento="44686283",
+            nombres="DEAN EDGARDO",
+            apellidos="VALDIVIA CHIMPEN",
+            celular="999888777",
+        )
+        empresa_cliente = Cliente.objects.create(
+            tipo=TipoCliente.EMPRESA, correo="facturacion@edysan.com"
+        )
+        Empresa.objects.create(
+            cliente=empresa_cliente,
+            ruc="20600414233",
+            razon_social="CORPORACION ED & SAN S.A.C.",
+            domicilio_fiscal=(
+                "CAL.SIGMA MZA. F LOTE. 21 URB. JUAN XXIII "
+                "(ENTRE AV. ANGAMOS Y AV. AVIACION) LIMA - LIMA - SAN BORJA"
+            ),
+            representante_legal=representante,
+        )
+
+        response = self.client.get("/api/lookup/ruc/", {"ruc": "20600414233"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["source"], "cliente")
+        self.assertEqual(response.data["cliente_id"], empresa_cliente.id)
+        self.assertEqual(response.data["direccion"], "SIGMA")
+        self.assertEqual(response.data["numero"], "MZ F LT 21")
+        self.assertEqual(response.data["distrito"], "SAN BORJA")
+        self.assertEqual(response.data["urbanizacion"], "JUAN XXIII")
+        self.assertEqual(response.data["referencia"], "ENTRE AV. ANGAMOS Y AV. AVIACION")
+        self.assertEqual(Direccion.objects.filter(cliente=empresa_cliente).count(), 0)
+
+    def test_lookup_local_no_consulta_sunat(self):
+        with patch("api.lookup_views.consultar_sunat") as mocked:
+            response = self.client.get("/api/lookup/ruc/", {"ruc": "20600414233", "local": "1"})
+            mocked.assert_not_called()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["source"], "ninguno")
+        self.assertIsNone(response.data["cliente_id"])
 
     def test_lookup_uses_existing_cliente_and_last_sale(self):
         representante = Persona.objects.create(
@@ -2853,6 +2968,7 @@ class LookupRucTests(APITestCase):
             {"q": "CAL.LUIGGI BARSATO NRO. 167 LIMA - LIMA - SAN BORJA"},
         )
         self.assertEqual(parsed.data["parsed"]["tipo_direccion"], "CALLE")
+        self.assertEqual(parsed.data["parsed"]["direccion"], "LUIGGI BARSATO")
         self.assertEqual(parsed.data["parsed"]["numero"], "167")
         self.assertEqual(parsed.data["parsed"]["distrito"], "SAN BORJA")
 

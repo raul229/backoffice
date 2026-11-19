@@ -146,8 +146,10 @@ export function deleteUser(id) {
   });
 }
 
-export function lookupRuc(ruc) {
-  return request(`/lookup/ruc/?ruc=${encodeURIComponent(ruc)}`);
+export function lookupRuc(ruc, { local = false } = {}) {
+  const params = new URLSearchParams({ ruc });
+  if (local) params.set("local", "1");
+  return request(`/lookup/ruc/?${params}`);
 }
 
 export function lookupDireccion(query) {

@@ -99,6 +99,43 @@ function stepClienteFields(tipoCliente) {
 
 const stepDireccionFields = ['direccion', 'numero', 'distrito']
 
+const FIELD_LABELS = {
+  ruc: 'RUC',
+  razon_social: 'Razón social',
+  numero_documento: 'N° de documento',
+  nombres: 'Nombres',
+  apellidos: 'Apellidos',
+  celular: 'Celular',
+  correo: 'Correo de facturación',
+  distrito_nacimiento: 'Distrito de nacimiento',
+  padre: 'Padre',
+  madre: 'Madre',
+  domicilio_fiscal: 'Domicilio fiscal',
+  direccion: 'Dirección',
+  numero: 'Número',
+  distrito: 'Distrito',
+  urbanizacion: 'Urbanización',
+  interior: 'Interior',
+  tienda: 'Tienda',
+  piso: 'Piso',
+  tipo_galeria: 'Tipo',
+  galeria: 'Nombre',
+  referencia: 'Referencia',
+  producto: 'Producto',
+  flujo: 'Flujo',
+  promociones: 'Promociones',
+}
+
+function formatIssues(issues) {
+  return issues
+    .map((issue) => {
+      const label = FIELD_LABELS[issue.path?.[0]]
+      return label ? `${label}: ${issue.message}` : issue.message
+    })
+    .filter((message, index, all) => all.indexOf(message) === index)
+    .join(' ')
+}
+
 const LOOKUP_FIELDS = [
   'tipo_cliente',
   'razon_social',
@@ -196,6 +233,20 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
   const mutation = useMutation({
     mutationFn: async (value) => {
       let clienteId = value.cliente_id ? Number(value.cliente_id) : null
+      let empresaId = value.empresa_id ? Number(value.empresa_id) : null
+      if (!clienteId && /^\d{11}$/.test(value.ruc || '')) {
+        try {
+          const existing = await lookupRuc(value.ruc, { local: true })
+          if (existing?.cliente_id) {
+            clienteId = Number(existing.cliente_id)
+            if (existing.empresa_id) empresaId = Number(existing.empresa_id)
+            form.setFieldValue('cliente_id', String(clienteId))
+            if (empresaId) form.setFieldValue('empresa_id', String(empresaId))
+          }
+        } catch {
+          // Si la consulta local falla, se intenta crear con los datos del formulario.
+        }
+      }
       if (!clienteId) {
         if (value.tipo_cliente === 'EMPRESA') {
           const representante = await createPersona(personaPayload(value))
@@ -207,14 +258,18 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
             correo: value.correo.trim().toLowerCase(),
           })
           clienteId = empresa.cliente
+          empresaId = empresa.id
+          form.setFieldValue('cliente_id', String(clienteId))
+          form.setFieldValue('empresa_id', String(empresaId))
         } else {
           const persona = await createPersona(personaPayload(value))
           clienteId = persona.cliente
+          form.setFieldValue('cliente_id', String(clienteId))
         }
       } else {
         await updateCliente(clienteId, { correo: value.correo.trim().toLowerCase() })
-        if (value.empresa_id) {
-          await updateEmpresa(Number(value.empresa_id), {
+        if (empresaId) {
+          await updateEmpresa(empresaId, {
             domicilio_fiscal: value.domicilio_fiscal.trim(),
           })
         }
@@ -356,6 +411,8 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
           onSubmit={(event) => {
             event.preventDefault()
             event.stopPropagation()
+            const parsed = nuevaVentaSchema.safeParse(form.state.values)
+            setFormError(parsed.success ? '' : formatIssues(parsed.error.issues))
             form.handleSubmit()
           }}
         >
@@ -677,7 +734,9 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
                 )}
               </Field>
               <Field form={form} name="numero" validators={requiredText()}>
-                {(field) => <TextField field={field} label="Número" normalize="upper" />}
+                {(field) => (
+                  <TextField field={field} label="Número" maxLength={30} normalize="upper" />
+                )}
               </Field>
               <Field form={form} name="distrito" validators={requiredText()}>
                 {(field) => <TextField field={field} label="Distrito" normalize="upper" />}
@@ -714,6 +773,12 @@ export default function NuevaVentaPage({ onCancel, onCreated }) {
           </>
             )}
           </form.Subscribe>
+
+          {formError ? (
+            <div className="alert alert-error mt-6 text-sm">
+              <span>{formError}</span>
+            </div>
+          ) : null}
 
           <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             {step > 0 ? (
